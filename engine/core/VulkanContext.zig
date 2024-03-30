@@ -203,6 +203,7 @@ const device_commands = vk.DeviceCommandFlags {
     .cmdUpdateBuffer = true,
     .createComputePipelines = true,
     .cmdDispatch = true,
+    .cmdPushDescriptorSetKHR = true,
 };
 
 const validation_device_commands = if (validate) vk.DeviceCommandFlags {
@@ -255,6 +256,10 @@ const Self = @This();
 const QueueFamilyAcceptable = fn(vk.Instance, vk.PhysicalDevice, u32) bool;
 fn returnsTrue(_: vk.Instance, _: vk.PhysicalDevice, _: u32) bool { return true; }
 
+const required_device_extensions = [_][*:0]const u8{
+    vk.extension_info.khr_push_descriptor.name,
+};
+
 pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_extensions: []const [*:0]const u8, device_extensions: []const [*:0]const u8, features: ?*const anyopaque, comptime queueFamilyAcceptable: ?QueueFamilyAcceptable) !Self {
     var base = try Base.new();
     errdefer base.destroy();
@@ -265,8 +270,10 @@ pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_ex
     const debug_messenger = if (validate) try instance.createDebugUtilsMessengerEXT(&debug_messenger_create_info, null) else undefined;
     errdefer if (validate) instance.destroyDebugUtilsMessengerEXT(debug_messenger, null);
 
-    const physical_device = try PhysicalDevice.pick(instance, allocator, if (queueFamilyAcceptable) |acc| acc else returnsTrue, device_extensions);
-    const device = try physical_device.createLogicalDevice(instance, device_extensions, features);
+    const all_device_extensions = try std.mem.concat(allocator, [*:0]const u8, &[_][]const [*:0]const u8{ &required_device_extensions, device_extensions }); 
+    defer allocator.free(all_device_extensions);
+    const physical_device = try PhysicalDevice.pick(instance, allocator, if (queueFamilyAcceptable) |acc| acc else returnsTrue, all_device_extensions);
+    const device = try physical_device.createLogicalDevice(instance, all_device_extensions, features);
     errdefer device.destroyDevice(null);
 
     const queue = device.getDeviceQueue(physical_device.queue_family_index, 0);
