@@ -161,7 +161,7 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         errdefer scratch_buffer.destroy(vc);
         build_geometry_info.scratch_data.device_address = scratch_buffer.getAddress(vc);
 
-        const buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.acceleration_structure_size, .{ .acceleration_structure_storage_bit_khr = true });
+        const buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.acceleration_structure_size, .{ .acceleration_structure_storage_bit_khr = true, .shader_device_address_bit = true });
         errdefer buffer.destroy(vc);
 
         build_geometry_info.dst_acceleration_structure = try vc.device.createAccelerationStructureKHR(&.{
@@ -280,7 +280,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     defer scratch_buffer.destroy(vc);
 
     self.tlas_buffer.destroy(vc);
-    self.tlas_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.acceleration_structure_size, .{ .acceleration_structure_storage_bit_khr = true });
+    self.tlas_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.acceleration_structure_size, .{ .acceleration_structure_storage_bit_khr = true, .shader_device_address_bit = true });
 
     vc.device.destroyAccelerationStructureKHR(self.tlas_handle, null);
     geometry_info.dst_acceleration_structure = try vc.device.createAccelerationStructureKHR(&.{
@@ -465,7 +465,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     const scratch_buffer = try vk_allocator.createOwnedDeviceBuffer(vc, size_info.build_scratch_size, .{ .shader_device_address_bit = true, .storage_buffer_bit = true });
     defer scratch_buffer.destroy(vc);
 
-    const tlas_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.acceleration_structure_size, .{ .acceleration_structure_storage_bit_khr = true });
+    const tlas_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.acceleration_structure_size, .{ .acceleration_structure_storage_bit_khr = true, .shader_device_address_bit = true });
     errdefer tlas_buffer.destroy(vc);
 
     geometry_info.dst_acceleration_structure = try vc.device.createAccelerationStructureKHR(&.{
