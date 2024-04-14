@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) !void {
         const tests = b.addTest(.{
             .name = "tests",
             .root_source_file = .{ .path = "engine/tests.zig" },
-            .test_runner = "engine/test_runner.zig",
+            .test_runner = .{ .path = "engine/test_runner.zig" },
             .target = target,
             .optimize = optimize,
         });

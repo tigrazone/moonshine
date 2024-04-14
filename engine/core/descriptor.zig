@@ -33,21 +33,24 @@ pub fn DescriptorLayout(comptime bindings: []const DescriptorBindingInfo, compti
 
         pub fn create(vc: *const VulkanContext, samplers: [sampler_count]vk.Sampler) !Self {
             var vk_bindings: [bindings.len]vk.DescriptorSetLayoutBinding = undefined;
-            comptime var vk_binding_flags: [bindings.len]vk.DescriptorBindingFlags = undefined;
-            comptime var samplers_so_far = 0;
-            inline for (bindings, &vk_bindings, &vk_binding_flags, 0..) |binding, *vk_binding, *vk_binding_flag, binding_index| {
-                vk_binding.* = vk.DescriptorSetLayoutBinding {
-                    .binding = binding_index,
-                    .descriptor_type = binding.descriptor_type,
-                    .descriptor_count = binding.descriptor_count,
-                    .stage_flags = binding.stage_flags,
-                };
-                if (binding.descriptor_type == .sampler or binding.descriptor_type == .combined_image_sampler) {
-                    vk_binding.p_immutable_samplers = samplers[samplers_so_far..samplers_so_far +  binding.descriptor_count];
-                    samplers_so_far += binding.descriptor_count;
+            const vk_binding_flags = blk: {
+                comptime var vk_binding_flags: [bindings.len]vk.DescriptorBindingFlags = undefined;
+                comptime var samplers_so_far = 0;
+                inline for (bindings, &vk_bindings, &vk_binding_flags, 0..) |binding, *vk_binding, *vk_binding_flag, binding_index| {
+                    vk_binding.* = vk.DescriptorSetLayoutBinding {
+                        .binding = binding_index,
+                        .descriptor_type = binding.descriptor_type,
+                        .descriptor_count = binding.descriptor_count,
+                        .stage_flags = binding.stage_flags,
+                    };
+                    if (binding.descriptor_type == .sampler or binding.descriptor_type == .combined_image_sampler) {
+                        vk_binding.p_immutable_samplers = samplers[samplers_so_far..samplers_so_far +  binding.descriptor_count];
+                        samplers_so_far += binding.descriptor_count;
+                    }
+                    vk_binding_flag.* = binding.binding_flags;
                 }
-                vk_binding_flag.* = binding.binding_flags;
-            }
+                break :blk vk_binding_flags;
+            };
             const create_info = vk.DescriptorSetLayoutCreateInfo {
                 .flags = layout_flags,
                 .binding_count = bindings.len,
@@ -62,12 +65,15 @@ pub fn DescriptorLayout(comptime bindings: []const DescriptorBindingInfo, compti
 
             try vk_helpers.setDebugName(vc, handle, debug_name);
 
-            comptime var pool_sizes: [bindings.len]vk.DescriptorPoolSize = undefined;
-            comptime for (&pool_sizes, bindings) |*pool_size, binding| {
-                pool_size.* = .{
-                    .type =  binding.descriptor_type,
-                    .descriptor_count = binding.descriptor_count * max_sets,
+            const pool_sizes = blk: {
+                comptime var pool_sizes: [bindings.len]vk.DescriptorPoolSize = undefined;
+                comptime for (&pool_sizes, bindings) |*pool_size, binding| {
+                    pool_size.* = .{
+                        .type =  binding.descriptor_type,
+                        .descriptor_count = binding.descriptor_count * max_sets,
+                    };
                 };
+                break :blk pool_sizes;
             };
 
             return Self {
