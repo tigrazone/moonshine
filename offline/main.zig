@@ -98,7 +98,7 @@ pub fn main() !void {
 
     try logger.log("set up initial state");
 
-    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &commands, config.in_filepath, config.skybox_filepath, config.extent, false);
+    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &commands, config.in_filepath, config.skybox_filepath, config.extent);
     defer scene.destroy(&context, allocator);
 
     try logger.log("load world");

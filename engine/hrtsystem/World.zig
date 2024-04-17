@@ -230,21 +230,15 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 // glTF doesn't correspond very well to the internal data structures here so this is very inefficient
 // also very inefficient because it's written very inefficiently, can remove a lot of copying, but that's a problem for another time
 // inspection bool specifies whether some buffers should be created with the `transfer_src_flag` for inspection
-pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands, gltf: Gltf, inspection: bool) !Self {
+pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands, gltf: Gltf) !Self {
     var materials = blk: {
-        var material_list = std.ArrayListUnmanaged(MaterialManager.MaterialInfo) {};
-        defer material_list.deinit(allocator);
-
-        var textures = try TextureManager.create(vc);
+        var materials = try MaterialManager.createEmpty(vc);
+        errdefer materials.destroy(vc, allocator);
 
         for (gltf.data.materials.items) |material| {
-            const mat = try gltfMaterialToMaterial(vc, vk_allocator, allocator, commands, gltf, material, &textures);
-            try material_list.append(allocator, mat);
+            const mat = try gltfMaterialToMaterial(vc, vk_allocator, allocator, commands, gltf, material, &materials.textures);
+            _ = try materials.upload(vc, vk_allocator, allocator, commands, mat);
         }
-
-        var materials = try MaterialManager.create(vc, vk_allocator, allocator, commands, material_list.items);
-        materials.textures.destroy(vc, allocator); // strange
-        materials.textures = textures;
 
         break :blk materials; 
     };
@@ -348,11 +342,17 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
         }
     }
 
-    var meshes = try MeshManager.create(vc, vk_allocator, allocator, commands, objects.items);
+    var meshes = MeshManager {};
     errdefer meshes.destroy(vc, allocator);
+    for (objects.items) |object| {
+        _ = try meshes.upload(vc, vk_allocator, allocator, commands, object);
+    }
 
-    var accel = try Accel.create(vc, vk_allocator, allocator, commands, meshes, instances.items, inspection);
+    var accel = Accel {};
     errdefer accel.destroy(vc, allocator);
+    for (instances.items) |instance| {
+        _ = try accel.uploadInstance(vc, vk_allocator, allocator, commands, meshes, instance);
+    }
 
     return Self {
         .materials = materials,

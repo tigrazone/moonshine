@@ -104,7 +104,7 @@ pub fn main() !void {
 
     std.log.info("Set up initial state!", .{});
 
-    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &commands, config.in_filepath, config.skybox_filepath, config.extent, true);
+    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &commands, config.in_filepath, config.skybox_filepath, config.extent);
 
     defer scene.destroy(&context, allocator);
 
