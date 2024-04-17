@@ -1,5 +1,5 @@
-#include "../utils/math.hlsl"
-#include "../utils/helpers.hlsl"
+#include "../../utils/math.hlsl"
+#include "../../utils/helpers.hlsl"
 
 [[vk::binding(0, 0)]] Texture2D<float3> srcColorImage;
 [[vk::binding(1, 0)]] RWTexture2D<float> dstLuminanceImage;

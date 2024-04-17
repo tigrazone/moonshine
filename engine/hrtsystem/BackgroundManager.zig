@@ -26,17 +26,17 @@ fn luminance(rgb: [3]f32) f32 {
     return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
 }
 
-const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/equirectangular_to_equal_area.hlsl", .PushSetBindings = struct {
+const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "hrtsystem/background/equirectangular_to_equal_area.hlsl", .PushSetBindings = struct {
     src_texture: engine.core.pipeline.CombinedImageSampler,
     dst_image: engine.core.pipeline.StorageImage,
 }});
 
-const LuminancePipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/luminance.hlsl", .PushSetBindings = struct {
+const LuminancePipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "hrtsystem/background/luminance.hlsl", .PushSetBindings = struct {
     src_color_image: engine.core.pipeline.SampledImage,
     dst_luminance_image: engine.core.pipeline.StorageImage,
 }});
 
-const FoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/fold.hlsl", .PushSetBindings = struct {
+const FoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "hrtsystem/background/fold.hlsl", .PushSetBindings = struct {
     src_mip: engine.core.pipeline.SampledImage,
     dst_mip: engine.core.pipeline.StorageImage,
 }});

@@ -340,9 +340,9 @@ fn makeEngineModule(b: *std.Build, vk: *std.Build.Module, options: EngineOptions
     imports.appendSlice(&.{
         compileShader(b, .ray_tracing, "hrtsystem/input.hlsl"),
         compileShader(b, .ray_tracing, "hrtsystem/main.hlsl"),
-        compileShader(b, .compute, "background/equirectangular_to_equal_area.hlsl"),
-        compileShader(b, .compute, "background/luminance.hlsl"),
-        compileShader(b, .compute, "background/fold.hlsl"),
+        compileShader(b, .compute, "hrtsystem/background/equirectangular_to_equal_area.hlsl"),
+        compileShader(b, .compute, "hrtsystem/background/luminance.hlsl"),
+        compileShader(b, .compute, "hrtsystem/background/fold.hlsl"),
     }) catch @panic("OOM");
 
     const module = b.createModule(.{

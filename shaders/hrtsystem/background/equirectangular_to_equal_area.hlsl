@@ -1,5 +1,5 @@
-#include "../utils/helpers.hlsl"
-#include "../utils/mappings.hlsl"
+#include "../../utils/helpers.hlsl"
+#include "../../utils/mappings.hlsl"
 
 [[vk::combinedImageSampler]] [[vk::binding(0, 0)]] Texture2D<float3> srcTexture;
 [[vk::combinedImageSampler]] [[vk::binding(0, 0)]] SamplerState srcTextureSampler;
