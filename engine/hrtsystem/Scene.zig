@@ -29,10 +29,13 @@ pub fn fromGlbExr(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocato
     var gltf = Gltf.init(allocator);
     defer gltf.deinit();
 
-    const buffer = try std.fs.cwd().readFileAlloc(
+    const buffer = try std.fs.cwd().readFileAllocOptions(
         allocator,
         glb_filepath,
         std.math.maxInt(usize),
+        null,
+        4,
+        null
     );
     defer allocator.free(buffer);
     try gltf.parse(buffer);

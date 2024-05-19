@@ -351,7 +351,7 @@ pub fn endFrame(self: *Self, vc: *const VulkanContext, command_buffer: vk.Comman
     if (draw_data.CmdListsCount > 0) {
         var vertex_offset: usize = 0;
         var index_offset: usize = 0;
-        for (draw_data.CmdLists[0..@intCast(draw_data.CmdListsCount)]) |cmd_list| {
+        for (draw_data.CmdLists.Data[0..@intCast(draw_data.CmdListsCount)]) |cmd_list| {
             const vertex_count: usize = @intCast(cmd_list.*.VtxBuffer.Size);
             const index_count: usize = @intCast(cmd_list.*.IdxBuffer.Size);
             @memcpy(vertex_buffer.data[vertex_offset..].ptr, cmd_list.*.VtxBuffer.Data[0..vertex_count]);
@@ -408,7 +408,7 @@ pub fn endFrame(self: *Self, vc: *const VulkanContext, command_buffer: vk.Comman
 
     var global_idx_offset: u32 = 0;
     var global_vtx_offset: u32 = 0;
-    for (draw_data.CmdLists[0..@intCast(draw_data.CmdListsCount)]) |cmd_list| {
+    for (draw_data.CmdLists.Data[0..@intCast(draw_data.CmdListsCount)]) |cmd_list| {
         for (cmd_list.*.CmdBuffer.Data[0..@intCast(cmd_list.*.CmdBuffer.Size)]) |cmd| {
             if (cmd.UserCallback) |_| @panic("todo");
             vc.device.cmdSetScissor(command_buffer, 0, 1, @ptrCast(&vk.Rect2D{

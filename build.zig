@@ -1,5 +1,5 @@
 const std = @import("std");
-const vkgen = @import("./deps/vulkan-zig/generator/index.zig");
+const vkgen = @import("vulkan_zig");
 
 // TODO: useful error messages on missing system deps
 
@@ -142,7 +142,7 @@ pub fn build(b: *std.Build) !void {
             lib.linkSystemLibrary("usd_sdr");
             lib.linkSystemLibrary("usd_hio");
         }
-        
+
         // include headers necessary for usd
         lib.addSystemIncludePath(.{ .path = b.pathJoin(&.{ usd_dir, "include/" }) });
         if (tbb_dir) |dir| lib.addSystemIncludePath(.{ .path = b.pathJoin(&.{ dir, "include/" }) });
@@ -212,7 +212,7 @@ pub fn build(b: *std.Build) !void {
         const install_pluginfo_json = b.addInstallLibFile(pluginfo_file, "plugInfo.json");
         step.dependOn(&install_pluginfo_json.step);
     }
-    
+
     // create run step for all exes
     for (compiles.items) |exe| {
         if (exe.kind == .lib or exe.kind == .obj) continue;
@@ -312,8 +312,8 @@ pub const EngineOptions = struct {
 };
 
 fn makeEngineModule(b: *std.Build, vk: *std.Build.Module, options: EngineOptions, target: std.Build.ResolvedTarget) *std.Build.Module {
-    const zgltf = b.createModule(.{ .root_source_file = .{ .path = "deps/zgltf/src/main.zig" } });
-    const zigimg = b.createModule(.{ .root_source_file = .{ .path = "deps/zigimg/zigimg.zig" } });
+    const zgltf = b.dependency("zgltf", .{}).module("zgltf");
+    const zigimg = b.dependency("zigimg", .{}).module("zigimg");
 
     // actual engine
     const build_options = b.addOptions();
@@ -412,17 +412,18 @@ fn makeEngineModule(b: *std.Build, vk: *std.Build.Module, options: EngineOptions
 }
 
 const CLibrary = struct {
-    include_path: []const u8,
+    include_path: std.Build.LazyPath,
     library: *std.Build.Step.Compile,
 
     fn add(self: CLibrary, module: *std.Build.Module) void {
         module.linkLibrary(self.library);
-        module.addIncludePath(.{ .path = self.include_path });
+        module.addIncludePath(self.include_path);
     }
 };
 
 fn makeCImguiLibrary(b: *std.Build, target: std.Build.ResolvedTarget, glfw: CLibrary) CLibrary {
-    const path = "./deps/cimgui/";
+    const cimgui = b.dependency("cimgui", .{});
+    const imgui = b.dependency("imgui", .{});
 
     const lib = b.addStaticLibrary(.{
         .name = "cimgui",
@@ -431,31 +432,37 @@ fn makeCImguiLibrary(b: *std.Build, target: std.Build.ResolvedTarget, glfw: CLib
     });
     lib.linkLibCpp();
     lib.addCSourceFiles(.{
+        .root = cimgui.path(""),
         .files = &.{
-            path ++ "cimgui.cpp",
-            path ++ "imgui/imgui.cpp",
-            path ++ "imgui/imgui_draw.cpp",
-            path ++ "imgui/imgui_demo.cpp",
-            path ++ "imgui/imgui_widgets.cpp",
-            path ++ "imgui/imgui_tables.cpp",
-            path ++ "imgui/backends/imgui_impl_glfw.cpp",
+            "cimgui.cpp",
+        }
+    });
+    lib.addIncludePath(imgui.path(""));
+    lib.addCSourceFiles(.{
+        .root = imgui.path(""),
+        .files = &.{
+            "imgui.cpp",
+            "imgui_draw.cpp",
+            "imgui_demo.cpp",
+            "imgui_widgets.cpp",
+            "imgui_tables.cpp",
+            "backends/imgui_impl_glfw.cpp",
         }, .flags = &.{
             "-DGLFW_INCLUDE_NONE",
             "-DIMGUI_IMPL_API=extern \"C\"",
         }
     });
-    lib.addIncludePath(.{ .path = path ++ "imgui/" });
-    lib.addIncludePath(.{ .path = glfw.include_path });
+    lib.addIncludePath(glfw.include_path);
 
     return CLibrary {
-        .include_path = path,
+        .include_path = cimgui.path(""),
         .library = lib,
     };
 }
 
 fn makeTinyExrLibrary(b: *std.Build, target: std.Build.ResolvedTarget) CLibrary {
-    const tinyexr_path = "./deps/tinyexr/";
-    const miniz_path = tinyexr_path ++ "deps/miniz/";
+    const tinyexr = b.dependency("tinyexr", .{});
+    const miniz_path = "deps/miniz/";
 
     const lib = b.addStaticLibrary(.{
         .name = "tinyexr",
@@ -463,22 +470,23 @@ fn makeTinyExrLibrary(b: *std.Build, target: std.Build.ResolvedTarget) CLibrary 
         .optimize = .ReleaseFast,
     });
     lib.linkLibCpp();
-    lib.addIncludePath(.{ .path = miniz_path });
+    lib.addIncludePath(tinyexr.path(miniz_path));
     lib.addCSourceFiles(.{
+        .root = tinyexr.path(""),
         .files = &.{
-            tinyexr_path ++ "tinyexr.cc",
+            "tinyexr.cc",
             miniz_path ++ "miniz.c",
         },
     });
 
     return CLibrary {
-        .include_path = tinyexr_path,
+        .include_path = tinyexr.path(""),
         .library = lib,
     };
 }
 
 fn makeGlfwLibrary(b: *std.Build, target: std.Build.ResolvedTarget) !CLibrary {
-    const path = "./deps/glfw/";
+    const glfw = b.dependency("glfw", .{});
     const lib = b.addStaticLibrary(.{
         .name = "glfw",
         .target = target,
@@ -499,7 +507,7 @@ fn makeGlfwLibrary(b: *std.Build, target: std.Build.ResolvedTarget) !CLibrary {
     const sources = blk: {
         var sources = std.ArrayList([]const u8).init(b.allocator);
 
-        const source_path = path ++ "src/";
+        const source_path = "src/";
 
         const general_sources = [_][]const u8 {
             source_path ++ "context.c",
@@ -572,7 +580,11 @@ fn makeGlfwLibrary(b: *std.Build, target: std.Build.ResolvedTarget) !CLibrary {
         break :blk flags.items;
     };
 
-    lib.addCSourceFiles(.{ .files = sources, .flags = flags });
+    lib.addCSourceFiles(.{
+        .root = glfw.path(""),
+        .files = sources,
+        .flags = flags,
+    });
 
     // link and include necessary deps
     lib.linkLibC();
@@ -583,7 +595,7 @@ fn makeGlfwLibrary(b: *std.Build, target: std.Build.ResolvedTarget) !CLibrary {
     } else if (target.result.os.tag == .windows) lib.linkSystemLibrary("gdi32");
 
     return CLibrary {
-        .include_path = path ++ "include",
+        .include_path = glfw.path("include"),
         .library = lib,
     };
 }

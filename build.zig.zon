@@ -1,0 +1,38 @@
+.{
+    .name = "moonshine",
+    .version = "0.0.0",
+
+    .dependencies = .{
+        .vulkan_zig = .{
+            .url = "https://github.com/ashpil/vulkan-zig/archive/8056647961fdb5816dcbc57c5c73fe12a4064c4e.tar.gz",
+            .hash = "122001cd55e3ed8568d2d8eb5a0c3a9537abd863f971c51f51f1f32fe57ebad141e0",
+        },
+        .cimgui = .{
+            .url = "https://github.com/ashpil/cimgui/archive/97684ddceec2e4b9d15c4d6aa67dd7230f94b513.tar.gz",
+            .hash = "1220c6cae6769d51e7e0b94b0a7e46dbca685b8a196ed3bb17d18b7e767f4c54e0ed",
+        },
+        .imgui = .{
+            .url = "https://github.com/ocornut/imgui/archive/refs/tags/v1.90.6.tar.gz",
+            .hash = "1220ff68019b489a1567e4ef5eca451cf135391f7052442a6f0cff78fbe5cde903da",
+        },
+        .glfw = .{
+            .url = "https://github.com/glfw/glfw/archive/9a87635686c7fcb63ca63149c5b179b85a53a725.tar.gz",
+            .hash = "12203c62e66cdd7b9ae369f98ce770468adffb52138645e8c8cfb7efcf3304f95654",
+        },
+        .tinyexr = .{
+            .url = "https://github.com/syoyo/tinyexr/archive/02310c77e5156c36fedf6cf810c4071e3f83906f.tar.gz",
+            .hash = "1220a729dc69159e2a94a4cee570e9951e2ee95662d8cc94e56a328577183c4e92f4",
+        },
+        .zgltf = .{
+            .url = "https://github.com/kooparse/zgltf/archive/930b158e8324196073dd4ee02ee71b2aeb9418a1.tar.gz",
+            .hash = "12202686bbdc4035313e639d740c007d73c73a102a36a6b654b593d9cd5e74001583",
+        },
+        .zigimg = .{
+            .url = "https://github.com/zigimg/zigimg/archive/29d34702995a7e84e097004e87ede905cdb674dd.tar.gz",
+            .hash = "12206b669a4712ff9c06d4111a650f298d7597dd39f9d4853858d7f298c819353a65",
+        },
+    },
+    .paths = .{
+        "",
+    },
+}
