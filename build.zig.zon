@@ -4,8 +4,12 @@
 
     .dependencies = .{
         .vulkan_zig = .{
-            .url = "https://github.com/ashpil/vulkan-zig/archive/8056647961fdb5816dcbc57c5c73fe12a4064c4e.tar.gz",
-            .hash = "122001cd55e3ed8568d2d8eb5a0c3a9537abd863f971c51f51f1f32fe57ebad141e0",
+            .url = "https://github.com/ashpil/vulkan-zig/archive/4b5b7e8804abeeed7ce652aa6d145b661308fcda.tar.gz",
+            .hash = "12209ad212e123ebea413fcbe06cc3e0dad2d801d494473a58ef79d2ef5ca5644b88",
+        },
+        .vulkan_headers = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/2b55157592bf4c639b76cc16d64acaef565cc4b5.tar.gz",
+            .hash = "1220d94eea3421af918576ff1bbe62741871d0e17538fe4509e647f92f9ea8e6d8f2",
         },
         .cimgui = .{
             .url = "https://github.com/ashpil/cimgui/archive/97684ddceec2e4b9d15c4d6aa67dd7230f94b513.tar.gz",

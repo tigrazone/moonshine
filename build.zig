@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     // packages/libraries we'll need below
-    const vk = vkgen.VkGenerateStep.create(b, try b.build_root.join(b.allocator, &.{ "deps/vk.xml" })).getModule();
+    const vulkan = makeVulkanModule(b, target);
     const glfw = try makeGlfwLibrary(b, target);
     const cimgui = makeCImguiLibrary(b, target, glfw);
     const tinyexr = makeTinyExrLibrary(b, target);
@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) !void {
         var engine_options = default_engine_options;
         engine_options.window = false;
         engine_options.gui = false;
-        const engine = makeEngineModule(b, vk, engine_options, target);
+        const engine = makeEngineModule(b, vulkan, engine_options, target);
 
         const tests = b.addTest(.{
             .name = "tests",
@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) !void {
             .target = target,
             .optimize = optimize,
         });
-        tests.root_module.addImport("vulkan", vk);
+        tests.root_module.addImport("vulkan", vulkan);
         tests.root_module.addImport("engine", engine);
 
         break :blk tests;
@@ -48,14 +48,14 @@ pub fn build(b: *std.Build) !void {
         var engine_options = default_engine_options;
         engine_options.vk_metrics = true;
         engine_options.shader_source = .load; // for hot shader reload
-        const engine = makeEngineModule(b, vk, engine_options, target);
+        const engine = makeEngineModule(b, vulkan, engine_options, target);
         const exe = b.addExecutable(.{
             .name = "online",
             .root_source_file = .{ .path = "online/main.zig" },
             .target = target,
             .optimize = optimize,
         });
-        exe.root_module.addImport("vulkan", vk);
+        exe.root_module.addImport("vulkan", vulkan);
         exe.root_module.addImport("engine", engine);
         glfw.add(&exe.root_module);
         glfw.add(engine);
@@ -72,14 +72,14 @@ pub fn build(b: *std.Build) !void {
         var engine_options = default_engine_options;
         engine_options.window = false;
         engine_options.gui = false;
-        const engine = makeEngineModule(b, vk, engine_options, target);
+        const engine = makeEngineModule(b, vulkan, engine_options, target);
         const exe = b.addExecutable(.{
             .name = "offline",
             .root_source_file = .{ .path = "offline/main.zig" },
             .target = target,
             .optimize = optimize,
         });
-        exe.root_module.addImport("vulkan", vk);
+        exe.root_module.addImport("vulkan", vulkan);
         exe.root_module.addImport("engine", engine);
         tinyexr.add(&exe.root_module);
         tinyexr.add(engine);
@@ -93,7 +93,7 @@ pub fn build(b: *std.Build) !void {
         engine_options.window = false;
         engine_options.gui = false;
         engine_options.shader_source = .embed;
-        const engine = makeEngineModule(b, vk, engine_options, target);
+        const engine = makeEngineModule(b, vulkan, engine_options, target);
 
         // once https://github.com/ziglang/zig/issues/9698 lands
         // wont need to make own header
@@ -104,7 +104,7 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .pic = true,
         });
-        zig_lib.root_module.addImport("vulkan", vk);
+        zig_lib.root_module.addImport("vulkan", vulkan);
         zig_lib.root_module.addImport("engine", engine);
         zig_lib.linkLibC();
         try compiles.append(zig_lib);
@@ -409,6 +409,19 @@ fn makeEngineModule(b: *std.Build, vk: *std.Build.Module, options: EngineOptions
     module.link_libc = true; // always needed to load vulkan
 
     return module;
+}
+
+fn makeVulkanModule(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Module {
+    const vulkan_zig = b.dependency("vulkan_zig", .{});
+    const vulkan_headers = b.dependency("vulkan_headers", .{});
+    const vk_generate_cmd = b.addRunArtifact(vulkan_zig.artifact("vulkan-zig-generator"));
+    vk_generate_cmd.addFileArg(vulkan_headers.path("registry/vk.xml"));
+    const vk_zig = vk_generate_cmd.addOutputFileArg("vk.zig");
+    return b.addModule("vulkan-zig", .{
+        .root_source_file = vk_zig,
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
 }
 
 const CLibrary = struct {
