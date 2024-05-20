@@ -81,7 +81,7 @@ pub fn main() !void {
     defer window.destroy();
 
     const context = try VulkanContext.create(allocator, "online", &window.getRequiredInstanceExtensions(), &(displaysystem.required_device_extensions ++ hrtsystem.required_device_extensions), &hrtsystem.required_device_features, queueFamilyAcceptable);
-    defer context.destroy();
+    defer context.destroy(allocator);
 
     var vk_allocator = try VkAllocator.create(&context, allocator);
     defer vk_allocator.destroy(&context, allocator);

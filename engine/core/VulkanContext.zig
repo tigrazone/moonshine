@@ -115,14 +115,18 @@ const validation_vulkan_functions = if (validate) vk.ApiInfo {
 
 const all_vulkan_commands = [_]vk.ApiInfo { core_vulkan_functions, validation_vulkan_functions } ++ additional_vulkan_functions;
 
-const BaseDispatch = vk.BaseWrapper(&all_vulkan_commands);
-const Instance = vk.InstanceWrapper(&all_vulkan_commands);
-const Device = vk.DeviceWrapper(&all_vulkan_commands);
+const InstanceDispatch = vk.InstanceWrapper(&all_vulkan_commands);
+const Instance = vk.InstanceProxy(&all_vulkan_commands);
+
+const DeviceDispatch = vk.DeviceWrapper(&all_vulkan_commands);
+const Device = vk.DeviceProxy(&all_vulkan_commands);
 
 const Base = struct {
     vulkan_lib: std.DynLib,
     pfn_get_instance_proc_addr: vk.PfnGetInstanceProcAddr,
     dispatch: BaseDispatch,
+
+    const BaseDispatch = vk.BaseWrapper(&all_vulkan_commands);
 
     fn new() !Base {
         const vulkan_lib_name = if (builtin.os.tag == .windows) "vulkan-1.dll" else "libvulkan.so.1";
@@ -151,7 +155,7 @@ const Base = struct {
         }
     }
 
-    fn createInstance(self: Base, allocator: std.mem.Allocator, app_name: [*:0]const u8, required_extension_names: []const [*:0]const u8) !Instance {
+    fn createInstance(self: Base, allocator: std.mem.Allocator, app_name: [*:0]const u8, required_extension_names: []const [*:0]const u8) !vk.Instance {
         const required_extensions = try getRequiredExtensions(allocator, required_extension_names);
         defer allocator.free(required_extensions);
 
@@ -167,8 +171,6 @@ const Base = struct {
         };
 
         return try self.dispatch.createInstance(
-            Instance,
-            self.pfn_get_instance_proc_addr,
             &.{
                 .p_application_info = &app_info,
                 .enabled_layer_count = if (validate) validation_layers.len else 0,
@@ -244,6 +246,8 @@ const debug_messenger_create_info = vk.DebugUtilsMessengerCreateInfoEXT {
 };
 
 base: Base,
+instance_dispatch: *InstanceDispatch,
+device_dispatch: *DeviceDispatch,
 instance: Instance,
 device: Device,
 
@@ -266,7 +270,10 @@ pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_ex
     var base = try Base.new();
     errdefer base.destroy();
 
-    const instance = try base.createInstance(allocator, app_name, instance_extensions);
+    const instance_handle = try base.createInstance(allocator, app_name, instance_extensions);
+    const instance_dispatch = try allocator.create(InstanceDispatch);
+    instance_dispatch.* = try InstanceDispatch.load(instance_handle, base.pfn_get_instance_proc_addr);
+    const instance = Instance.init(instance_handle, instance_dispatch);
     errdefer instance.destroyInstance(null);
 
     const debug_messenger = if (validate) try instance.createDebugUtilsMessengerEXT(&debug_messenger_create_info, null) else undefined;
@@ -275,15 +282,20 @@ pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_ex
     const all_device_extensions = try std.mem.concat(allocator, [*:0]const u8, &[_][]const [*:0]const u8{ &required_device_extensions, device_extensions });
     defer allocator.free(all_device_extensions);
     const physical_device = try PhysicalDevice.pick(instance, allocator, if (queueFamilyAcceptable) |acc| acc else returnsTrue, all_device_extensions);
-    const device = try physical_device.createLogicalDevice(instance, all_device_extensions, features);
+    const device_handle = try physical_device.createLogicalDevice(instance, all_device_extensions, features);
+    const device_dispatch = try allocator.create(DeviceDispatch);
+    device_dispatch.* = try DeviceDispatch.load(device_handle, instance_dispatch.dispatch.vkGetDeviceProcAddr);
+    const device = Device.init(device_handle, device_dispatch);
     errdefer device.destroyDevice(null);
 
     const queue = device.getDeviceQueue(physical_device.queue_family_index, 0);
 
     return Self {
         .base = base,
+        .instance_dispatch = instance_dispatch,
         .instance = instance,
         .debug_messenger = debug_messenger,
+        .device_dispatch = device_dispatch,
         .device = device,
         .physical_device = physical_device,
 
@@ -291,11 +303,13 @@ pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_ex
     };
 }
 
-pub fn destroy(self: Self) void {
+pub fn destroy(self: Self, allocator: std.mem.Allocator) void {
     self.device.destroyDevice(null);
+    allocator.destroy(self.device_dispatch);
 
     if (validate) self.instance.destroyDebugUtilsMessengerEXT(self.debug_messenger, null);
     self.instance.destroyInstance(null);
+    allocator.destroy(self.instance_dispatch);
     self.base.destroy();
 }
 
@@ -353,7 +367,7 @@ const PhysicalDevice = struct {
         return true;
     }
 
-    fn createLogicalDevice(self: *const PhysicalDevice, instance: Instance, extensions: []const [*:0]const u8, features: ?*const anyopaque) !Device {
+    fn createLogicalDevice(self: *const PhysicalDevice, instance: Instance, extensions: []const [*:0]const u8, features: ?*const anyopaque) !vk.Device {
         const priority = [_]f32{1.0};
         const queue_create_info = [_]vk.DeviceQueueCreateInfo{
             .{
@@ -381,8 +395,6 @@ const PhysicalDevice = struct {
         };
 
         return try instance.createDevice(
-            Device,
-            instance.dispatch.vkGetDeviceProcAddr,
             self.handle,
             &.{
                 .queue_create_info_count = queue_create_info.len,

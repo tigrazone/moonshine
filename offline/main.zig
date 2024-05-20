@@ -88,7 +88,7 @@ pub fn main() !void {
     defer config.destroy(allocator);
 
     const context = try VulkanContext.create(allocator, "offline", &.{}, &engine.hrtsystem.required_device_extensions, &engine.hrtsystem.required_device_features, null);
-    defer context.destroy();
+    defer context.destroy(allocator);
 
     var vk_allocator = try VkAllocator.create(&context, allocator);
     defer vk_allocator.destroy(&context, allocator);

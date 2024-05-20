@@ -551,7 +551,7 @@ pub const HdMoonshine = struct {
         self.camera.destroy(&self.vc, self.allocator.allocator());
         self.commands.destroy(&self.vc);
         self.vk_allocator.destroy(&self.vc, self.allocator.allocator());
-        self.vc.destroy();
+        self.vc.destroy(self.allocator.allocator());
         var alloc = self.allocator;
         alloc.allocator().destroy(self);
         _ = alloc.deinit();

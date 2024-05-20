@@ -34,7 +34,7 @@ const TestingContext = struct {
 
     fn create(allocator: std.mem.Allocator, extent: vk.Extent2D) !TestingContext {
         const vc = try VulkanContext.create(allocator, "engine-tests", &.{}, &engine.hrtsystem.required_device_extensions, &engine.hrtsystem.required_device_features, null);
-        errdefer vc.destroy();
+        errdefer vc.destroy(allocator);
 
         var vk_allocator = try VkAllocator.create(&vc, allocator);
         errdefer vk_allocator.destroy(&vc, allocator);
@@ -104,7 +104,7 @@ const TestingContext = struct {
         self.output_buffer.destroy(&self.vc);
         self.commands.destroy(&self.vc);
         self.vk_allocator.destroy(&self.vc, allocator);
-        self.vc.destroy();
+        self.vc.destroy(allocator);
     }
 };
 
