@@ -119,7 +119,7 @@ pub fn getClickedObject(self: *Self, vc: *const VulkanContext, normalized_coords
         .p_signal_semaphore_infos = undefined,
     };
 
-    try vc.device.queueSubmit2(vc.queue, 1, @ptrCast(&submit_info), self.ready_fence);
+    try vc.queue.submit2(1, @ptrCast(&submit_info), self.ready_fence);
     _ = try vc.device.waitForFences(1, @ptrCast(&self.ready_fence), vk.TRUE, std.math.maxInt(u64));
     try vc.device.resetFences(1, @ptrCast(&self.ready_fence));
     try vc.device.resetCommandPool(self.command_pool, .{});

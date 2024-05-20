@@ -116,10 +116,11 @@ const validation_vulkan_functions = if (validate) vk.ApiInfo {
 const all_vulkan_commands = [_]vk.ApiInfo { core_vulkan_functions, validation_vulkan_functions } ++ additional_vulkan_functions;
 
 const InstanceDispatch = vk.InstanceWrapper(&all_vulkan_commands);
-const Instance = vk.InstanceProxy(&all_vulkan_commands);
-
 const DeviceDispatch = vk.DeviceWrapper(&all_vulkan_commands);
-const Device = vk.DeviceProxy(&all_vulkan_commands);
+
+pub const Instance = vk.InstanceProxy(&all_vulkan_commands);
+pub const Device = vk.DeviceProxy(&all_vulkan_commands);
+pub const Queue = vk.QueueProxy(&all_vulkan_commands);
 
 const Base = struct {
     vulkan_lib: std.DynLib,
@@ -255,7 +256,7 @@ physical_device: PhysicalDevice,
 
 debug_messenger: if (validate) vk.DebugUtilsMessengerEXT else void,
 
-queue: vk.Queue,
+queue: Queue,
 
 const Self = @This();
 
@@ -288,7 +289,8 @@ pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_ex
     const device = Device.init(device_handle, device_dispatch);
     errdefer device.destroyDevice(null);
 
-    const queue = device.getDeviceQueue(physical_device.queue_family_index, 0);
+    const queue_handle = device.getDeviceQueue(physical_device.queue_family_index, 0);
+    const queue = Queue.init(queue_handle, device_dispatch);
 
     return Self {
         .base = base,

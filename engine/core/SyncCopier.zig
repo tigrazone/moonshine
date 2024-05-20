@@ -59,7 +59,7 @@ pub fn copyBufferItem(self: *Self, vc: *const VulkanContext, comptime BufferInne
     }));
     try vc.device.endCommandBuffer(self.command_buffer);
 
-    try vc.device.queueSubmit2(vc.queue, 1, @ptrCast(&vk.SubmitInfo2 {
+    try vc.queue.submit2(1, @ptrCast(&vk.SubmitInfo2 {
         .command_buffer_info_count = 1,
         .p_command_buffer_infos = @ptrCast(&vk.CommandBufferSubmitInfo {
             .command_buffer = self.command_buffer,
@@ -96,7 +96,7 @@ pub fn copyImagePixel(self: *Self, vc: *const VulkanContext, comptime PixelType:
     }));
     try vc.device.endCommandBuffer(self.command_buffer);
 
-    try vc.device.queueSubmit2(vc.queue, 1, @ptrCast(&vk.SubmitInfo2 {
+    try vc.queue.submit2(1, @ptrCast(&vk.SubmitInfo2 {
         .command_buffer_info_count = 1,
         .p_command_buffer_infos = @ptrCast(&vk.CommandBufferSubmitInfo{
             .command_buffer = self.command_buffer,

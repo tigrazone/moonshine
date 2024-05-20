@@ -66,7 +66,7 @@ pub fn submit(self: *Self, vc: *const VulkanContext) !void {
         .p_signal_semaphore_infos = undefined,
     };
 
-    try vc.device.queueSubmit2(vc.queue, 1, @ptrCast(&submit_info), .null_handle);
+    try vc.queue.submit2(1, @ptrCast(&submit_info), .null_handle);
 }
 
 pub fn submitAndIdleUntilDone(self: *Self, vc: *const VulkanContext) !void {
@@ -76,7 +76,7 @@ pub fn submitAndIdleUntilDone(self: *Self, vc: *const VulkanContext) !void {
 
 // must be called at some point if you want a guarantee your work is actually done
 pub fn idleUntilDone(self: *Self, vc: *const VulkanContext) !void {
-    try vc.device.queueWaitIdle(vc.queue);
+    try vc.queue.waitIdle();
     try vc.device.resetCommandPool(self.pool, .{});
 }
 
@@ -135,7 +135,7 @@ pub fn createAccelStructsAndGetCompactedSizes(self: *Self, vc: *const VulkanCont
 
 pub fn copyBufferToImage(self: *Self, vc: *const VulkanContext, src: vk.Buffer, dst: vk.Image, width: u32, height: u32, layer_count: u32) !void {
     try self.startRecording(vc);
-    
+
     const copy = vk.BufferImageCopy {
         .buffer_offset = 0,
         .buffer_row_length = width,
@@ -155,7 +155,7 @@ pub fn copyBufferToImage(self: *Self, vc: *const VulkanContext, src: vk.Buffer, 
             .width = width,
             .height = height,
             .depth = 1,
-        },  
+        },
     };
     vc.device.cmdCopyBufferToImage(self.buffer, src, dst, .transfer_dst_optimal, 1, @ptrCast(&copy));
     try self.submitAndIdleUntilDone(vc);
@@ -166,7 +166,7 @@ pub fn transitionImageLayout(self: *Self, vc: *const VulkanContext, allocator: s
 
     const barriers = try allocator.alloc(vk.ImageMemoryBarrier2, images.len);
     defer allocator.free(barriers);
-    
+
     for (images, barriers) |image, *barrier| {
         barrier.* = .{
             .old_layout = src_layout,
@@ -236,7 +236,7 @@ pub fn uploadDataToImage(self: *Self, vc: *const VulkanContext, vk_allocator: *V
             .width = extent.width,
             .height = extent.height,
             .depth = 1,
-        },  
+        },
     }));
     vc.device.cmdPipelineBarrier2(self.buffer, &vk.DependencyInfo {
         .image_memory_barrier_count = 1,

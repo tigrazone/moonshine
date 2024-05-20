@@ -82,8 +82,8 @@ pub fn acquireNextImage(self: *Self, vc: *const VulkanContext, semaphore: vk.Sem
     return result.result;
 }
 
-pub fn present(self: *const Self, vc: *const VulkanContext, queue: vk.Queue, semaphore: vk.Semaphore) !vk.Result {
-    return try vc.device.queuePresentKHR(queue, &vk.PresentInfoKHR {
+pub fn present(self: *const Self, vc: *const VulkanContext, semaphore: vk.Semaphore) !vk.Result {
+    return try vc.queue.presentKHR(&vk.PresentInfoKHR {
         .wait_semaphore_count = 1,
         .p_wait_semaphores = @ptrCast(&semaphore),
         .swapchain_count = 1,
@@ -161,6 +161,6 @@ const SwapSettings = struct {
         }
         if (extent.height == 0 and extent.width == 0) {
             return SwapchainError.InvalidSurfaceDimensions;
-        } 
+        }
     }
 };

@@ -112,7 +112,7 @@ pub fn endFrame(self: *Self, vc: *const VulkanContext) !vk.Result {
     try vc.device.endCommandBuffer(frame.command_buffer);
 
     // TODO: figure out why color_attachment_output_bit is the right thing here
-    try vc.device.queueSubmit2(vc.queue, 1, &[_]vk.SubmitInfo2 { .{
+    try vc.queue.submit2(1, &[_]vk.SubmitInfo2 { .{
         .flags = .{},
         .wait_semaphore_info_count = 1,
         .p_wait_semaphore_infos = @ptrCast(&vk.SemaphoreSubmitInfoKHR{
@@ -135,7 +135,7 @@ pub fn endFrame(self: *Self, vc: *const VulkanContext) !vk.Result {
         }),
     }}, frame.fence);
 
-    if (self.swapchain.present(vc, vc.queue, frame.command_completed)) |ok| {
+    if (self.swapchain.present(vc, frame.command_completed)) |ok| {
         // if ok, frame presented successfully and we should wait for previous frame
         self.frame_index = (self.frame_index + 1) % frames_in_flight;
 
