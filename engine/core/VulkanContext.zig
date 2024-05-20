@@ -237,7 +237,7 @@ fn debugCallback(
         error_severity => 31,
         else => unreachable,
     };
-    std.debug.print("\x1b[{}m{s}\x1b[0m\n", .{ color, callback_data.?.p_message });
+    std.debug.print("\x1b[{}m{s}\x1b[0m\n", .{ color, callback_data.?.p_message.? });
     return 0;
 }
 
