@@ -121,6 +121,7 @@ const DeviceDispatch = vk.DeviceWrapper(&all_vulkan_commands);
 pub const Instance = vk.InstanceProxy(&all_vulkan_commands);
 pub const Device = vk.DeviceProxy(&all_vulkan_commands);
 pub const Queue = vk.QueueProxy(&all_vulkan_commands);
+pub const CommandBuffer = vk.CommandBufferProxy(&all_vulkan_commands);
 
 const Base = struct {
     vulkan_lib: std.DynLib,

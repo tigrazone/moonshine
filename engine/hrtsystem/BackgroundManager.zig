@@ -189,7 +189,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
     try commands.startRecording(vc);
 
     // copy equirectangular image to device
-    vc.device.cmdPipelineBarrier2(commands.buffer, &vk.DependencyInfo {
+    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 3,
         .p_image_memory_barriers = &[3]vk.ImageMemoryBarrier2 {
             .{
@@ -242,7 +242,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
             },
         },
     });
-    vc.device.cmdCopyBufferToImage(commands.buffer, equirectangular_image_host.handle, equirectangular_image.handle, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
+    commands.buffer.copyBufferToImage(equirectangular_image_host.handle, equirectangular_image.handle, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
         .buffer_offset = 0,
         .buffer_row_length = 0,
         .buffer_image_height = 0,
@@ -264,7 +264,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
         },
     }));
 
-    vc.device.cmdPipelineBarrier2(commands.buffer, &vk.DependencyInfo {
+    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{
@@ -289,15 +289,15 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
     });
 
     // do conversion
-    self.equirectangular_to_equal_area_pipeline.recordBindPipeline(vc, commands.buffer);
-    self.equirectangular_to_equal_area_pipeline.recordPushDescriptors(vc, commands.buffer, .{
+    self.equirectangular_to_equal_area_pipeline.recordBindPipeline(commands.buffer);
+    self.equirectangular_to_equal_area_pipeline.recordPushDescriptors(commands.buffer, .{
         .src_texture = equirectangular_image.view,
         .dst_image = equal_area_image.view,
     });
     const dispatch_size = if (equal_area_map_size > shader_local_size) @divExact(equal_area_map_size, shader_local_size) else 1;
-    self.equirectangular_to_equal_area_pipeline.recordDispatch(vc, commands.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
+    self.equirectangular_to_equal_area_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
 
-    vc.device.cmdPipelineBarrier2(commands.buffer, &vk.DependencyInfo {
+    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{
@@ -321,16 +321,16 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
         },
     });
 
-    self.luminance_pipeline.recordBindPipeline(vc, commands.buffer);
-    self.luminance_pipeline.recordPushDescriptors(vc, commands.buffer, .{
+    self.luminance_pipeline.recordBindPipeline(commands.buffer);
+    self.luminance_pipeline.recordPushDescriptors(commands.buffer, .{
         .src_color_image = equal_area_image.view,
         .dst_luminance_image = luminance_image.view,
     });
-    self.luminance_pipeline.recordDispatch(vc, commands.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
+    self.luminance_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
 
-    self.fold_pipeline.recordBindPipeline(vc, commands.buffer);
+    self.fold_pipeline.recordBindPipeline(commands.buffer);
     for (1..luminance_mips_views.len) |dst_mip_level| {
-        vc.device.cmdPipelineBarrier2(commands.buffer, &vk.DependencyInfo {
+        commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
             .image_memory_barrier_count = 1,
             .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
                 .{
@@ -353,15 +353,15 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
                 }
             },
         });
-        self.fold_pipeline.recordPushDescriptors(vc, commands.buffer, .{
+        self.fold_pipeline.recordPushDescriptors(commands.buffer, .{
             .src_mip = luminance_mips_views.get(dst_mip_level - 1),
             .dst_mip = luminance_mips_views.get(dst_mip_level),
         });
         const dst_mip_size = std.math.pow(u32, 2, @intCast(luminance_mips_views.len - dst_mip_level));
         const mip_dispatch_size = if (dst_mip_size > shader_local_size) @divExact(dst_mip_size, shader_local_size) else 1;
-        self.fold_pipeline.recordDispatch(vc, commands.buffer, .{ .width = mip_dispatch_size, .height = mip_dispatch_size, .depth = 1 });
+        self.fold_pipeline.recordDispatch(commands.buffer, .{ .width = mip_dispatch_size, .height = mip_dispatch_size, .depth = 1 });
     }
-    vc.device.cmdPipelineBarrier2(commands.buffer, &vk.DependencyInfo {
+    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{

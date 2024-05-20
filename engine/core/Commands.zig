@@ -9,7 +9,7 @@ const VkAllocator = core.Allocator;
 const vk_helpers = core.vk_helpers;
 
 pool: vk.CommandPool,
-buffer: vk.CommandBuffer,
+buffer: VulkanContext.CommandBuffer,
 
 const Self = @This();
 
@@ -33,7 +33,7 @@ pub fn create(vc: *const VulkanContext) !Self {
 
     return Self {
         .pool = pool,
-        .buffer = buffer,
+        .buffer = VulkanContext.CommandBuffer.init(buffer, vc.device_dispatch),
     };
 }
 
@@ -43,7 +43,7 @@ pub fn destroy(self: *Self, vc: *const VulkanContext) void {
 
 // start recording work
 pub fn startRecording(self: *Self, vc: *const VulkanContext) !void {
-    try vc.device.beginCommandBuffer(self.buffer, &.{
+    try vc.device.beginCommandBuffer(self.buffer.handle, &.{
         .flags = .{
             .one_time_submit_bit = true,
         },
@@ -52,12 +52,12 @@ pub fn startRecording(self: *Self, vc: *const VulkanContext) !void {
 
 // submit recorded work
 pub fn submit(self: *Self, vc: *const VulkanContext) !void {
-    try vc.device.endCommandBuffer(self.buffer);
+    try vc.device.endCommandBuffer(self.buffer.handle);
 
     const submit_info = vk.SubmitInfo2 {
         .command_buffer_info_count = 1,
         .p_command_buffer_infos = @ptrCast(&vk.CommandBufferSubmitInfo {
-            .command_buffer = self.buffer,
+            .command_buffer = self.buffer.handle,
             .device_mask = 0,
         }),
         .wait_semaphore_info_count = 0,
@@ -198,7 +198,7 @@ pub fn uploadDataToImage(self: *Self, vc: *const VulkanContext, vk_allocator: *V
     @memcpy(staging_buffer.data, src_data);
 
     try self.startRecording(vc);
-    vc.device.cmdPipelineBarrier2(self.buffer, &vk.DependencyInfo {
+    self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
             .dst_stage_mask = .{ .copy_bit = true },
@@ -217,7 +217,7 @@ pub fn uploadDataToImage(self: *Self, vc: *const VulkanContext, vk_allocator: *V
             },
         }),
     });
-    vc.device.cmdCopyBufferToImage(self.buffer, staging_buffer.handle, dst_image, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
+    self.buffer.copyBufferToImage(staging_buffer.handle, dst_image, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
         .buffer_offset = 0,
         .buffer_row_length = 0,
         .buffer_image_height = 0,
@@ -238,7 +238,7 @@ pub fn uploadDataToImage(self: *Self, vc: *const VulkanContext, vk_allocator: *V
             .depth = 1,
         },
     }));
-    vc.device.cmdPipelineBarrier2(self.buffer, &vk.DependencyInfo {
+    self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
             .src_stage_mask = .{ .copy_bit = true },
@@ -267,19 +267,19 @@ pub fn recordCopyBuffer(self: *Self, vc: *const VulkanContext, dst: vk.Buffer, s
 
 // buffers must have appropriate flags
 // uploads whole host buffer to gpu buffer
-pub fn recordUploadBuffer(self: *Self, comptime T: type, vc: *const VulkanContext, dst: VkAllocator.DeviceBuffer(T), src: VkAllocator.HostBuffer(T)) void {
+pub fn recordUploadBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: VkAllocator.HostBuffer(T)) void {
     const region = vk.BufferCopy {
         .src_offset = 0,
         .dst_offset = 0,
         .size = src.sizeInBytes(),
     };
 
-    vc.device.cmdCopyBuffer(self.buffer, src.handle, dst.handle, 1, @ptrCast(&region));
+    self.buffer.copyBuffer(src.handle, dst.handle, 1, @ptrCast(&region));
 }
 
-pub fn recordUpdateBuffer(self: *Self, comptime T: type, vc: *const VulkanContext, dst: VkAllocator.DeviceBuffer(T), src: []const T, offset: vk.DeviceSize) void {
+pub fn recordUpdateBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: []const T, offset: vk.DeviceSize) void {
     const bytes = std.mem.sliceAsBytes(src);
-    vc.device.cmdUpdateBuffer(self.buffer, dst.handle, offset * @sizeOf(T), bytes.len, src.ptr);
+    self.buffer.updateBuffer(dst.handle, offset * @sizeOf(T), bytes.len, src.ptr);
 }
 
 pub fn uploadData(self: *Self, comptime T: type, vc: *const VulkanContext, vk_allocator: *VkAllocator, dst: VkAllocator.DeviceBuffer(T), src: []const T) !void {

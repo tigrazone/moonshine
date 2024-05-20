@@ -271,25 +271,25 @@ pub fn Pipeline(
             self.push_set_layout.destroy(vc);
         }
 
-        pub fn recordBindPipeline(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer) void {
-            vc.device.cmdBindPipeline(command_buffer, .compute, self.handle);
+        pub fn recordBindPipeline(self: *const Self, command_buffer: VulkanContext.CommandBuffer) void {
+            command_buffer.bindPipeline(.compute, self.handle);
         }
 
-        pub fn recordDispatch(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, extent: vk.Extent3D) void {
+        pub fn recordDispatch(self: *const Self, command_buffer: VulkanContext.CommandBuffer, extent: vk.Extent3D) void {
             _ = self;
-            vc.device.cmdDispatch(command_buffer, extent.width, extent.height, extent.depth);
+            command_buffer.dispatch(extent.width, extent.height, extent.depth);
         }
 
         pub usingnamespace if (@sizeOf(PushConstants) != 0) struct {
-            pub fn recordPushConstants(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, constants: PushConstants) void {
+            pub fn recordPushConstants(self: *const Self, command_buffer: VulkanContext.CommandBuffer, constants: PushConstants) void {
                 const bytes = std.mem.asBytes(&constants);
-                vc.device.cmdPushConstants(command_buffer, self.layout, .{ .compute_bit = true }, 0, bytes.len, bytes);
+                command_buffer.pushConstants(self.layout, .{ .compute_bit = true }, 0, bytes.len, bytes);
             }
         } else struct {};
 
-        pub fn recordPushDescriptors(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, data: PushDescriptorData) void {
+        pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, data: PushDescriptorData) void {
             const writes = pushDescriptorDataToWriteDescriptor(push_set_bindings, data);
-            vc.device.cmdPushDescriptorSetKHR(command_buffer, .compute, self.layout, 0, writes.len, &writes.buffer);
+            command_buffer.pushDescriptorSetKHR(.compute, self.layout, 0, writes.len, &writes.buffer);
         }
     };
 }

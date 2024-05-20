@@ -57,21 +57,21 @@ const TestingContext = struct {
         try self.commands.startRecording(&self.vc);
 
         // prepare our stuff
-        scene.camera.sensors.items[0].recordPrepareForCapture(&self.vc, self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
+        scene.camera.sensors.items[0].recordPrepareForCapture(self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
 
         // bind our stuff
-        pipeline.recordBindPipeline(&self.vc, self.commands.buffer);
-        pipeline.recordBindTextureDescriptorSet(&self.vc, self.commands.buffer, scene.world.materials.textures.descriptor_set);
+        pipeline.recordBindPipeline(self.commands.buffer);
+        pipeline.recordBindTextureDescriptorSet(self.commands.buffer, scene.world.materials.textures.descriptor_set);
 
         // push our stuff
-        pipeline.recordPushDescriptors(&self.vc, self.commands.buffer, scene.pushDescriptors(0, 0));
-        pipeline.recordPushConstants(&self.vc, self.commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
+        pipeline.recordPushDescriptors(self.commands.buffer, scene.pushDescriptors(0, 0));
+        pipeline.recordPushConstants(self.commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
 
         // trace our stuff
-        pipeline.recordTraceRays(&self.vc, self.commands.buffer, scene.camera.sensors.items[0].extent);
+        pipeline.recordTraceRays(self.commands.buffer, scene.camera.sensors.items[0].extent);
 
         // copy our stuff
-        scene.camera.sensors.items[0].recordPrepareForCopy(&self.vc, self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
+        scene.camera.sensors.items[0].recordPrepareForCopy(self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
 
         // copy output image to host-visible staging buffer
         const copy = vk.BufferImageCopy {
@@ -95,7 +95,7 @@ const TestingContext = struct {
                 .depth = 1,
             },
         };
-        self.vc.device.cmdCopyImageToBuffer(self.commands.buffer, scene.camera.sensors.items[0].image.handle, .transfer_src_optimal, self.output_buffer.handle, 1, @ptrCast(&copy));
+        self.commands.buffer.copyImageToBuffer(scene.camera.sensors.items[0].image.handle, .transfer_src_optimal, self.output_buffer.handle, 1, @ptrCast(&copy));
 
         try self.commands.submitAndIdleUntilDone(&self.vc);
     }

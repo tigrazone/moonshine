@@ -30,8 +30,8 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, extent: vk.E
 //   recordPrepareForCapture(...)
 //   ...
 //   recordPrepareForCopy(...)
-pub fn recordPrepareForCapture(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, capture_stage: vk.PipelineStageFlags2, copy_stage: vk.PipelineStageFlags2) void {
-    vc.device.cmdPipelineBarrier2(command_buffer, &vk.DependencyInfo{
+pub fn recordPrepareForCapture(self: *const Self, command_buffer: VulkanContext.CommandBuffer, capture_stage: vk.PipelineStageFlags2, copy_stage: vk.PipelineStageFlags2) void {
+    command_buffer.pipelineBarrier2(&vk.DependencyInfo{
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2{
             .src_stage_mask = copy_stage,
@@ -54,8 +54,8 @@ pub fn recordPrepareForCapture(self: *const Self, vc: *const VulkanContext, comm
     });
 }
 
-pub fn recordPrepareForCopy(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, capture_stage: vk.PipelineStageFlags2, copy_stage: vk.PipelineStageFlags2) void {
-    vc.device.cmdPipelineBarrier2(command_buffer, &vk.DependencyInfo{
+pub fn recordPrepareForCopy(self: *const Self, command_buffer: VulkanContext.CommandBuffer, capture_stage: vk.PipelineStageFlags2, copy_stage: vk.PipelineStageFlags2) void {
+    command_buffer.pipelineBarrier2(&vk.DependencyInfo{
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
             .src_stage_mask = capture_stage,

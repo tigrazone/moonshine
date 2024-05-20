@@ -343,7 +343,7 @@ pub fn startFrame(self: *Self) void {
     imgui.newFrame();
 }
 
-pub fn endFrame(self: *Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, swapchain_image_index: usize, display_image_index: usize) void {
+pub fn endFrame(self: *Self, command_buffer: VulkanContext.CommandBuffer, swapchain_image_index: usize, display_image_index: usize) void {
     imgui.render();
     const draw_data = imgui.getDrawData();
 
@@ -365,7 +365,7 @@ pub fn endFrame(self: *Self, vc: *const VulkanContext, command_buffer: vk.Comman
         }
     } else return;
 
-    vc.device.cmdBeginRendering(command_buffer, &vk.RenderingInfo{
+    command_buffer.beginRendering(&vk.RenderingInfo{
         .render_area = vk.Rect2D{
             .offset = vk.Offset2D{
                 .x = 0.0,
@@ -386,10 +386,10 @@ pub fn endFrame(self: *Self, vc: *const VulkanContext, command_buffer: vk.Comman
             .clear_value = undefined,
         }),
     });
-    vc.device.cmdBindPipeline(command_buffer, .graphics, self.pipeline);
-    vc.device.cmdBindVertexBuffers(command_buffer, 0, 1, @ptrCast(&vertex_buffer.handle), @ptrCast(&@as(vk.DeviceSize, 0)));
-    vc.device.cmdBindIndexBuffer(command_buffer, index_buffer.handle, 0, .uint16);
-    vc.device.cmdSetViewport(command_buffer, 0, 1, @ptrCast(&vk.Viewport{
+    command_buffer.bindPipeline(.graphics, self.pipeline);
+    command_buffer.bindVertexBuffers(0, 1, @ptrCast(&vertex_buffer.handle), @ptrCast(&@as(vk.DeviceSize, 0)));
+    command_buffer.bindIndexBuffer(index_buffer.handle, 0, .uint16);
+    command_buffer.setViewport(0, 1, @ptrCast(&vk.Viewport{
         .x = 0,
         .y = 0,
         .width = @floatFromInt(self.extent.width),
@@ -406,16 +406,16 @@ pub fn endFrame(self: *Self, vc: *const VulkanContext, command_buffer: vk.Comman
             -1.0 - draw_data.DisplayPos.x * scale[0],
             -1.0 - draw_data.DisplayPos.y * scale[1],
         };
-        vc.device.cmdPushConstants(command_buffer, self.pipeline_layout, .{ .vertex_bit = true }, 0, @sizeOf(f32) * 4, &std.mem.toBytes(.{ scale, translate }));
+        command_buffer.pushConstants(self.pipeline_layout, .{ .vertex_bit = true }, 0, @sizeOf(f32) * 4, &std.mem.toBytes(.{ scale, translate }));
     }
-    vc.device.cmdBindDescriptorSets(command_buffer, .graphics, self.pipeline_layout, 0, 1, @ptrCast(&self.font_image_set), 0, undefined);
+    command_buffer.bindDescriptorSets(.graphics, self.pipeline_layout, 0, 1, @ptrCast(&self.font_image_set), 0, undefined);
 
     var global_idx_offset: u32 = 0;
     var global_vtx_offset: u32 = 0;
     for (draw_data.CmdLists.Data[0..@intCast(draw_data.CmdListsCount)]) |cmd_list| {
         for (cmd_list.*.CmdBuffer.Data[0..@intCast(cmd_list.*.CmdBuffer.Size)]) |cmd| {
             if (cmd.UserCallback) |_| @panic("todo");
-            vc.device.cmdSetScissor(command_buffer, 0, 1, @ptrCast(&vk.Rect2D{
+            command_buffer.setScissor(0, 1, @ptrCast(&vk.Rect2D{
                 .offset = vk.Offset2D {
                     .x = @intFromFloat(cmd.ClipRect.x),
                     .y = @intFromFloat(cmd.ClipRect.y),
@@ -425,12 +425,12 @@ pub fn endFrame(self: *Self, vc: *const VulkanContext, command_buffer: vk.Comman
                     .height = @as(u32, @intFromFloat(cmd.ClipRect.w)) - @as(u32, @intFromFloat(cmd.ClipRect.y)),
                 },
             }));
-            vc.device.cmdDrawIndexed(command_buffer, cmd.ElemCount, 1, global_idx_offset + cmd.IdxOffset, @intCast(global_vtx_offset + cmd.VtxOffset), 0);
+            command_buffer.drawIndexed(cmd.ElemCount, 1, global_idx_offset + cmd.IdxOffset, @intCast(global_vtx_offset + cmd.VtxOffset), 0);
         }
         global_idx_offset += @intCast(cmd_list.*.IdxBuffer.Size);
         global_vtx_offset += @intCast(cmd_list.*.VtxBuffer.Size);
     }
-    vc.device.cmdEndRendering(command_buffer);
+    command_buffer.endRendering();
 }
 
 pub const GuiDescriptorLayout = DescriptorLayout(&.{

@@ -48,7 +48,7 @@ buffer: VkAllocator.HostBuffer(ClickDataShader),
 pipeline: Pipeline,
 
 command_pool: vk.CommandPool,
-command_buffer: vk.CommandBuffer,
+command_buffer: VulkanContext.CommandBuffer,
 ready_fence: vk.Fence,
 
 pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands) !Self {
@@ -81,36 +81,36 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         .pipeline = pipeline,
 
         .command_pool = command_pool,
-        .command_buffer = command_buffer,
+        .command_buffer = VulkanContext.CommandBuffer.init(command_buffer, vc.device_dispatch),
         .ready_fence = ready_fence,
     };
 }
 
 pub fn getClickedObject(self: *Self, vc: *const VulkanContext, normalized_coords: F32x2, camera: Camera, accel: vk.AccelerationStructureKHR, sensor: Sensor) !?ClickedObject {
     // begin
-    try vc.device.beginCommandBuffer(self.command_buffer, &.{ .flags = .{} });
+    try vc.device.beginCommandBuffer(self.command_buffer.handle, &.{ .flags = .{} });
 
     // bind pipeline + sets
-    self.pipeline.recordBindPipeline(vc, self.command_buffer);
-    self.pipeline.recordPushDescriptors(vc, self.command_buffer, Pipeline.PushDescriptorData {
+    self.pipeline.recordBindPipeline(self.command_buffer);
+    self.pipeline.recordPushDescriptors(self.command_buffer, Pipeline.PushDescriptorData {
         .tlas = accel,
         .output_image = sensor.image.view,
         .click_data = self.buffer.handle,
     });
 
-    self.pipeline.recordPushConstants(vc, self.command_buffer, .{ .lens = camera.lenses.items[0], .click_position = normalized_coords });
+    self.pipeline.recordPushConstants(self.command_buffer, .{ .lens = camera.lenses.items[0], .click_position = normalized_coords });
 
     // trace rays
-    self.pipeline.recordTraceRays(vc, self.command_buffer, vk.Extent2D { .width = 1, .height = 1 });
+    self.pipeline.recordTraceRays(self.command_buffer, vk.Extent2D { .width = 1, .height = 1 });
 
     // end
-    try vc.device.endCommandBuffer(self.command_buffer);
+    try vc.device.endCommandBuffer(self.command_buffer.handle);
 
     const submit_info = vk.SubmitInfo2 {
         .flags = .{},
         .command_buffer_info_count = 1,
         .p_command_buffer_infos = @ptrCast(&vk.CommandBufferSubmitInfo {
-            .command_buffer = self.command_buffer,
+            .command_buffer = self.command_buffer.handle,
             .device_mask = 0,
         }),
         .wait_semaphore_info_count = 0,

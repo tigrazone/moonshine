@@ -149,7 +149,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
                     variant_buffer.buffer = try vk_allocator.createDeviceBuffer(vc, allocator, field.type, max_materials, .{ .shader_device_address_bit = true, .transfer_dst_bit = true });
                     variant_buffer.addr = variant_buffer.buffer.getAddress(vc);
                 }
-                commands.recordUpdateBuffer(field.type, vc, variant_buffer.buffer, &.{ @field(info.variant, field.name) }, variant_buffer.len);
+                commands.recordUpdateBuffer(field.type, variant_buffer.buffer, &.{ @field(info.variant, field.name) }, variant_buffer.len);
                 variant_buffer.len += 1;
             }
 
@@ -160,7 +160,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
                 .addr = @field(self.variant_buffers, field.name).addr + (@field(self.variant_buffers, field.name).len - 1) * @sizeOf(field.type),
             };
             if (self.materials.is_null()) self.materials = try vk_allocator.createDeviceBuffer(vc, allocator, Material, max_materials, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
-            commands.recordUpdateBuffer(Material, vc, self.materials, &.{ gpu_material }, self.material_count);
+            commands.recordUpdateBuffer(Material, self.materials, &.{ gpu_material }, self.material_count);
         }
     }
     try commands.submitAndIdleUntilDone(vc);
@@ -198,7 +198,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
 
                 @memcpy(host_buffer.data, data);
                 try commands.startRecording(vc);
-                commands.recordUploadBuffer(field.type, vc, device_buffer, host_buffer);
+                commands.recordUploadBuffer(field.type, device_buffer, host_buffer);
                 try commands.submitAndIdleUntilDone(vc);
 
                 @field(variant_buffers, field.name) = .{
@@ -230,7 +230,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         if (material_count != 0)
         {
             try commands.startRecording(vc);
-            commands.recordUploadBuffer(Material, vc, materials_gpu, materials_host);
+            commands.recordUploadBuffer(Material, materials_gpu, materials_host);
             try commands.submitAndIdleUntilDone(vc);
         }
 
@@ -245,7 +245,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     };
 }
 
-pub fn recordUpdateSingleVariant(self: *Self, vc: *const VulkanContext, comptime VariantType: type, command_buffer: vk.CommandBuffer, variant_idx: u32, new_data: VariantType) void {
+pub fn recordUpdateSingleVariant(self: *Self, comptime VariantType: type, command_buffer: VulkanContext.CommandBuffer, variant_idx: u32, new_data: VariantType) void {
     const variant_name = inline for (@typeInfo(MaterialVariant).Union.fields) |union_field| {
         if (union_field.type == VariantType) {
             break union_field.name;
@@ -254,9 +254,9 @@ pub fn recordUpdateSingleVariant(self: *Self, vc: *const VulkanContext, comptime
 
     const offset = @sizeOf(VariantType) * variant_idx;
     const size = @sizeOf(VariantType);
-    vc.device.cmdUpdateBuffer(command_buffer, @field(self.variant_buffers, variant_name).buffer.handle, offset, size, &new_data);
+    command_buffer.updateBuffer(@field(self.variant_buffers, variant_name).buffer.handle, offset, size, &new_data);
 
-    vc.device.cmdPipelineBarrier2(command_buffer, &vk.DependencyInfo {
+    command_buffer.pipelineBarrier2(&vk.DependencyInfo {
         .buffer_memory_barrier_count = 1,
         .p_buffer_memory_barriers = @ptrCast(&vk.BufferMemoryBarrier2 {
             .src_stage_mask = .{ .clear_bit = true }, // cmdUpdateBuffer seems to be clear for some reason
@@ -337,7 +337,7 @@ pub const TextureManager = struct {
             .p_set_layouts = @ptrCast(&descriptor_layout.handle),
         }, @ptrCast(&descriptor_set));
         try vk_helpers.setDebugName(vc, descriptor_set, "textures");
-        
+
         return TextureManager {
             .data = .{},
             .descriptor_layout = descriptor_layout,

@@ -69,7 +69,7 @@ pub const Handle = u32;
 
 pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands, host_mesh: Mesh) !Handle {
     std.debug.assert(self.meshes.len < max_meshes);
-    
+
     var position_staging_buffer = VkAllocator.HostBuffer(F32x3) {};
     defer position_staging_buffer.destroy(vc);
     var texcoord_staging_buffer = VkAllocator.HostBuffer(F32x2) {};
@@ -84,7 +84,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
         position_staging_buffer = try vk_allocator.createHostBuffer(vc, F32x3, host_mesh.positions.len, .{ .transfer_src_bit = true });
         @memcpy(position_staging_buffer.data, host_mesh.positions);
         const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, F32x3, host_mesh.positions.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .acceleration_structure_build_input_read_only_bit_khr = true });
-        commands.recordUploadBuffer(F32x3, vc, gpu_buffer, position_staging_buffer);
+        commands.recordUploadBuffer(F32x3, gpu_buffer, position_staging_buffer);
 
         break :blk gpu_buffer;
     };
@@ -95,7 +95,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
             texcoord_staging_buffer = try vk_allocator.createHostBuffer(vc, F32x2, texcoords.len, .{ .transfer_src_bit = true });
             @memcpy(texcoord_staging_buffer.data, texcoords);
             const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, F32x2, texcoords.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true });
-            commands.recordUploadBuffer(F32x2, vc, gpu_buffer, texcoord_staging_buffer);
+            commands.recordUploadBuffer(F32x2, gpu_buffer, texcoord_staging_buffer);
             break :blk gpu_buffer;
         } else {
             break :blk VkAllocator.DeviceBuffer(F32x2) {};
@@ -108,7 +108,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
             normal_staging_buffer = try vk_allocator.createHostBuffer(vc, F32x3, normals.len, .{ .transfer_src_bit = true });
             @memcpy(normal_staging_buffer.data, normals);
             const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, F32x3, normals.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true });
-            commands.recordUploadBuffer(F32x3, vc, gpu_buffer, normal_staging_buffer);
+            commands.recordUploadBuffer(F32x3, gpu_buffer, normal_staging_buffer);
             break :blk gpu_buffer;
         } else {
             break :blk VkAllocator.DeviceBuffer(F32x3) {};
@@ -120,7 +120,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
         index_staging_buffer = try vk_allocator.createHostBuffer(vc, U32x3, host_mesh.indices.len, .{ .transfer_src_bit = true });
         @memcpy(index_staging_buffer.data, host_mesh.indices);
         const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, U32x3, host_mesh.indices.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .acceleration_structure_build_input_read_only_bit_khr = true });
-        commands.recordUploadBuffer(U32x3, vc, gpu_buffer, index_staging_buffer);
+        commands.recordUploadBuffer(U32x3, gpu_buffer, index_staging_buffer);
 
         break :blk gpu_buffer;
     };
@@ -135,7 +135,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
     };
 
     if (self.addresses_buffer.is_null()) self.addresses_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, MeshAddresses, max_meshes, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .storage_buffer_bit = true });
-    commands.recordUpdateBuffer(MeshAddresses, vc, self.addresses_buffer, &.{ addresses }, self.meshes.len);
+    commands.recordUpdateBuffer(MeshAddresses, self.addresses_buffer, &.{ addresses }, self.meshes.len);
     try commands.submitAndIdleUntilDone(vc);
 
     try self.meshes.append(allocator, .{
@@ -160,7 +160,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     var meshes = Meshes {};
     try meshes.ensureTotalCapacity(allocator, host_meshes.len);
     errdefer meshes.deinit(allocator);
-    
+
     var addresses_buffer_host = try vk_allocator.createHostBuffer(vc, MeshAddresses, @intCast(host_meshes.len), .{ .transfer_src_bit = true });
     defer addresses_buffer_host.destroy(vc);
 
@@ -176,7 +176,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
             try staging_buffers.append(staging_buffer.toBytes());
             @memcpy(staging_buffer.data, host_mesh.positions);
             const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, F32x3, host_mesh.positions.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .acceleration_structure_build_input_read_only_bit_khr = true });
-            commands.recordUploadBuffer(F32x3, vc, gpu_buffer, staging_buffer);
+            commands.recordUploadBuffer(F32x3, gpu_buffer, staging_buffer);
 
             break :blk gpu_buffer;
         };
@@ -188,7 +188,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
                 try staging_buffers.append(staging_buffer.toBytes());
                 @memcpy(staging_buffer.data, texcoords);
                 const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, F32x2, texcoords.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true });
-                commands.recordUploadBuffer(F32x2, vc, gpu_buffer, staging_buffer);
+                commands.recordUploadBuffer(F32x2, gpu_buffer, staging_buffer);
                 break :blk gpu_buffer;
             } else {
                 break :blk VkAllocator.DeviceBuffer(F32x2) {};
@@ -202,7 +202,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
                 try staging_buffers.append(staging_buffer.toBytes());
                 @memcpy(staging_buffer.data, normals);
                 const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, F32x3, normals.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true });
-                commands.recordUploadBuffer(F32x3, vc, gpu_buffer, staging_buffer);
+                commands.recordUploadBuffer(F32x3, gpu_buffer, staging_buffer);
                 break :blk gpu_buffer;
             } else {
                 break :blk VkAllocator.DeviceBuffer(F32x3) {};
@@ -215,7 +215,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
             try staging_buffers.append(staging_buffer.toBytes());
             @memcpy(staging_buffer.data, host_mesh.indices);
             const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, U32x3, host_mesh.indices.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .acceleration_structure_build_input_read_only_bit_khr = true });
-            commands.recordUploadBuffer(U32x3, vc, gpu_buffer, staging_buffer);
+            commands.recordUploadBuffer(U32x3, gpu_buffer, staging_buffer);
 
             break :blk gpu_buffer;
         };
@@ -248,10 +248,10 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     errdefer addresses_buffer.destroy(vc);
 
     if (host_meshes.len != 0) {
-        commands.recordUploadBuffer(MeshAddresses, vc, addresses_buffer, addresses_buffer_host);
+        commands.recordUploadBuffer(MeshAddresses, addresses_buffer, addresses_buffer_host);
         try commands.submitAndIdleUntilDone(vc);
     }
-    
+
     return Self {
         .meshes = meshes,
         .addresses_buffer = addresses_buffer,

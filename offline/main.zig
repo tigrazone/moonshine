@@ -121,23 +121,23 @@ pub fn main() !void {
         try commands.startRecording(&context);
 
         // prepare our stuff
-        scene.camera.sensors.items[0].recordPrepareForCapture(&context, commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
+        scene.camera.sensors.items[0].recordPrepareForCapture(commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
 
         // bind our stuff
-        pipeline.recordBindPipeline(&context, commands.buffer);
-        pipeline.recordBindTextureDescriptorSet(&context, commands.buffer, scene.world.materials.textures.descriptor_set);
-        pipeline.recordPushDescriptors(&context, commands.buffer, scene.pushDescriptors(0, 0));
+        pipeline.recordBindPipeline(commands.buffer);
+        pipeline.recordBindTextureDescriptorSet(commands.buffer, scene.world.materials.textures.descriptor_set);
+        pipeline.recordPushDescriptors(commands.buffer, scene.pushDescriptors(0, 0));
 
         for (0..config.spp) |sample_count| {
             // push our stuff
-            pipeline.recordPushConstants(&context, commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
+            pipeline.recordPushConstants(commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
 
             // trace our stuff
-            pipeline.recordTraceRays(&context, commands.buffer, scene.camera.sensors.items[0].extent);
+            pipeline.recordTraceRays(commands.buffer, scene.camera.sensors.items[0].extent);
 
             // if not last invocation, need barrier cuz we write to images
             if (sample_count != config.spp) {
-                context.device.cmdPipelineBarrier2(commands.buffer, &vk.DependencyInfo {
+                commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
                     .image_memory_barrier_count = 1,
                     .p_image_memory_barriers = &[_]vk.ImageMemoryBarrier2 {
                         .{
@@ -165,7 +165,7 @@ pub fn main() !void {
         }
 
         // copy our stuff
-        scene.camera.sensors.items[0].recordPrepareForCopy(&context, commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
+        scene.camera.sensors.items[0].recordPrepareForCopy(commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
 
         // copy rendered image to host-visible staging buffer
         const copy = vk.BufferImageCopy {
@@ -189,7 +189,7 @@ pub fn main() !void {
                 .depth = 1,
             },
         };
-        context.device.cmdCopyImageToBuffer(commands.buffer, scene.camera.sensors.items[0].image.handle, .transfer_src_optimal, output_buffer.handle, 1, @ptrCast(&copy));
+        commands.buffer.copyImageToBuffer(scene.camera.sensors.items[0].image.handle, .transfer_src_optimal, output_buffer.handle, 1, @ptrCast(&copy));
 
         try commands.submitAndIdleUntilDone(&context);
     }

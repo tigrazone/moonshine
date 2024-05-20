@@ -77,7 +77,7 @@ pub fn destroy(self: *Self, vc: *const VulkanContext) void {
     }
 }
 
-pub fn startFrame(self: *Self, vc: *const VulkanContext) !vk.CommandBuffer {
+pub fn startFrame(self: *Self, vc: *const VulkanContext) !VulkanContext.CommandBuffer {
     const frame = self.frames[self.frame_index];
 
     _ = try self.swapchain.acquireNextImage(vc, frame.image_acquired);
@@ -96,7 +96,7 @@ pub fn startFrame(self: *Self, vc: *const VulkanContext) !vk.CommandBuffer {
 
     if (metrics) vc.device.cmdWriteTimestamp2(frame.command_buffer, .{ .top_of_pipe_bit = true }, frame.query_pool, 0);
 
-    return frame.command_buffer;
+    return VulkanContext.CommandBuffer.init(frame.command_buffer, vc.device_dispatch);
 }
 
 pub fn recreate(self: *Self, vc: *const VulkanContext, new_extent: vk.Extent2D, destruction_queue: *DestructionQueue, allocator: std.mem.Allocator) !void {

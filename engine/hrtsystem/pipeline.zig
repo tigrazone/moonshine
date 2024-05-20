@@ -249,30 +249,30 @@ pub fn Pipeline(
             self.push_set_layout.destroy(vc);
         }
 
-        pub fn recordBindPipeline(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer) void {
-            vc.device.cmdBindPipeline(command_buffer, .ray_tracing_khr, self.handle);
+        pub fn recordBindPipeline(self: *const Self, command_buffer: VulkanContext.CommandBuffer) void {
+            command_buffer.bindPipeline(.ray_tracing_khr, self.handle);
         }
 
         pub usingnamespace if (has_textures) struct {
-            pub fn recordBindTextureDescriptorSet(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, set: vk.DescriptorSet) void {
-                vc.device.cmdBindDescriptorSets(command_buffer, .ray_tracing_khr, self.layout, 0, 1, &[_]vk.DescriptorSet { set }, 0, undefined);
+            pub fn recordBindTextureDescriptorSet(self: *const Self, command_buffer: VulkanContext.CommandBuffer, set: vk.DescriptorSet) void {
+                command_buffer.bindDescriptorSets(.ray_tracing_khr, self.layout, 0, 1, &[_]vk.DescriptorSet { set }, 0, undefined);
             }
         } else struct {};
 
         pub usingnamespace if (@sizeOf(PushConstants) != 0) struct {
-            pub fn recordPushConstants(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, constants: PushConstants) void {
+            pub fn recordPushConstants(self: *const Self, command_buffer: VulkanContext.CommandBuffer, constants: PushConstants) void {
                 const bytes = std.mem.asBytes(&constants);
-                vc.device.cmdPushConstants(command_buffer, self.layout, .{ .raygen_bit_khr = true }, 0, bytes.len, bytes);
+                command_buffer.pushConstants(self.layout, .{ .raygen_bit_khr = true }, 0, bytes.len, bytes);
             }
         } else struct {};
 
-        pub fn recordTraceRays(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, extent: vk.Extent2D) void {
-            vc.device.cmdTraceRaysKHR(command_buffer, &self.sbt.getRaygenSBT(), &self.sbt.getMissSBT(), &self.sbt.getHitSBT(), &self.sbt.getCallableSBT(), extent.width, extent.height, 1);
+        pub fn recordTraceRays(self: *const Self, command_buffer: VulkanContext.CommandBuffer, extent: vk.Extent2D) void {
+            command_buffer.traceRaysKHR(&self.sbt.getRaygenSBT(), &self.sbt.getMissSBT(), &self.sbt.getHitSBT(), &self.sbt.getCallableSBT(), extent.width, extent.height, 1);
         }
 
-        pub fn recordPushDescriptors(self: *const Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, data: PushDescriptorData) void {
+        pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, data: PushDescriptorData) void {
             const writes = core.pipeline.pushDescriptorDataToWriteDescriptor(push_set_bindings, data);
-            vc.device.cmdPushDescriptorSetKHR(command_buffer, .ray_tracing_khr, self.layout, if (has_textures) 1 else 0, writes.len, &writes.buffer);
+            command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.layout, if (has_textures) 1 else 0, writes.len, &writes.buffer);
         }
     };
 }
@@ -498,7 +498,7 @@ const ShaderBindingTable = struct {
         errdefer handle.destroy(vc);
 
         try cmd.startRecording(vc);
-        cmd.recordUploadBuffer(u8, vc, handle, sbt);
+        cmd.recordUploadBuffer(u8, handle, sbt);
         try cmd.submit(vc);
 
         const raygen_address = handle.getAddress(vc);
@@ -567,7 +567,7 @@ const ShaderBindingTable = struct {
         std.mem.copyBackwards(u8, sbt.data[miss_index..miss_index + miss_size], sbt.data[raygen_size..raygen_size + miss_size]);
 
         try cmd.startRecording(vc);
-        cmd.recordUploadBuffer(u8, vc, self.handle, sbt);
+        cmd.recordUploadBuffer(u8, self.handle, sbt);
         try cmd.submitAndIdleUntilDone(vc);
     }
 

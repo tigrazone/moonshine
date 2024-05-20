@@ -178,7 +178,7 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         });
     }
 
-    vc.device.cmdBuildAccelerationStructuresKHR(commands.buffer, @intCast(build_geometry_infos.len), build_geometry_infos.ptr, build_infos.ptr);
+    commands.buffer.buildAccelerationStructuresKHR(@intCast(build_geometry_infos.len), build_geometry_infos.ptr, build_infos.ptr);
 
     return scratch_buffers;
 }
@@ -202,7 +202,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
             try vk_helpers.setDebugName(vc, self.geometries.handle, "geometries");
         }
 
-        commands.recordUpdateBuffer(Geometry, vc, self.geometries, instance.geometries, self.geometry_count);
+        commands.recordUpdateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
 
         self.geometry_count += @intCast(instance.geometries.len);
     }
@@ -236,7 +236,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
 
         self.instances_host.data[self.instance_count] = vk_instance;
 
-        commands.recordUpdateBuffer(vk.AccelerationStructureInstanceKHR, vc, self.instances_device, &.{ vk_instance }, self.instance_count); // TODO: can copy
+        commands.recordUpdateBuffer(vk.AccelerationStructureInstanceKHR, self.instances_device, &.{ vk_instance }, self.instance_count); // TODO: can copy
     }
 
     // upload world_to_instance matrix
@@ -248,7 +248,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
 
         self.world_to_instance_host.data[self.instance_count] = instance.transform.inverse_affine();
 
-        commands.recordUpdateBuffer(Mat3x4, vc, self.world_to_instance_device, &.{ instance.transform.inverse_affine() }, self.instance_count);
+        commands.recordUpdateBuffer(Mat3x4, self.world_to_instance_device, &.{ instance.transform.inverse_affine() }, self.instance_count);
     }
 
     self.instance_count += 1;
@@ -297,7 +297,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     self.tlas_update_scratch_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.update_scratch_size, .{ .shader_device_address_bit = true, .storage_buffer_bit = true });
     self.tlas_update_scratch_address = self.tlas_update_scratch_buffer.getAddress(vc);
 
-    vc.device.cmdBuildAccelerationStructuresKHR(commands.buffer, 1, @ptrCast(&geometry_info), &[_][*]const vk.AccelerationStructureBuildRangeInfoKHR{ @ptrCast(&vk.AccelerationStructureBuildRangeInfoKHR {
+    commands.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), &[_][*]const vk.AccelerationStructureBuildRangeInfoKHR{ @ptrCast(&vk.AccelerationStructureBuildRangeInfoKHR {
         .primitive_count = @intCast(self.instance_count),
         .first_vertex = 0,
         .primitive_offset = 0,
@@ -345,7 +345,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     // create a BLAS for each model
     var blases = BottomLevelAccels {};
     errdefer blases.deinit(allocator);
-    
+
     try commands.startRecording(vc);
     const scratch_buffers = try makeBlases(vc, vk_allocator, allocator, commands, mesh_manager, unique_mesh_lists_hash.keys(), &blases);
     defer allocator.free(scratch_buffers);
@@ -374,7 +374,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         }
 
         if (total_geometry_count != 0) {
-            commands.recordUploadBuffer(Geometry, vc, geometries, geometries_host);
+            commands.recordUploadBuffer(Geometry, geometries, geometries_host);
         }
 
         break :blk geometries;
@@ -413,7 +413,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         }
 
         if (instance_count != 0) {
-            commands.recordUploadBuffer(vk.AccelerationStructureInstanceKHR, vc, instances_device, instances_host);
+            commands.recordUploadBuffer(vk.AccelerationStructureInstanceKHR, instances_device, instances_host);
         }
 
         break :blk instances_device;
@@ -432,7 +432,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         }
 
         if (instance_count != 0) {
-            commands.recordUploadBuffer(Mat3x4, vc, buffer, world_to_instance_host);
+            commands.recordUploadBuffer(Mat3x4, buffer, world_to_instance_host);
         }
 
         break :blk buffer;
@@ -481,7 +481,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     const update_scratch_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.update_scratch_size, .{ .shader_device_address_bit = true, .storage_buffer_bit = true });
     errdefer update_scratch_buffer.destroy(vc);
 
-    vc.device.cmdBuildAccelerationStructuresKHR(commands.buffer, 1, @ptrCast(&geometry_info), &[_][*]const vk.AccelerationStructureBuildRangeInfoKHR{ @ptrCast(&vk.AccelerationStructureBuildRangeInfoKHR {
+    commands.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), &[_][*]const vk.AccelerationStructureBuildRangeInfoKHR{ @ptrCast(&vk.AccelerationStructureBuildRangeInfoKHR {
         .primitive_count = instance_count,
         .first_vertex = 0,
         .primitive_offset = 0,
@@ -532,7 +532,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         alias_staging_buffer.data[0].select = table.sum;
         @memcpy(alias_staging_buffer.data[1..], table.entries);
 
-        commands.recordUploadBuffer(AliasTableT.TableEntry, vc, buffer, alias_staging_buffer);
+        commands.recordUploadBuffer(AliasTableT.TableEntry, buffer, alias_staging_buffer);
 
         break :blk buffer;
     };
@@ -564,12 +564,12 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
 
 // probably bad idea if you're changing many
 // must recordRebuild to see changes
-pub fn recordUpdateSingleTransform(self: *Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, instance_idx: u32, new_transform: Mat3x4) void {
+pub fn recordUpdateSingleTransform(self: *Self, command_buffer: VulkanContext.CommandBuffer, instance_idx: u32, new_transform: Mat3x4) void {
     const offset = @sizeOf(vk.AccelerationStructureInstanceKHR) * instance_idx + @offsetOf(vk.AccelerationStructureInstanceKHR, "transform");
     const offset_inverse = @sizeOf(Mat3x4) * instance_idx;
     const size = @sizeOf(vk.TransformMatrixKHR);
-    vc.device.cmdUpdateBuffer(command_buffer, self.instances_device.handle, offset, size, &new_transform);
-    vc.device.cmdUpdateBuffer(command_buffer, self.world_to_instance_device.handle, offset_inverse, size, &new_transform.inverse_affine());
+    command_buffer.updateBuffer(self.instances_device.handle, offset, size, &new_transform);
+    command_buffer.updateBuffer(self.world_to_instance_device.handle, offset_inverse, size, &new_transform.inverse_affine());
     const barriers = [_]vk.BufferMemoryBarrier2 {
         .{
             .src_stage_mask = .{ .clear_bit = true }, // cmdUpdateBuffer seems to be clear for some reason
@@ -594,7 +594,7 @@ pub fn recordUpdateSingleTransform(self: *Self, vc: *const VulkanContext, comman
             .size = size,
         },
     };
-    vc.device.cmdPipelineBarrier2(command_buffer, &vk.DependencyInfo {
+    command_buffer.pipelineBarrier2(&vk.DependencyInfo {
         .buffer_memory_barrier_count = barriers.len,
         .p_buffer_memory_barriers = &barriers,
     });
@@ -606,11 +606,11 @@ pub fn updateVisibility(self: *Self, instance_idx: u32, visible: bool) void {
 }
 
 // probably bad idea if you're changing many
-pub fn recordUpdateSingleMaterial(self: Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer, geometry_idx: u32, new_material_idx: u32) void {
+pub fn recordUpdateSingleMaterial(self: Self, command_buffer: VulkanContext.CommandBuffer, geometry_idx: u32, new_material_idx: u32) void {
     const offset = @sizeOf(Geometry) * geometry_idx + @offsetOf(Geometry, "material");
     const size = @sizeOf(u32);
-    vc.device.cmdUpdateBuffer(command_buffer, self.geometries.handle, offset, size, &new_material_idx);
-    vc.device.cmdPipelineBarrier2(command_buffer, &vk.DependencyInfo {
+    command_buffer.updateBuffer(self.geometries.handle, offset, size, &new_material_idx);
+    command_buffer.pipelineBarrier2(&vk.DependencyInfo {
         .buffer_memory_barrier_count = 1,
         .p_buffer_memory_barriers = @ptrCast(&vk.BufferMemoryBarrier2 {
             .src_stage_mask = .{ .clear_bit = true }, // cmdUpdateBuffer seems to be clear for some reason
@@ -626,7 +626,7 @@ pub fn recordUpdateSingleMaterial(self: Self, vc: *const VulkanContext, command_
     });
 }
 
-pub fn recordRebuild(self: *Self, vc: *const VulkanContext, command_buffer: vk.CommandBuffer) !void {
+pub fn recordRebuild(self: *Self, command_buffer: VulkanContext.CommandBuffer) !void {
     const geometry = vk.AccelerationStructureGeometryKHR {
         .geometry_type = .instances_khr,
         .flags = .{ .opaque_bit_khr = true },
@@ -662,7 +662,7 @@ pub fn recordRebuild(self: *Self, vc: *const VulkanContext, command_buffer: vk.C
 
     const build_info_ref = &build_info;
 
-    vc.device.cmdBuildAccelerationStructuresKHR(command_buffer, 1, @ptrCast(&geometry_info), @ptrCast(&build_info_ref));
+    command_buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), @ptrCast(&build_info_ref));
 
     const barriers = [_]vk.MemoryBarrier2 {
         .{
@@ -672,7 +672,7 @@ pub fn recordRebuild(self: *Self, vc: *const VulkanContext, command_buffer: vk.C
             .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true },
         }
     };
-    vc.device.cmdPipelineBarrier2(command_buffer, &vk.DependencyInfo {
+    command_buffer.pipelineBarrier2(&vk.DependencyInfo {
         .memory_barrier_count = barriers.len,
         .p_memory_barriers = &barriers,
     });

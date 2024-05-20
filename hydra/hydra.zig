@@ -160,32 +160,32 @@ pub const HdMoonshine = struct {
                     if (update.value_ptr.normal) |normal| {
                         const offset = index * @sizeOf(MaterialManager.Material) + @offsetOf(MaterialManager.Material, "normal");
                         const bytes = std.mem.asBytes(&normal);
-                        self.vc.device.cmdUpdateBuffer(self.commands.buffer, self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
+                        self.commands.buffer.updateBuffer(self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.emissive) |emissive| {
                         const offset = index * @sizeOf(MaterialManager.Material) + @offsetOf(MaterialManager.Material, "emissive");
                         const bytes = std.mem.asBytes(&emissive);
-                        self.vc.device.cmdUpdateBuffer(self.commands.buffer, self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
+                        self.commands.buffer.updateBuffer(self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.color) |color| {
                         const offset = index * @sizeOf(MaterialManager.StandardPBR) + @offsetOf(MaterialManager.StandardPBR, "color");
                         const bytes = std.mem.asBytes(&color);
-                        self.vc.device.cmdUpdateBuffer(self.commands.buffer, self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
+                        self.commands.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.metalness) |metalness| {
                         const offset = index * @sizeOf(MaterialManager.StandardPBR) + @offsetOf(MaterialManager.StandardPBR, "metalness");
                         const bytes = std.mem.asBytes(&metalness);
-                        self.vc.device.cmdUpdateBuffer(self.commands.buffer, self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
+                        self.commands.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.roughness) |roughness| {
                         const offset = index * @sizeOf(MaterialManager.StandardPBR) + @offsetOf(MaterialManager.StandardPBR, "roughness");
                         const bytes = std.mem.asBytes(&roughness);
-                        self.vc.device.cmdUpdateBuffer(self.commands.buffer, self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
+                        self.commands.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.ior) |ior| {
                         const offset = index * @sizeOf(MaterialManager.StandardPBR) + @offsetOf(MaterialManager.StandardPBR, "ior");
                         const bytes = std.mem.asBytes(&ior);
-                        self.vc.device.cmdUpdateBuffer(self.commands.buffer, self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
+                        self.commands.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
                     }
                 }
 
@@ -214,7 +214,7 @@ pub const HdMoonshine = struct {
                         .size = vk.WHOLE_SIZE,
                     },
                 };
-                self.vc.device.cmdPipelineBarrier2(self.commands.buffer, &vk.DependencyInfo {
+                self.commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
                     .buffer_memory_barrier_count = update_barriers.len,
                     .p_buffer_memory_barriers = &update_barriers,
                 });
@@ -227,8 +227,8 @@ pub const HdMoonshine = struct {
                 actual_size_instances.data.len = self.world.accel.instance_count;
                 var actual_size_world_to_instance = self.world.accel.world_to_instance_host;
                 actual_size_world_to_instance.data.len = self.world.accel.instance_count;
-                self.commands.recordUploadBuffer(vk.AccelerationStructureInstanceKHR, &self.vc, self.world.accel.instances_device, actual_size_instances);
-                self.commands.recordUploadBuffer(Mat3x4, &self.vc, self.world.accel.world_to_instance_device, actual_size_world_to_instance);
+                self.commands.recordUploadBuffer(vk.AccelerationStructureInstanceKHR, self.world.accel.instances_device, actual_size_instances);
+                self.commands.recordUploadBuffer(Mat3x4, self.world.accel.world_to_instance_device, actual_size_world_to_instance);
 
                 const update_barriers = [_]vk.BufferMemoryBarrier2 {
                     .{
@@ -254,7 +254,7 @@ pub const HdMoonshine = struct {
                         .size = vk.WHOLE_SIZE,
                     },
                 };
-                self.vc.device.cmdPipelineBarrier2(self.commands.buffer, &vk.DependencyInfo {
+                self.commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
                     .buffer_memory_barrier_count = update_barriers.len,
                     .p_buffer_memory_barriers = &update_barriers,
                 });
@@ -294,7 +294,7 @@ pub const HdMoonshine = struct {
 
                 const build_info_ref = &build_info;
 
-                self.vc.device.cmdBuildAccelerationStructuresKHR(self.commands.buffer, 1, @ptrCast(&geometry_info), @ptrCast(&build_info_ref));
+                self.commands.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), @ptrCast(&build_info_ref));
 
                 const ray_trace_barriers = [_]vk.MemoryBarrier2 {
                     .{
@@ -304,7 +304,7 @@ pub const HdMoonshine = struct {
                         .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true },
                     }
                 };
-                self.vc.device.cmdPipelineBarrier2(self.commands.buffer, &vk.DependencyInfo {
+                self.commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
                     .memory_barrier_count = ray_trace_barriers.len,
                     .p_memory_barriers = &ray_trace_barriers,
                 });
@@ -314,22 +314,22 @@ pub const HdMoonshine = struct {
         }
 
         // prepare our stuff
-        self.camera.sensors.items[sensor].recordPrepareForCapture(&self.vc, self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
+        self.camera.sensors.items[sensor].recordPrepareForCapture(self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
 
         // bind our stuff
-        self.pipeline.recordBindPipeline(&self.vc, self.commands.buffer);
-        self.pipeline.recordBindTextureDescriptorSet(&self.vc, self.commands.buffer, self.world.materials.textures.descriptor_set);
-        self.pipeline.recordPushDescriptors(&self.vc, self.commands.buffer, (Scene { .background = self.background, .camera = self.camera, .world = self.world }).pushDescriptors(sensor, 0));
+        self.pipeline.recordBindPipeline(self.commands.buffer);
+        self.pipeline.recordBindTextureDescriptorSet(self.commands.buffer, self.world.materials.textures.descriptor_set);
+        self.pipeline.recordPushDescriptors(self.commands.buffer, (Scene { .background = self.background, .camera = self.camera, .world = self.world }).pushDescriptors(sensor, 0));
 
         // push our stuff
         const bytes = std.mem.asBytes(&.{ self.camera.lenses.items[lens], self.camera.sensors.items[sensor].sample_count });
-        self.vc.device.cmdPushConstants(self.commands.buffer, self.pipeline.layout, .{ .raygen_bit_khr = true }, 0, bytes.len, bytes);
+        self.commands.buffer.pushConstants(self.pipeline.layout, .{ .raygen_bit_khr = true }, 0, bytes.len, bytes);
 
         // trace our stuff
-        self.pipeline.recordTraceRays(&self.vc, self.commands.buffer, self.camera.sensors.items[sensor].extent);
+        self.pipeline.recordTraceRays(self.commands.buffer, self.camera.sensors.items[sensor].extent);
 
         // copy our stuff
-        self.camera.sensors.items[sensor].recordPrepareForCopy(&self.vc, self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
+        self.camera.sensors.items[sensor].recordPrepareForCopy(self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
 
         // copy rendered image to host-visible staging buffer
         const copy = vk.BufferImageCopy {
@@ -353,7 +353,7 @@ pub const HdMoonshine = struct {
                 .depth = 1,
             },
         };
-        self.vc.device.cmdCopyImageToBuffer(self.commands.buffer, self.camera.sensors.items[sensor].image.handle, .transfer_src_optimal, self.output_buffers.items[sensor].handle, 1, @ptrCast(&copy));
+        self.commands.buffer.copyImageToBuffer(self.camera.sensors.items[sensor].image.handle, .transfer_src_optimal, self.output_buffers.items[sensor].handle, 1, @ptrCast(&copy));
 
         self.commands.submitAndIdleUntilDone(&self.vc) catch return false;
 
