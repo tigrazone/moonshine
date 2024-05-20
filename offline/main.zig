@@ -75,7 +75,7 @@ const IntervalLogger = struct {
     }
 };
 
-pub const vulkan_context_device_functions = engine.hrtsystem.required_device_functions;
+pub const required_vulkan_functions = engine.hrtsystem.required_vulkan_functions;
 
 pub fn main() !void {
     var logger = try IntervalLogger.start();

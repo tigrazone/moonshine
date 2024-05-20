@@ -26,7 +26,7 @@ const F32x4 = vector.Vec4(f32);
 const U32x3 = vector.Vec3(u32);
 const Mat3x4 = vector.Mat3x4(f32);
 
-pub const vulkan_context_device_functions = hrtsystem.required_device_functions;
+pub const required_vulkan_functions = hrtsystem.required_vulkan_functions;
 
 const Allocator = std.heap.GeneralPurposeAllocator(.{});
 
@@ -148,11 +148,11 @@ pub const HdMoonshine = struct {
         self.commands.startRecording(&self.vc) catch return false;
 
         // update instance transforms
-        {   
+        {
             if (self.material_updates.count() != 0) {
                 var iter = self.material_updates.iterator();
                 while (iter.next()) |update| {
-                    // since only standard pbr materials are supported 
+                    // since only standard pbr materials are supported
                     // the material index and variant index should be identical
                     const index = update.key_ptr.*;
 

@@ -67,8 +67,7 @@ fn queueFamilyAcceptable(instance: vk.Instance, device: vk.PhysicalDevice, idx: 
     return Window.getPhysicalDevicePresentationSupport(instance, device, idx);
 }
 
-pub const vulkan_context_instance_functions = displaysystem.required_instance_functions;
-pub const vulkan_context_device_functions = displaysystem.required_device_functions.merge(Platform.required_device_functions).merge(hrtsystem.required_device_functions);
+pub const required_vulkan_functions = displaysystem.required_vulkan_functions ++ Platform.required_vulkan_functions ++ hrtsystem.required_vulkan_functions;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

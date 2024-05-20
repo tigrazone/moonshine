@@ -9,10 +9,11 @@ pub const World = @import("World.zig");
 pub const Scene = @import("Scene.zig");
 
 const vk = @import("vulkan");
+
 pub const required_device_extensions = [_][*:0]const u8{
-    vk.extension_info.khr_deferred_host_operations.name,
-    vk.extension_info.khr_acceleration_structure.name,
-    vk.extension_info.khr_ray_tracing_pipeline.name,
+    vk.extensions.khr_deferred_host_operations.name,
+    vk.extensions.khr_acceleration_structure.name,
+    vk.extensions.khr_ray_tracing_pipeline.name,
 };
 
 pub const required_device_features = vk.PhysicalDeviceRayTracingPipelineFeaturesKHR {
@@ -22,15 +23,19 @@ pub const required_device_features = vk.PhysicalDeviceRayTracingPipelineFeatures
     .ray_tracing_pipeline = vk.TRUE,
 };
 
-pub const required_device_functions = vk.DeviceCommandFlags {
-    .createRayTracingPipelinesKHR = true,
-    .cmdBuildAccelerationStructuresKHR = true,
-    .destroyAccelerationStructureKHR = true,
-    .createAccelerationStructureKHR = true,
-    .getAccelerationStructureBuildSizesKHR = true,
-    .getAccelerationStructureDeviceAddressKHR = true,
-    .getRayTracingShaderGroupHandlesKHR = true,
-    .cmdTraceRaysKHR = true,
-    .cmdWriteAccelerationStructuresPropertiesKHR = true,
-    .cmdCopyAccelerationStructureKHR = true,
+pub const required_vulkan_functions = [_]vk.ApiInfo {
+    .{
+        .device_commands = .{
+            .createRayTracingPipelinesKHR = true,
+            .cmdBuildAccelerationStructuresKHR = true,
+            .destroyAccelerationStructureKHR = true,
+            .createAccelerationStructureKHR = true,
+            .getAccelerationStructureBuildSizesKHR = true,
+            .getAccelerationStructureDeviceAddressKHR = true,
+            .getRayTracingShaderGroupHandlesKHR = true,
+            .cmdTraceRaysKHR = true,
+            .cmdWriteAccelerationStructuresPropertiesKHR = true,
+            .cmdCopyAccelerationStructureKHR = true,
+        },
+    },
 };

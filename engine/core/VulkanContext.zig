@@ -8,8 +8,7 @@ const validate = @import("build_options").vk_validation;
 
 const root = @import("root");
 
-const additional_instance_functions = if (@hasDecl(root, "vulkan_context_instance_functions")) root.vulkan_context_instance_functions else .{};
-const additional_device_functions = if (@hasDecl(root, "vulkan_context_device_functions")) root.vulkan_context_device_functions else .{};
+const additional_vulkan_functions = if (@hasDecl(root, "required_vulkan_functions")) root.required_vulkan_functions else [_]vk.ApiInfo {};
 
 const validation_layers = [_][*:0]const u8{ "VK_LAYER_KHRONOS_validation" };
 
@@ -22,16 +21,108 @@ const VulkanContextError = error {
     UnavailableQueues,
 };
 
+const core_vulkan_functions = vk.ApiInfo {
+    .base_commands = vk.BaseCommandFlags {
+        .createInstance = true,
+        .enumerateInstanceLayerProperties = true,
+        .enumerateInstanceExtensionProperties = true,
+    },
+    .instance_commands = vk.InstanceCommandFlags {
+        .destroyInstance = true,
+        .enumeratePhysicalDevices = true,
+        .enumerateDeviceExtensionProperties = true,
+        .getPhysicalDeviceQueueFamilyProperties = true,
+        .getDeviceProcAddr = true,
+        .createDevice = true,
+        .getPhysicalDeviceMemoryProperties = true,
+        .getPhysicalDeviceProperties2 = true,
+    },
+    .device_commands = vk.DeviceCommandFlags {
+        .getDeviceQueue = true,
+        .createImageView = true,
+        .destroyDevice = true,
+        .destroyImageView = true,
+        .createBuffer = true,
+        .getBufferMemoryRequirements = true,
+        .allocateMemory = true,
+        .bindBufferMemory = true,
+        .destroyBuffer = true,
+        .freeMemory = true,
+        .mapMemory = true,
+        .unmapMemory = true,
+        .createCommandPool = true,
+        .destroyCommandPool = true,
+        .allocateCommandBuffers = true,
+        .freeCommandBuffers = true,
+        .beginCommandBuffer = true,
+        .cmdCopyBuffer = true,
+        .endCommandBuffer = true,
+        .queueWaitIdle = true,
+        .destroyPipeline = true,
+        .createPipelineLayout = true,
+        .destroyPipelineLayout = true,
+        .createShaderModule = true,
+        .destroyShaderModule = true,
+        .createDescriptorSetLayout = true,
+        .destroyDescriptorSetLayout = true,
+        .cmdBindPipeline = true,
+        .cmdBindDescriptorSets = true,
+        .resetCommandPool = true,
+        .getBufferDeviceAddress = true,
+        .createSemaphore = true,
+        .destroySemaphore = true,
+        .allocateDescriptorSets = true,
+        .createDescriptorPool = true,
+        .destroyDescriptorPool = true,
+        .updateDescriptorSets = true,
+        .createImage = true,
+        .destroyImage = true,
+        .getImageMemoryRequirements = true,
+        .bindImageMemory = true,
+        .cmdPipelineBarrier2 = true,
+        .cmdBlitImage = true,
+        .deviceWaitIdle = true,
+        .createFence = true,
+        .destroyFence = true,
+        .waitForFences = true,
+        .resetFences = true,
+        .queueSubmit2 = true,
+        .cmdPushConstants = true,
+        .cmdCopyBufferToImage = true,
+        .createSampler = true,
+        .destroySampler = true,
+        .createQueryPool = true,
+        .resetQueryPool = true,
+        .getQueryPoolResults = true,
+        .destroyQueryPool = true,
+        .cmdCopyImageToBuffer = true,
+        .cmdUpdateBuffer = true,
+        .createComputePipelines = true,
+        .cmdDispatch = true,
+        .cmdPushDescriptorSetKHR = true,
+    }
+};
+
+const validation_vulkan_functions = if (validate) vk.ApiInfo {
+    .instance_commands = vk.InstanceCommandFlags {
+        .createDebugUtilsMessengerEXT = true,
+        .destroyDebugUtilsMessengerEXT = true,
+    },
+    .device_commands = vk.DeviceCommandFlags {
+        .setDebugUtilsObjectNameEXT = true,
+    },
+} else vk.ApiInfo {};
+
+const all_vulkan_commands = [_]vk.ApiInfo { core_vulkan_functions, validation_vulkan_functions } ++ additional_vulkan_functions;
+
+const BaseDispatch = vk.BaseWrapper(&all_vulkan_commands);
+const Instance = vk.InstanceWrapper(&all_vulkan_commands);
+const Device = vk.DeviceWrapper(&all_vulkan_commands);
+
 const Base = struct {
     vulkan_lib: std.DynLib,
     pfn_get_instance_proc_addr: vk.PfnGetInstanceProcAddr,
     dispatch: BaseDispatch,
-
-    const BaseDispatch = vk.BaseWrapper(.{
-        .createInstance = true,
-        .enumerateInstanceLayerProperties = true,
-        .enumerateInstanceExtensionProperties = true,
-    });
 
     fn new() !Base {
         const vulkan_lib_name = if (builtin.os.tag == .windows) "vulkan-1.dll" else "libvulkan.so.1";
@@ -52,7 +143,7 @@ const Base = struct {
     fn getRequiredExtensions(allocator: std.mem.Allocator, required_extension_names: []const [*:0]const u8) std.mem.Allocator.Error![]const [*:0]const u8 {
         if (validate) {
             const debug_extensions = [_][*:0]const u8{
-                vk.extension_info.ext_debug_utils.name,
+                vk.extensions.ext_debug_utils.name,
             };
             return std.mem.concat(allocator, [*:0]const u8, &[_][]const [*:0]const u8{ &debug_extensions, required_extension_names });
         } else {
@@ -123,95 +214,6 @@ const Base = struct {
     }
 };
 
-const instance_cmds = vk.InstanceCommandFlags {
-    .destroyInstance = true,
-    .enumeratePhysicalDevices = true,
-    .enumerateDeviceExtensionProperties = true,
-    .getPhysicalDeviceQueueFamilyProperties = true,
-    .getDeviceProcAddr = true,
-    .createDevice = true,
-    .getPhysicalDeviceMemoryProperties = true,
-    .getPhysicalDeviceProperties2 = true,
-};
-
-const validation_instance_cmds = if (validate) vk.InstanceCommandFlags {
-    .createDebugUtilsMessengerEXT = true,
-    .destroyDebugUtilsMessengerEXT = true,
-} else .{};
-
-const Instance = vk.InstanceWrapper(instance_cmds.merge(validation_instance_cmds).merge(additional_instance_functions));
-
-const device_commands = vk.DeviceCommandFlags {
-    .getDeviceQueue = true,
-    .createImageView = true,
-    .destroyDevice = true,
-    .destroyImageView = true,
-    .createBuffer = true,
-    .getBufferMemoryRequirements = true,
-    .allocateMemory = true,
-    .bindBufferMemory = true,
-    .destroyBuffer = true,
-    .freeMemory = true,
-    .mapMemory = true,
-    .unmapMemory = true,
-    .createCommandPool = true,
-    .destroyCommandPool = true,
-    .allocateCommandBuffers = true,
-    .freeCommandBuffers = true,
-    .beginCommandBuffer = true,
-    .cmdCopyBuffer = true,
-    .endCommandBuffer = true,
-    .queueWaitIdle = true,
-    .destroyPipeline = true,
-    .createPipelineLayout = true,
-    .destroyPipelineLayout = true,
-    .createShaderModule = true,
-    .destroyShaderModule = true,
-    .createDescriptorSetLayout = true,
-    .destroyDescriptorSetLayout = true,
-    .cmdBindPipeline = true,
-    .cmdBindDescriptorSets = true,
-    .resetCommandPool = true,
-    .getBufferDeviceAddress = true,
-    .createSemaphore = true,
-    .destroySemaphore = true,
-    .allocateDescriptorSets = true,
-    .createDescriptorPool = true,
-    .destroyDescriptorPool = true,
-    .updateDescriptorSets = true,
-    .createImage = true,
-    .destroyImage = true,
-    .getImageMemoryRequirements = true,
-    .bindImageMemory = true,
-    .cmdPipelineBarrier2 = true,
-    .cmdBlitImage = true,
-    .deviceWaitIdle = true,
-    .createFence = true,
-    .destroyFence = true,
-    .waitForFences = true,
-    .resetFences = true,
-    .queueSubmit2 = true,
-    .cmdPushConstants = true,
-    .cmdCopyBufferToImage = true,
-    .createSampler = true,
-    .destroySampler = true,
-    .createQueryPool = true,
-    .resetQueryPool = true,
-    .getQueryPoolResults = true,
-    .destroyQueryPool = true,
-    .cmdCopyImageToBuffer = true,
-    .cmdUpdateBuffer = true,
-    .createComputePipelines = true,
-    .cmdDispatch = true,
-    .cmdPushDescriptorSetKHR = true,
-};
-
-const validation_device_commands = if (validate) vk.DeviceCommandFlags {
-    .setDebugUtilsObjectNameEXT = true,
-} else .{};
-
-const Device = vk.DeviceWrapper(blk: {@setEvalBranchQuota(10000); break :blk device_commands.merge(validation_device_commands).merge(additional_device_functions);});
-
 fn debugCallback(
     message_severity: vk.DebugUtilsMessageSeverityFlagsEXT,
     message_type: vk.DebugUtilsMessageTypeFlagsEXT,
@@ -257,7 +259,7 @@ const QueueFamilyAcceptable = fn(vk.Instance, vk.PhysicalDevice, u32) bool;
 fn returnsTrue(_: vk.Instance, _: vk.PhysicalDevice, _: u32) bool { return true; }
 
 const required_device_extensions = [_][*:0]const u8{
-    vk.extension_info.khr_push_descriptor.name,
+    vk.extensions.khr_push_descriptor.name,
 };
 
 pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_extensions: []const [*:0]const u8, device_extensions: []const [*:0]const u8, features: ?*const anyopaque, comptime queueFamilyAcceptable: ?QueueFamilyAcceptable) !Self {
@@ -270,7 +272,7 @@ pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_ex
     const debug_messenger = if (validate) try instance.createDebugUtilsMessengerEXT(&debug_messenger_create_info, null) else undefined;
     errdefer if (validate) instance.destroyDebugUtilsMessengerEXT(debug_messenger, null);
 
-    const all_device_extensions = try std.mem.concat(allocator, [*:0]const u8, &[_][]const [*:0]const u8{ &required_device_extensions, device_extensions }); 
+    const all_device_extensions = try std.mem.concat(allocator, [*:0]const u8, &[_][]const [*:0]const u8{ &required_device_extensions, device_extensions });
     defer allocator.free(all_device_extensions);
     const physical_device = try PhysicalDevice.pick(instance, allocator, if (queueFamilyAcceptable) |acc| acc else returnsTrue, all_device_extensions);
     const device = try physical_device.createLogicalDevice(instance, all_device_extensions, features);

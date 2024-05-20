@@ -4,8 +4,8 @@
 
     .dependencies = .{
         .vulkan_zig = .{
-            .url = "https://github.com/ashpil/vulkan-zig/archive/4b5b7e8804abeeed7ce652aa6d145b661308fcda.tar.gz",
-            .hash = "12209ad212e123ebea413fcbe06cc3e0dad2d801d494473a58ef79d2ef5ca5644b88",
+            .url = "https://github.com/ashpil/vulkan-zig/archive/a8494b0c03499d1591f4531afaf940c58fccfdd9.tar.gz",
+            .hash = "1220ee2abf700b0bfeea5ffd5fe3a4f6f0895369a819139325c0c8e3f829e808375b"
         },
         .vulkan_headers = .{
             .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/2b55157592bf4c639b76cc16d64acaef565cc4b5.tar.gz",
