@@ -1,10 +1,6 @@
-zig-cache/
+# zig build artifacts
+.zig-cache/
 zig-out/
-/release/
-/debug/
-/build/
-/build-*/
-/docgen_tmp/
 
 # Any testing asset files
 **.exr

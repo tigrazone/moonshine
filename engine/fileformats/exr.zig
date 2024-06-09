@@ -201,7 +201,7 @@ pub const helpers = struct {
 
             var data: [*c]u8 = undefined;
             const file_size = try saveEXRImageToMemory(&image, &header, &data);
-            try std.fs.cwd().writeFile(out_filename, data[0..file_size]);
+            try std.fs.cwd().writeFile(.{ .sub_path = out_filename, .data = data[0..file_size]});
             std.heap.c_allocator.free(data[0..file_size]);
         }
 

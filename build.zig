@@ -32,8 +32,8 @@ pub fn build(b: *std.Build) !void {
 
         const tests = b.addTest(.{
             .name = "tests",
-            .root_source_file = .{ .path = "engine/tests.zig" },
-            .test_runner = .{ .path = "engine/test_runner.zig" },
+            .root_source_file = b.path("engine/tests.zig"),
+            .test_runner = b.path("engine/test_runner.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) !void {
         const engine = makeEngineModule(b, vulkan, engine_options, target);
         const exe = b.addExecutable(.{
             .name = "online",
-            .root_source_file = .{ .path = "online/main.zig" },
+            .root_source_file = b.path("online/main.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) !void {
         const engine = makeEngineModule(b, vulkan, engine_options, target);
         const exe = b.addExecutable(.{
             .name = "offline",
-            .root_source_file = .{ .path = "offline/main.zig" },
+            .root_source_file = b.path("offline/main.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -99,7 +99,7 @@ pub fn build(b: *std.Build) !void {
         // wont need to make own header
         const zig_lib = b.addSharedLibrary(.{
             .name = "moonshine",
-            .root_source_file = .{ .path = "hydra/hydra.zig" },
+            .root_source_file = b.path("hydra/hydra.zig"),
             .target = target,
             .optimize = optimize,
             .pic = true,
@@ -134,7 +134,7 @@ pub fn build(b: *std.Build) !void {
         const usd_monolithic = b.option(bool, "usd-monolithic", "Whether USD was built monolithically.") orelse false;
 
         // link against usd produced libraries
-        lib.addLibraryPath(.{ .path = b.pathJoin(&.{ usd_dir, "lib/" }) });
+        lib.addLibraryPath(.{ .cwd_relative = b.pathJoin(&.{ usd_dir, "lib/" }) });
         if (usd_monolithic) {
             lib.linkSystemLibrary("usd_ms");
         } else {
@@ -144,15 +144,15 @@ pub fn build(b: *std.Build) !void {
         }
 
         // include headers necessary for usd
-        lib.addSystemIncludePath(.{ .path = b.pathJoin(&.{ usd_dir, "include/" }) });
-        if (tbb_dir) |dir| lib.addSystemIncludePath(.{ .path = b.pathJoin(&.{ dir, "include/" }) });
+        lib.addSystemIncludePath(.{ .cwd_relative = b.pathJoin(&.{ usd_dir, "include/" }) });
+        if (tbb_dir) |dir| lib.addSystemIncludePath(.{ .cwd_relative = b.pathJoin(&.{ dir, "include/" }) });
         lib.defineCMacro("TBB_USE_DEBUG", "0"); // not sure why we need this
 
         // might need python headers if USD built with python support
         {
             var out_code: u8 = undefined;
             var iter = std.mem.splitScalar(u8, b.runAllowFail(&.{ "python3-config", "--includes" }, &out_code, .Inherit) catch b.runAllowFail(&.{ "python-config", "--includes" }, &out_code, .Inherit) catch "", ' ');
-            while (iter.next()) |include_dir| lib.addSystemIncludePath(.{ .path = include_dir[2..] });
+            while (iter.next()) |include_dir| lib.addSystemIncludePath(.{ .cwd_relative = include_dir[2..] });
         }
 
         // deal with the fact that USD is not (supposed to be) compiled with clang
@@ -162,7 +162,7 @@ pub fn build(b: *std.Build) !void {
             lib.defineCMacro("ARCH_HAS_GNU_STL_EXTENSIONS", null);
 
             // link against stdlibc++
-            lib.addObjectFile(.{ .path = std.mem.trim(u8, b.run(&.{ "g++", "-print-file-name=libstdc++.so" }), &std.ascii.whitespace) });
+            lib.addObjectFile(.{ .cwd_relative = std.mem.trim(u8, b.run(&.{ "g++", "-print-file-name=libstdc++.so" }), &std.ascii.whitespace) });
 
             // need stdlibc++ include directories
             // i've had to do some arcane magic to figure out what to do here,
@@ -171,9 +171,9 @@ pub fn build(b: *std.Build) !void {
             var iter = std.mem.splitScalar(u8, runAllowFailStderr(b, &.{ "g++", "-E", "-Wp,-v", "-xc++", "/dev/null" }) catch "", '\n');
             while (iter.next()) |include_dir| if (include_dir.len > 0 and include_dir[0] == ' ') {
                 if (first) {
-                    lib.addIncludePath(.{ .path = include_dir[1..] });
+                    lib.addIncludePath(.{ .cwd_relative = include_dir[1..] });
                 } else {
-                    lib.addSystemIncludePath(.{ .path = include_dir[1..] });
+                    lib.addSystemIncludePath(.{ .cwd_relative = include_dir[1..] });
                 }
                 first = false;
             };
@@ -245,7 +245,7 @@ pub fn build(b: *std.Build) !void {
 
 pub fn runAllowFailStderr(self: *std.Build, argv: []const []const u8) ![]u8 {
     const max_output_size = 400 * 1024;
-    var child = std.ChildProcess.init(argv, self.allocator);
+    var child = std.process.Child.init(argv, self.allocator);
     child.stdin_behavior = .Ignore;
     child.stdout_behavior = .Ignore;
     child.stderr_behavior = .Pipe;
@@ -402,7 +402,7 @@ fn makeEngineModule(b: *std.Build, vk: *std.Build.Module, options: EngineOptions
     }) catch @panic("OOM");
 
     const module = b.createModule(.{
-        .root_source_file = .{ .path = "engine/engine.zig" },
+        .root_source_file = b.path("engine/engine.zig"),
         .imports = imports.items,
     });
 
