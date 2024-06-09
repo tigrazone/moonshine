@@ -119,17 +119,8 @@ pub fn main() !void {
 
     std.log.info("Created pipelines!", .{});
 
-    var active_sensor: u32 = 0;
-    var window_data = WindowData{
-        .camera = &scene.camera,
-        .active_sensor = &active_sensor,
-    };
-
-    // window.setAspectRatio(config.extent.width, config.extent.height);
-    window.setUserPointer(&window_data);
-    window.setKeyCallback(keyCallback);
-
     // random state we need for gui
+    var active_sensor: u32 = 0;
     var max_sample_count: u32 = 0; // unlimited
     var rebuild_label_buffer: [20]u8 = undefined;
     var rebuild_label = try std.fmt.bufPrintZ(&rebuild_label_buffer, "Rebuild", .{});
@@ -273,14 +264,51 @@ pub fn main() !void {
             imgui.text("Go click something!");
         }
         imgui.end();
-        if (imgui.isMouseClicked(.left) and !imgui.getIO().WantCaptureMouse) {
-            const pos = window.getCursorPos();
-            const x = @as(f32, @floatCast(pos.x)) / @as(f32, @floatFromInt(display.swapchain.extent.width));
-            const y = @as(f32, @floatCast(pos.y)) / @as(f32, @floatFromInt(display.swapchain.extent.height));
-            current_clicked_object = try object_picker.getClickedObject(&context, F32x2.new(x, y), scene.camera, scene.world.accel.tlas_handle, scene.camera.sensors.items[active_sensor]);
-            const clicked_pixel = try sync_copier.copyImagePixel(&context, F32x4, scene.camera.sensors.items[active_sensor].image.handle, .transfer_src_optimal, vk.Offset3D { .x = @intFromFloat(pos.x), .y = @intFromFloat(pos.y), .z = 0 });
-            current_clicked_color = clicked_pixel.truncate();
-            has_clicked = true;
+        if (!imgui.getIO().WantCaptureMouse) {
+            const window_size = F32x2.new(
+                @as(f32, @floatFromInt(display.swapchain.extent.width)),
+                @as(f32, @floatFromInt(display.swapchain.extent.height))
+            );
+            if (imgui.isMouseDragging(.right)) {
+                window.setCursorMode(.disabled);
+                const delta = F32x2.new(0.5, 0.5).add(imgui.getMouseDragDelta(.right).div(window_size));
+                imgui.resetMouseDragDelta(.right);
+                if (!std.meta.eql(delta, F32x2.new(0.5, 0.5))) {
+                    const aspect = window_size.x / window_size.y;
+                    scene.camera.lenses.items[0].forward = scene.camera.lenses.items[0].directionFromUv(F32x2.new(delta.x, 1.0 - delta.y), aspect);
+                    scene.camera.sensors.items[active_sensor].clear();
+                }
+            } else {
+                window.setCursorMode(.normal);
+                if (imgui.isMouseClicked(.left)) {
+                    const pos = imgui.getMousePos().div(window_size);
+                    current_clicked_object = try object_picker.getClickedObject(&context, pos, scene.camera, scene.world.accel.tlas_handle, scene.camera.sensors.items[active_sensor]);
+                    const clicked_pixel = try sync_copier.copyImagePixel(&context, F32x4, scene.camera.sensors.items[active_sensor].image.handle, .transfer_src_optimal, vk.Offset3D { .x = @intFromFloat(pos.x), .y = @intFromFloat(pos.y), .z = 0 });
+                    current_clicked_color = clicked_pixel.truncate();
+                    has_clicked = true;
+                }
+            }
+        }
+        if (!imgui.getIO().WantCaptureKeyboard) {
+            const old_lens = scene.camera.lenses.items[0];
+            const side = old_lens.forward.cross(old_lens.up).unit();
+            var new_lens = scene.camera.lenses.items[0];
+
+            const speed = imgui.getIO().DeltaTime;
+
+            if (imgui.isKeyDown(.w)) new_lens.origin = new_lens.origin.add(new_lens.forward.mul_scalar(speed * 30));
+            if (imgui.isKeyDown(.s)) new_lens.origin = new_lens.origin.sub(new_lens.forward.mul_scalar(speed * 30));
+            if (imgui.isKeyDown(.d)) new_lens.origin = new_lens.origin.add(side.mul_scalar(speed * 30));
+            if (imgui.isKeyDown(.a)) new_lens.origin = new_lens.origin.sub(side.mul_scalar(speed * 30));
+            if (imgui.isKeyDown(.f) and new_lens.aperture > 0.0) new_lens.aperture -= speed / 10;
+            if (imgui.isKeyDown(.r)) new_lens.aperture += speed / 10;
+            if (imgui.isKeyDown(.q)) new_lens.focus_distance -= speed * 10;
+            if (imgui.isKeyDown(.e)) new_lens.focus_distance += speed * 10;
+
+            if (!std.meta.eql(new_lens, old_lens)) {
+                scene.camera.lenses.items[0] = new_lens;
+                scene.camera.sensors.items[active_sensor].clear();
+            }
         }
 
         if (max_sample_count != 0 and scene.camera.sensors.items[active_sensor].sample_count > max_sample_count) scene.camera.sensors.items[active_sensor].clear();
@@ -431,52 +459,4 @@ pub fn main() !void {
     try context.device.deviceWaitIdle();
 
     std.log.info("Program completed!", .{});
-}
-
-const WindowData = struct {
-    camera: *Camera,
-    active_sensor: *u32,
-};
-
-fn keyCallback(window: *const Window, key: u32, action: Window.Action, mods: Window.ModifierKeys) void {
-    const ptr = window.getUserPointer().?;
-    const window_data: *WindowData = @ptrCast(@alignCast(ptr));
-
-    if (action == .repeat or action == .press) {
-        var camera_info = window_data.camera.lenses.items[0];
-        const side = camera_info.forward.cross(camera_info.up).unit();
-
-        switch (key) {
-            'W' => if (mods.shift) {
-                camera_info.forward = Mat4.fromAxisAngle(side, 0.01).mul_vec(camera_info.forward).unit();
-            } else {
-                camera_info.origin = camera_info.origin.add(camera_info.forward.mul_scalar(0.1));
-            },
-            'S' => if (mods.shift) {
-                camera_info.forward = Mat4.fromAxisAngle(side, -0.01).mul_vec(camera_info.forward).unit();
-            } else {
-                camera_info.origin = camera_info.origin.sub(camera_info.forward.mul_scalar(0.1));
-            },
-            'D' => if (mods.shift) {
-                camera_info.forward = Mat4.fromAxisAngle(camera_info.up, -0.01).mul_vec(camera_info.forward).unit();
-            } else {
-                camera_info.origin = camera_info.origin.add(side.mul_scalar(0.1));
-            },
-            'A' => if (mods.shift) {
-                camera_info.forward = Mat4.fromAxisAngle(camera_info.up, 0.01).mul_vec(camera_info.forward).unit();
-            } else {
-                camera_info.origin = camera_info.origin.sub(side.mul_scalar(0.1));
-            },
-            'F' => if (camera_info.aperture > 0.0) {
-                camera_info.aperture -= 0.005;
-            },
-            'R' => camera_info.aperture += 0.005,
-            'Q' => camera_info.focus_distance -= 0.01,
-            'E' => camera_info.focus_distance += 0.01,
-            else => return,
-        }
-
-        window_data.camera.lenses.items[0] = camera_info;
-        window_data.camera.sensors.items[window_data.active_sensor.*].clear();
-    }
 }

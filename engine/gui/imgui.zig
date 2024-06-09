@@ -16,11 +16,6 @@ pub const IO = c.ImGuiIO;
 pub const FontAtlas = c.ImFontAtlas;
 pub const DrawData = c.ImDrawData;
 pub const Vec2 = c.ImVec2;
-pub const MouseButton = enum(c_int) {
-    left = c.ImGuiMouseButton_Left,
-    right = c.ImGuiMouseButton_Right,
-    middle = c.ImGuiMouseButton_Middle,
-};
 
 pub fn createContext() void {
     _ = c.igCreateContext(null);
@@ -187,9 +182,63 @@ pub fn colorEdit(label: [*:0]const u8, color: *F32x3, flags: ColorEditFlags) boo
     return c.igColorEdit4(label, @ptrCast(color), @bitCast(flags));
 }
 
-pub fn getMouseDragDelta(mouse_button: MouseButton, lock_threshold: f32) F32x2 {
+pub const Key = enum(c_uint) {
+    a = c.ImGuiKey_A,
+    b = c.ImGuiKey_B,
+    c = c.ImGuiKey_C,
+    d = c.ImGuiKey_D,
+    e = c.ImGuiKey_E,
+    f = c.ImGuiKey_F,
+    g = c.ImGuiKey_G,
+    h = c.ImGuiKey_H,
+    i = c.ImGuiKey_I,
+    j = c.ImGuiKey_J,
+    k = c.ImGuiKey_K,
+    l = c.ImGuiKey_L,
+    m = c.ImGuiKey_M,
+    n = c.ImGuiKey_N,
+    o = c.ImGuiKey_O,
+    p = c.ImGuiKey_P,
+    q = c.ImGuiKey_Q,
+    r = c.ImGuiKey_R,
+    s = c.ImGuiKey_S,
+    t = c.ImGuiKey_T,
+    u = c.ImGuiKey_U,
+    v = c.ImGuiKey_V,
+    w = c.ImGuiKey_W,
+    x = c.ImGuiKey_X,
+    y = c.ImGuiKey_Y,
+    z = c.ImGuiKey_Z,
+    _,
+};
+pub fn isKeyDown(key: Key) bool {
+    return c.igIsKeyDown_Nil(@intFromEnum(key));
+}
+
+pub const MouseCursor = enum(c_int) {
+    none = c.ImGuiMouseCursor_None,
+    arrow = c.ImGuiMouseCursor_Arrow,
+    text_input = c.ImGuiMouseCursor_TextInput,
+    resize_all = c.ImGuiMouseCursor_ResizeAll,
+    resize_ns = c.ImGuiMouseCursor_ResizeNS,
+    resize_ew = c.ImGuiMouseCursor_ResizeEW,
+    resize_nesw = c.ImGuiMouseCursor_ResizeNESW,
+    resize_nwse = c.ImGuiMouseCursor_ResizeNWSE,
+    hand = c.ImGuiMouseCursor_Hand,
+    not_allowed = c.ImGuiMouseCursor_NotAllowed,
+};
+pub fn setMouseCursor(cursor: MouseCursor) void {
+    c.igSetMouseCursor(@intFromEnum(cursor));
+}
+
+pub const MouseButton = enum(c_int) {
+    left = c.ImGuiMouseButton_Left,
+    right = c.ImGuiMouseButton_Right,
+    middle = c.ImGuiMouseButton_Middle,
+};
+pub fn getMouseDragDelta(mouse_button: MouseButton) F32x2 {
     var out: Vec2 = undefined;
-    c.igGetMouseDragDelta(&out, @intFromEnum(mouse_button), lock_threshold);
+    c.igGetMouseDragDelta(&out, @intFromEnum(mouse_button), -1);
     return @bitCast(out);
 }
 
@@ -197,8 +246,22 @@ pub fn resetMouseDragDelta(mouse_button: MouseButton) void {
     c.igResetMouseDragDelta(@intFromEnum(mouse_button));
 }
 
+pub fn isMouseDragging(mouse_button: MouseButton) bool {
+    return c.igIsMouseDragging(@intFromEnum(mouse_button), -1);
+}
+
 pub fn isMouseClicked(mouse_button: MouseButton) bool {
     return c.igIsMouseClicked_Bool(@intFromEnum(mouse_button), false);
+}
+
+pub fn isMouseReleased(mouse_button: MouseButton) bool {
+    return c.igIsMouseReleased_Nil(@intFromEnum(mouse_button));
+}
+
+pub fn getMousePos() F32x2 {
+    var out: Vec2 = undefined;
+    c.igGetMousePos(&out);
+    return @bitCast(out);
 }
 
 pub fn getFontSize() f32 {

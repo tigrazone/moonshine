@@ -24,8 +24,7 @@ struct PushConsts {
 [shader("raygeneration")]
 void raygen() {
     float2 uv = pushConsts.coords;
-    uv.y -= 1;
-    uv.y *= -1;
+    uv.y = (1 - uv.y);
     Camera camera = pushConsts.camera;
     // make camera have perfect focus
     camera.focus_distance = 1.0f;

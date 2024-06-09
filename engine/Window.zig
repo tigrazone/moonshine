@@ -113,16 +113,26 @@ pub fn getCursorPos(self: *const Self) struct { x: f64, y: f64 } {
     };
 }
 
+pub const Mode = enum(c_int) {
+    normal = c.GLFW_CURSOR_NORMAL,
+    hidden = c.GLFW_CURSOR_HIDDEN,
+    disabled = c.GLFW_CURSOR_DISABLED,
+};
+pub fn setCursorMode(self: *const Self, value: Mode) void {
+    c.glfwSetInputMode(self.handle, c.GLFW_CURSOR, @intFromEnum(value));
+}
+
 pub const Action = enum(c_int) {
-    release = 0,
-    press = 1,
-    repeat = 2,
+    release = c.GLFW_RELEASE,
+    press = c.GLFW_PRESS,
+    repeat = c.GLFW_REPEAT,
+    _,
 };
 
 pub const MouseButton = enum(c_int) {
-    left = 0,
-    right = 1,
-    middle = 2,
+    left = c.GLFW_MOUSE_BUTTON_LEFT,
+    right = c.GLFW_MOUSE_BUTTON_RIGHT,
+    middle = c.GLFW_MOUSE_BUTTON_MIDDLE,
     _,
 };
 

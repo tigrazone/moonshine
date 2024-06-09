@@ -11,6 +11,7 @@ const Commands = core.Commands;
 const Sensor = core.Sensor;
 
 const vector = @import("../vector.zig");
+const F32x2 = vector.Vec2(f32);
 const F32x3 = vector.Vec3(f32);
 const F32x4 = vector.Vec4(f32);
 const Mat3x4 = vector.Mat3x4(f32);
@@ -48,6 +49,24 @@ pub const Lens = extern struct {
             .aperture = 0.0,
             .focus_distance = 1.0,
         };
+    }
+
+    // should correspond to GPU-side generateRay
+    pub fn directionFromUv(self: Lens, uv: F32x2, aspect: f32) F32x3 {
+        const w = self.forward.mul_scalar(-1);
+        const u = self.up.cross(w).unit();
+        const v = w.cross(u);
+
+        const h = std.math.tan(self.vfov / 2);
+        const viewport_height = 2 * h * self.focus_distance;
+        const viewport_width = aspect * viewport_height;
+
+        const horizontal = u.mul_scalar(viewport_width);
+        const vertical = v.mul_scalar(viewport_height);
+
+        const lower_left_corner = self.origin.sub(horizontal.div_scalar(2)).sub(vertical.div_scalar(2)).sub(w.mul_scalar(self.focus_distance));
+
+        return (lower_left_corner.add(horizontal.mul_scalar(uv.x)).add(vertical.mul_scalar(uv.y)).sub(self.origin)).unit();
     }
 };
 
