@@ -40,13 +40,13 @@ struct PushConsts {
 [[vk::constant_id(6)]] const bool two_component_normal_texture = true;  // whether normal textures are two or three component vectors
 
 // https://www.nu42.com/2015/03/how-you-average-numbers.html
-void storeColor(float3 sampledColor) {
+void accumulateColor(float3 sampledColor, uint sampleCount) {
     uint2 imageCoords = DispatchRaysIndex().xy;
-    if (pushConsts.sampleCount == 0) {
-        dOutputImage[imageCoords] = float4(sampledColor / samples_per_run, 1.0);
+    if (sampleCount == 0) {
+        dOutputImage[imageCoords] = float4(sampledColor, 1.0);
     } else {
         float3 priorSampleAverage = dOutputImage[imageCoords].rgb;
-        dOutputImage[imageCoords] += float4((sampledColor - priorSampleAverage) / (pushConsts.sampleCount + samples_per_run), 1.0);
+        dOutputImage[imageCoords] += float4((sampledColor - priorSampleAverage) / (sampleCount + 1), 1.0);
     }
 }
 
@@ -77,9 +77,6 @@ void raygen() {
     scene.envMap = EnvMap::create(dBackgroundRgbTexture, dBackgroundSampler, dBackgroundLuminanceTexture);
     scene.meshLights = MeshLights::create(dEmitterAliasTable, world);
 
-    // the result that we write to our buffer
-    float3 color = float3(0.0, 0.0, 0.0);
-
     for (uint sampleCount = 0; sampleCount < samples_per_run; sampleCount++) {
         // create rng for this sample
         Rng rng = Rng::fromSeed(uint3(pushConsts.sampleCount + sampleCount, DispatchRaysIndex().x, DispatchRaysIndex().y));
@@ -88,10 +85,9 @@ void raygen() {
         RayDesc initialRay = pushConsts.camera.generateRay(dOutputImage, dispatchUV(float2(rng.getFloat(), rng.getFloat())), float2(rng.getFloat(), rng.getFloat()));
 
         // trace the ray
-        color += integrator.incomingRadiance(scene, initialRay, rng);
+        float3 color = integrator.incomingRadiance(scene, initialRay, rng);
+        accumulateColor(color, pushConsts.sampleCount + sampleCount);
     }
-
-    storeColor(color);
 }
 
 struct Attributes
