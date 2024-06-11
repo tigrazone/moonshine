@@ -19,10 +19,7 @@ pub const ShaderType = enum {
 pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: []const u8, allocator: std.mem.Allocator, comptime shader_type: ShaderType) !vk.ShaderModule {
     var to_free: []const u8 = undefined;
     defer if (build_options.shader_source == .load) allocator.free(to_free);
-    const shader_code = if (build_options.shader_source == .embed) switch (shader_type) {
-            .ray_tracing => @field(@import("rt_shaders"), shader_path),
-            .compute => @field(@import("compute_shaders"), shader_path),
-        } else blk: {
+    const shader_code = if (build_options.shader_source == .embed) @embedFile(shader_path).* else blk: {
         const compile_cmd = switch (shader_type) {
             .ray_tracing => build_options.rt_shader_compile_cmd,
             .compute => build_options.compute_shader_compile_cmd,

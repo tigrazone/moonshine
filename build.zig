@@ -1,5 +1,4 @@
 const std = @import("std");
-const vkgen = @import("vulkan_zig");
 
 // TODO: useful error messages on missing system deps
 
@@ -270,30 +269,21 @@ pub fn runAllowFailStderr(self: *std.Build, argv: []const []const u8) ![]u8 {
     }
 }
 
-const base_shader_compile_cmd = [_][]const u8 {
-    "dxc",
-    "-HV", "2021",
-    "-spirv",
-    "-fspv-target-env=vulkan1.3",
-    "-fvk-use-scalar-layout",
-    "-Ges", // strict mode
-    "-WX", // treat warnings as errors
-};
-
-const rt_shader_compile_cmd = base_shader_compile_cmd ++ [_][]const u8 { "-T", "lib_6_7" };
-const compute_shader_compile_cmd = base_shader_compile_cmd ++ [_][]const u8 { "-T", "cs_6_7" };
-
 const ShaderSource = enum {
     embed, // embed SPIRV shaders into binary at compile time
-    load,  // dynamically load shader and compile to SPIRV at runtime
+    load,  // dynamically load shader and compile to SPIRV at runtime (but also check build-time correctness)
 };
 
 pub const EngineOptions = struct {
+    const rt_shader_args = [_][]const u8 { "-T", ShaderType.ray_tracing.dxcProfile() };
+    const compute_shader_args = [_][]const u8 { "-T", ShaderType.compute.dxcProfile() };
+    const stdout_shader_args = [_][]const u8{ "-Fo", "/dev/stdout" }; // TODO: windows
+
     vk_validation: bool = false,
     vk_metrics: bool = false,
     shader_source: ShaderSource = .embed,
-    rt_shader_compile_cmd: []const []const u8 = &(rt_shader_compile_cmd ++ [_][]const u8{ "-Fo", "/dev/stdout" }), // TODO: windows
-    compute_shader_compile_cmd: []const []const u8 = &(compute_shader_compile_cmd ++ [_][]const u8{ "-Fo", "/dev/stdout" }), // TODO: windows
+    rt_shader_compile_cmd: []const []const u8 = &(base_shader_compile_cmd ++ rt_shader_args ++ stdout_shader_args),
+    compute_shader_compile_cmd: []const []const u8 = &(base_shader_compile_cmd ++ compute_shader_args ++ stdout_shader_args),
 
     // modules
     hrtsystem: bool = true,
@@ -347,58 +337,12 @@ fn makeEngineModule(b: *std.Build, vk: *std.Build.Module, options: EngineOptions
         },
     }) catch @panic("OOM");
 
-    // embed shaders even if options.shader_source == .load so that
-    // initial shader correctness is checked at compile time even
-    // if runtime modification is allowed
-    const rt_shader_comp = vkgen.ShaderCompileStep.create(b, &rt_shader_compile_cmd, "-Fo");
-    rt_shader_comp.step.name = "Compile ray tracing shaders";
-    rt_shader_comp.add("@\"hrtsystem/input.hlsl\"", "shaders/hrtsystem/input.hlsl", .{});
-    rt_shader_comp.add("@\"hrtsystem/main.hlsl\"", "shaders/hrtsystem/main.hlsl", .{
-        .watched_files = &.{
-            "shaders/hrtsystem/camera.hlsl",
-            "shaders/hrtsystem/world.hlsl",
-            "shaders/hrtsystem/integrator.hlsl",
-            "shaders/hrtsystem/intersection.hlsl",
-            "shaders/hrtsystem/light.hlsl",
-            "shaders/hrtsystem/material.hlsl",
-            "shaders/hrtsystem/reflection_frame.hlsl",
-            "shaders/utils/mappings.hlsl",
-            "shaders/utils/helpers.hlsl",
-            "shaders/utils/random.hlsl",
-            "shaders/utils/math.hlsl",
-        }
-    });
-
-    const compute_shader_comp = vkgen.ShaderCompileStep.create(b, &compute_shader_compile_cmd, "-Fo");
-    compute_shader_comp.step.name = "Compile compute shaders";
-    compute_shader_comp.add("@\"background/equirectangular_to_equal_area.hlsl\"", "shaders/background/equirectangular_to_equal_area.hlsl", .{
-        .watched_files = &.{
-            "shaders/utils/mappings.hlsl",
-            "shaders/utils/helpers.hlsl",
-            "shaders/utils/math.hlsl",
-        },
-    });
-    compute_shader_comp.add("@\"background/luminance.hlsl\"", "shaders/background/luminance.hlsl", .{
-        .watched_files = &.{
-            "shaders/utils/math.hlsl",
-            "shaders/utils/helpers.hlsl",
-        },
-    });
-    compute_shader_comp.add("@\"background/fold.hlsl\"", "shaders/background/fold.hlsl", .{
-        .watched_files = &.{
-            "shaders/utils/helpers.hlsl",
-        },
-    });
-
     imports.appendSlice(&.{
-        .{
-            .name = "rt_shaders",
-            .module = rt_shader_comp.getModule(),
-        },
-        .{
-            .name = "compute_shaders",
-            .module = compute_shader_comp.getModule(),
-        },
+        compileShader(b, .ray_tracing, "hrtsystem/input.hlsl"),
+        compileShader(b, .ray_tracing, "hrtsystem/main.hlsl"),
+        compileShader(b, .compute, "background/equirectangular_to_equal_area.hlsl"),
+        compileShader(b, .compute, "background/luminance.hlsl"),
+        compileShader(b, .compute, "background/fold.hlsl"),
     }) catch @panic("OOM");
 
     const module = b.createModule(.{
@@ -654,4 +598,56 @@ fn generateWaylandHeader(b: *std.Build, write_file_step: *std.Build.Step.WriteFi
     const gen_client_header_step = b.addSystemCommand(&.{ "wayland-scanner", "client-header", xml_path });
     const out_header = gen_client_header_step.addOutputFileArg(out_header_name);
     _ = write_file_step.addCopyFile(out_header, out_header_name);
+}
+
+const base_shader_compile_cmd = [_][]const u8 {
+    "dxc",
+    "-HV", "2021",
+    "-spirv",
+    "-fspv-target-env=vulkan1.3",
+    "-fvk-use-scalar-layout",
+    "-Ges", // strict mode
+    "-WX", // treat warnings as errors
+};
+
+const ShaderType = enum {
+    compute,
+    ray_tracing,
+
+    fn dxcProfile(self: ShaderType) []const u8 {
+        return switch (self) {
+            .compute => "cs_6_7",
+            .ray_tracing => "lib_6_7",
+        };
+    }
+};
+
+fn compileShader(b: *std.Build, shader_type: ShaderType, path: []const u8) std.Build.Module.Import {
+    const input_file_path = b.path(b.pathJoin(&.{ "shaders", path }));
+
+    const get_dependendies = std.Build.Step.Run.create(b, b.fmt("get dependencies of {s}", .{ path }));
+    get_dependendies.addArgs(&base_shader_compile_cmd);
+    get_dependendies.addArg("-T");
+    get_dependendies.addArg(shader_type.dxcProfile());
+    get_dependendies.addFileArg(input_file_path);
+    get_dependendies.addArg("-MF");
+    _ = get_dependendies.addDepFileOutputArg(b.fmt("{s}.d", .{ path }));
+
+    const compile_shader = std.Build.Step.Run.create(b, b.fmt("compile {s}", .{ path }));
+    compile_shader.addArgs(&base_shader_compile_cmd);
+    compile_shader.addArg("-T");
+    compile_shader.addArg(shader_type.dxcProfile());
+    compile_shader.addFileArg(input_file_path);
+    compile_shader.addArg("-Fo");
+    const spv_file = compile_shader.addOutputFileArg(b.fmt("{s}.spv", .{ path }));
+
+    compile_shader.step.dependOn(&get_dependendies.step);
+    compile_shader.dep_output_file = get_dependendies.argv.getLast().output_file;
+
+    return std.Build.Module.Import {
+        .name = path,
+        .module = std.Build.Module.create(b, .{
+            .root_source_file = spv_file,
+        }),
+    };
 }
