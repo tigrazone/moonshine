@@ -16,7 +16,7 @@ pub const ShaderType = enum {
 };
 
 // creates shader modules, respecting build option to statically embed or dynamically load shader code
-pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: []const u8, allocator: std.mem.Allocator, comptime shader_type: ShaderType) !vk.ShaderModule {
+pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: [:0]const u8, allocator: std.mem.Allocator, comptime shader_type: ShaderType) !vk.ShaderModule {
     var to_free: []const u8 = undefined;
     defer if (build_options.shader_source == .load) allocator.free(to_free);
     const shader_code = if (build_options.shader_source == .embed) @embedFile(shader_path).* else blk: {
@@ -49,10 +49,12 @@ pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: []cons
         if (term == .Exited and term.Exited != 0) return error.ShaderCompileFail;
         break :blk stdout;
     };
-    return try vc.device.createShaderModule(&.{
+    const module = try vc.device.createShaderModule(&.{
         .code_size = shader_code.len,
         .p_code = @as([*]const u32, @ptrCast(@alignCast(if (build_options.shader_source == .embed) &shader_code else shader_code.ptr))),
     }, null);
+    try core.vk_helpers.setDebugName(vc, module, shader_path);
+    return module;
 }
 
 pub fn CreatePushDescriptorDataType(comptime bindings: []const descriptor.DescriptorBindingInfo) type {
@@ -169,7 +171,7 @@ pub inline fn pushDescriptorDataToWriteDescriptor(comptime bindings: []const des
 }
 
 pub fn Pipeline(
-        comptime shader_path: []const u8,
+        comptime shader_path: [:0]const u8,
         comptime SpecConstantsT: type,
         comptime PushConstants: type,
         comptime push_set_bindings: []const descriptor.DescriptorBindingInfo,
@@ -206,6 +208,7 @@ pub fn Pipeline(
                 .p_push_constant_ranges = &push_constants,
             }, null);
             errdefer vc.device.destroyPipelineLayout(layout, null);
+            try core.vk_helpers.setDebugName(vc, layout, shader_path);
 
             var self = Self {
                 .push_set_layout = push_set_layout,
@@ -258,6 +261,7 @@ pub fn Pipeline(
             const old_handle = self.handle;
             _ = try vc.device.createComputePipelines(.null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&self.handle));
             errdefer vc.device.destroyPipeline(self.handle, null);
+            try core.vk_helpers.setDebugName(vc, self.handle, shader_path);
 
             return old_handle;
         }

@@ -10,6 +10,9 @@ fn typeToObjectType(comptime in: type) vk.ObjectType {
         vk.Buffer => .buffer,
         vk.CommandBuffer => .command_buffer,
         vk.Image => .image,
+        vk.Pipeline => .pipeline,
+        vk.PipelineLayout => .pipeline_layout,
+        vk.ShaderModule => .shader_module,
         else => unreachable, // TODO: add more
     };
 }

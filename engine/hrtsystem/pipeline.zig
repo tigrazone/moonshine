@@ -60,7 +60,7 @@ const Stage = struct {
 };
 
 pub fn Pipeline(
-        comptime shader_name: []const u8,
+        comptime shader_name: [:0]const u8,
         comptime SpecConstantsT: type,
         comptime PushConstants: type,
         comptime has_textures: bool,
@@ -103,6 +103,7 @@ pub fn Pipeline(
                 .p_push_constant_ranges = &push_constants,
             }, null);
             errdefer vc.device.destroyPipelineLayout(layout, null);
+            try core.vk_helpers.setDebugName(vc, layout, shader_name);
 
             const module = try core.pipeline.createShaderModule(vc, "hrtsystem/" ++ shader_name ++ ".hlsl", allocator, .ray_tracing);
             defer vc.device.destroyShaderModule(module, null);
@@ -162,6 +163,7 @@ pub fn Pipeline(
             var handle: vk.Pipeline = undefined;
             _ = try vc.device.createRayTracingPipelinesKHR(.null_handle, .null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&handle));
             errdefer vc.device.destroyPipeline(handle, null);
+            try core.vk_helpers.setDebugName(vc, handle, shader_name);
 
             const shader_info = comptime ShaderInfo.find(stages);
             const sbt = try ShaderBindingTable.create(vc, vk_allocator, allocator, handle, cmd, shader_info.raygen_count, shader_info.miss_count, shader_info.hit_count, shader_info.callable_count);
@@ -236,6 +238,7 @@ pub fn Pipeline(
             const old_handle = self.handle;
             _ = try vc.device.createRayTracingPipelinesKHR(.null_handle, .null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&self.handle));
             errdefer vc.device.destroyPipeline(self.handle, null);
+            try core.vk_helpers.setDebugName(vc, self.handle, shader_name);
 
             try self.sbt.recreate(vc, vk_allocator, self.handle, cmd);
 
