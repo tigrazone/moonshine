@@ -55,14 +55,14 @@ const Stage = struct {
     type: StageType,
 };
 
-pub fn Pipeline(
-        comptime shader_path: [:0]const u8,
-        comptime SpecConstantsT: type,
-        comptime PushConstants: type,
-        comptime additional_descriptor_layout_count: comptime_int,
-        comptime push_set_bindings: []const descriptor.DescriptorBindingInfo,
-        comptime stages: []const Stage,
-    ) type {
+pub fn Pipeline(comptime options: struct {
+    shader_path: [:0]const u8,
+    SpecConstants: type = struct {},
+    PushConstants: type = struct {},
+    push_set_bindings: []const descriptor.DescriptorBindingInfo = &.{},
+    additional_descriptor_layout_count: comptime_int = 0,
+    stages: []const Stage,
+}) type {
 
     return struct {
         bindings: Bindings,
@@ -71,24 +71,24 @@ pub fn Pipeline(
 
         const Self = @This();
 
-        const Bindings = core.pipeline.PipelineBindings(shader_path, .{ .raygen_bit_khr = true }, PushConstants, push_set_bindings, additional_descriptor_layout_count);
+        const Bindings = core.pipeline.PipelineBindings(options.shader_path, .{ .raygen_bit_khr = true }, options.PushConstants, options.push_set_bindings, options.additional_descriptor_layout_count);
 
-        pub const SpecConstants = SpecConstantsT;
+        pub const SpecConstants = options.SpecConstants;
 
-        pub const PushDescriptorData = core.pipeline.CreatePushDescriptorDataType(push_set_bindings);
+        pub const PushDescriptorData = core.pipeline.CreatePushDescriptorDataType(options.push_set_bindings);
 
-        const PushSetLayout = descriptor.DescriptorLayout(push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, shader_path ++ " push descriptor");
+        const PushSetLayout = descriptor.DescriptorLayout(options.push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, options.shader_path ++ " push descriptor");
 
-        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, additional_descriptor_layouts: [additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [PushSetLayout.sampler_count]vk.Sampler) !Self {
+        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [PushSetLayout.sampler_count]vk.Sampler) !Self {
             var bindings = try Bindings.create(vc, samplers, additional_descriptor_layouts);
             errdefer bindings.destroy(vc);
 
-            const module = try core.pipeline.createShaderModule(vc, shader_path, allocator, .ray_tracing);
+            const module = try core.pipeline.createShaderModule(vc, options.shader_path, allocator, .ray_tracing);
             defer vc.device.destroyShaderModule(module, null);
 
-            var vk_stages: [stages.len]vk.PipelineShaderStageCreateInfo = undefined;
-            var vk_groups: [stages.len]vk.RayTracingShaderGroupCreateInfoKHR = undefined;
-            inline for (stages, &vk_stages, &vk_groups, 0..) |stage, *vk_stage, *vk_group, i| {
+            var vk_stages: [options.stages.len]vk.PipelineShaderStageCreateInfo = undefined;
+            var vk_groups: [options.stages.len]vk.RayTracingShaderGroupCreateInfoKHR = undefined;
+            inline for (options.stages, &vk_stages, &vk_groups, 0..) |stage, *vk_stage, *vk_group, i| {
                 vk_stage.* = vk.PipelineShaderStageCreateInfo {
                     .module = module,
                     .p_name = stage.entrypoint,
@@ -115,7 +115,7 @@ pub fn Pipeline(
                     };
                 }
 
-                for (stages, &vk_stages) |stage, *vk_stage|{
+                for (options.stages, &vk_stages) |stage, *vk_stage|{
                     // only use specialization constants in raygen
                     if (stage.type == .raygen) {
                         vk_stage.p_specialization_info = &vk.SpecializationInfo {
@@ -141,9 +141,9 @@ pub fn Pipeline(
             var handle: vk.Pipeline = undefined;
             _ = try vc.device.createRayTracingPipelinesKHR(.null_handle, .null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&handle));
             errdefer vc.device.destroyPipeline(handle, null);
-            try core.vk_helpers.setDebugName(vc, handle, shader_path);
+            try core.vk_helpers.setDebugName(vc, handle, options.shader_path);
 
-            const shader_info = comptime ShaderInfo.find(stages);
+            const shader_info = comptime ShaderInfo.find(options.stages);
             const sbt = try ShaderBindingTable.create(vc, vk_allocator, allocator, handle, cmd, shader_info.raygen_count, shader_info.miss_count, shader_info.hit_count, shader_info.callable_count);
             errdefer sbt.destroy(vc);
 
@@ -157,12 +157,12 @@ pub fn Pipeline(
 
         // returns old handle which must be cleaned up
         pub fn recreate(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, constants: SpecConstants) !vk.Pipeline {
-            const module = try core.pipeline.createShaderModule(vc, shader_path, allocator, .ray_tracing);
+            const module = try core.pipeline.createShaderModule(vc, options.shader_path, allocator, .ray_tracing);
             defer vc.device.destroyShaderModule(module, null);
 
-            var vk_stages: [stages.len]vk.PipelineShaderStageCreateInfo = undefined;
-            var vk_groups: [stages.len]vk.RayTracingShaderGroupCreateInfoKHR = undefined;
-            inline for (stages, &vk_stages, &vk_groups, 0..) |stage, *vk_stage, *vk_group, i| {
+            var vk_stages: [options.stages.len]vk.PipelineShaderStageCreateInfo = undefined;
+            var vk_groups: [options.stages.len]vk.RayTracingShaderGroupCreateInfoKHR = undefined;
+            inline for (options.stages, &vk_stages, &vk_groups, 0..) |stage, *vk_stage, *vk_group, i| {
                 vk_stage.* = vk.PipelineShaderStageCreateInfo {
                     .module = module,
                     .p_name = stage.entrypoint,
@@ -189,7 +189,7 @@ pub fn Pipeline(
                     };
                 }
 
-                for (stages, &vk_stages) |stage, *vk_stage|{
+                for (options.stages, &vk_stages) |stage, *vk_stage|{
                     // only use specialization constants in raygen
                     if (stage.type == .raygen) {
                         vk_stage.p_specialization_info = &vk.SpecializationInfo {
@@ -215,7 +215,7 @@ pub fn Pipeline(
             const old_handle = self.handle;
             _ = try vc.device.createRayTracingPipelinesKHR(.null_handle, .null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&self.handle));
             errdefer vc.device.destroyPipeline(self.handle, null);
-            try core.vk_helpers.setDebugName(vc, self.handle, shader_path);
+            try core.vk_helpers.setDebugName(vc, self.handle, options.shader_path);
 
             try self.sbt.recreate(vc, vk_allocator, self.handle, cmd);
 
@@ -232,14 +232,14 @@ pub fn Pipeline(
             command_buffer.bindPipeline(.ray_tracing_khr, self.handle);
         }
 
-        pub usingnamespace if (additional_descriptor_layout_count != 0) struct {
-            pub fn recordBindAdditionalDescriptorSets(self: *const Self, command_buffer: VulkanContext.CommandBuffer, sets: [additional_descriptor_layout_count]vk.DescriptorSet) void {
+        pub usingnamespace if (options.additional_descriptor_layout_count != 0) struct {
+            pub fn recordBindAdditionalDescriptorSets(self: *const Self, command_buffer: VulkanContext.CommandBuffer, sets: [options.additional_descriptor_layout_count]vk.DescriptorSet) void {
                 command_buffer.bindDescriptorSets(.ray_tracing_khr, self.bindings.layout, 1, sets.len, &sets, 0, undefined);
             }
         } else struct {};
 
-        pub usingnamespace if (@sizeOf(PushConstants) != 0) struct {
-            pub fn recordPushConstants(self: *const Self, command_buffer: VulkanContext.CommandBuffer, constants: PushConstants) void {
+        pub usingnamespace if (@sizeOf(options.PushConstants) != 0) struct {
+            pub fn recordPushConstants(self: *const Self, command_buffer: VulkanContext.CommandBuffer, constants: options.PushConstants) void {
                 const bytes = std.mem.asBytes(&constants);
                 command_buffer.pushConstants(self.bindings.layout, .{ .raygen_bit_khr = true }, 0, bytes.len, bytes);
             }
@@ -250,21 +250,19 @@ pub fn Pipeline(
         }
 
         pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, data: PushDescriptorData) void {
-            const writes = core.pipeline.pushDescriptorDataToWriteDescriptor(push_set_bindings, data);
+            const writes = core.pipeline.pushDescriptorDataToWriteDescriptor(options.push_set_bindings, data);
             command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.bindings.layout, 0, writes.len, &writes.buffer);
         }
     };
 }
 
-pub const ObjectPickPipeline = Pipeline(
-    "hrtsystem/input.hlsl",
-    extern struct {},
-    extern struct {
+pub const ObjectPickPipeline = Pipeline(.{
+    .shader_path = "hrtsystem/input.hlsl",
+    .PushConstants = extern struct {
         lens: Camera.Lens,
         click_position: F32x2,
     },
-    0,
-    &.{
+    .push_set_bindings = &.{
         .{
             .name = "tlas",
             .descriptor_type = .acceleration_structure_khr,
@@ -284,18 +282,18 @@ pub const ObjectPickPipeline = Pipeline(
             .stage_flags = .{ .raygen_bit_khr = true },
         },
     },
-    &[_]Stage {
+    .stages = &[_]Stage {
         .{ .type = .raygen, .entrypoint = "raygen" },
         .{ .type = .miss, .entrypoint = "miss" },
         .{ .type = .closest_hit, .entrypoint = "closesthit" },
     }
-);
+});
 
 // a "standard" pipeline -- that is, the one we use for most
 // rendering operations
-pub const StandardPipeline = Pipeline(
-    "hrtsystem/main.hlsl",
-    extern struct {
+pub const StandardPipeline = Pipeline(.{
+    .shader_path = "hrtsystem/main.hlsl",
+    .SpecConstants = extern struct {
         samples_per_run: u32 = 1,
         max_bounces: u32 = 4,
         env_samples_per_bounce: u32 = 1,
@@ -304,12 +302,12 @@ pub const StandardPipeline = Pipeline(
         indexed_attributes: bool align(@alignOf(vk.Bool32)) = true,
         two_component_normal_texture: bool align(@alignOf(vk.Bool32)) = true,
     },
-    extern struct {
+    .PushConstants = extern struct {
         lens: Camera.Lens,
         sample_count: u32,
     },
-    1,
-    &.{
+    .additional_descriptor_layout_count = 1,
+    .push_set_bindings = &.{
         .{
             .name = "tlas",
             .descriptor_type = .acceleration_structure_khr,
@@ -378,13 +376,13 @@ pub const StandardPipeline = Pipeline(
             .stage_flags = .{ .raygen_bit_khr = true },
         },
     },
-    &[_]Stage {
+    .stages = &[_]Stage {
         .{ .type = .raygen, .entrypoint = "raygen" },
         .{ .type = .miss, .entrypoint = "miss" },
         .{ .type = .miss, .entrypoint = "shadowmiss" },
         .{ .type = .closest_hit, .entrypoint = "closesthit" },
     }
-);
+});
 
 const ShaderInfo = struct {
     raygen_count: u32,

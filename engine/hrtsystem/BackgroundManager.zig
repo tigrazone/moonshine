@@ -26,8 +26,7 @@ fn luminance(rgb: [3]f32) f32 {
     return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
 }
 
-const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline("background/equirectangular_to_equal_area.hlsl", struct {}, struct {},
-&.{
+const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/equirectangular_to_equal_area.hlsl", .push_set_bindings = &.{
     .{
         .name = "src_texture",
         .descriptor_type = .combined_image_sampler,
@@ -40,10 +39,9 @@ const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline("backgr
         .descriptor_count = 1,
         .stage_flags = .{ .compute_bit = true },
     },
-}, 0);
+}});
 
-const LuminancePipeline = engine.core.pipeline.Pipeline("background/luminance.hlsl", struct {}, struct {},
-&.{
+const LuminancePipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/luminance.hlsl", .push_set_bindings = &.{
     .{
         .name = "src_color_image",
         .descriptor_type = .sampled_image,
@@ -56,10 +54,9 @@ const LuminancePipeline = engine.core.pipeline.Pipeline("background/luminance.hl
         .descriptor_count = 1,
         .stage_flags = .{ .compute_bit = true },
     },
-}, 0);
+}});
 
-const FoldPipeline = engine.core.pipeline.Pipeline("background/fold.hlsl", struct {}, struct {},
-&.{
+const FoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/fold.hlsl", .push_set_bindings = &.{
     .{
         .name = "src_mip",
         .descriptor_type = .sampled_image,
@@ -72,7 +69,7 @@ const FoldPipeline = engine.core.pipeline.Pipeline("background/fold.hlsl", struc
         .descriptor_count = 1,
         .stage_flags = .{ .compute_bit = true },
     },
-}, 0);
+}});
 
 pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator) !Self {
     const sampler = try vc.device.createSampler(&.{
