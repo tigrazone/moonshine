@@ -64,8 +64,8 @@ pub fn fromGlbExr(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocato
     };
 }
 
-pub fn pushDescriptors(self: *const Self, sensor: u32, background: u32) StandardPipeline.PushDescriptorData {
-    return engine.hrtsystem.pipeline.StandardPipeline.PushDescriptorData {
+pub fn pushDescriptors(self: *const Self, sensor: u32, background: u32) StandardPipeline.PushSetBindings {
+    return engine.hrtsystem.pipeline.StandardPipeline.PushSetBindings {
         .tlas = self.world.accel.tlas_handle,
         .instances = self.world.accel.instances_device.handle,
         .world_to_instances = self.world.accel.world_to_instance_device.handle,
@@ -73,9 +73,9 @@ pub fn pushDescriptors(self: *const Self, sensor: u32, background: u32) Standard
         .meshes = self.world.meshes.addresses_buffer.handle,
         .geometries = self.world.accel.geometries.handle,
         .material_values = self.world.materials.materials.handle,
-        .background_rgb_image = self.background.data.items[background].rgb_image.view,
-        .background_luminance_image = self.background.data.items[background].luminance_image.view,
-        .output_image = self.camera.sensors.items[sensor].image.view,
+        .background_rgb_image = .{ .view = self.background.data.items[background].rgb_image.view },
+        .background_luminance_image = .{ .view = self.background.data.items[background].luminance_image.view },
+        .output_image = .{ .view = self.camera.sensors.items[sensor].image.view },
     };
 }
 

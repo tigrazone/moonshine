@@ -92,9 +92,9 @@ pub fn getClickedObject(self: *Self, vc: *const VulkanContext, normalized_coords
 
     // bind pipeline + sets
     self.pipeline.recordBindPipeline(self.command_buffer);
-    self.pipeline.recordPushDescriptors(self.command_buffer, Pipeline.PushDescriptorData {
+    self.pipeline.recordPushDescriptors(self.command_buffer, Pipeline.PushSetBindings {
         .tlas = accel,
-        .output_image = sensor.image.view,
+        .output_image = .{ .view = sensor.image.view },
         .click_data = self.buffer.handle,
     });
 

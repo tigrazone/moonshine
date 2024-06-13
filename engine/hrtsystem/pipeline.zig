@@ -59,7 +59,7 @@ pub fn Pipeline(comptime options: struct {
     shader_path: [:0]const u8,
     SpecConstants: type = struct {},
     PushConstants: type = struct {},
-    push_set_bindings: []const descriptor.DescriptorBindingInfo = &.{},
+    PushSetBindings: type,
     additional_descriptor_layout_count: comptime_int = 0,
     stages: []const Stage,
 }) type {
@@ -71,15 +71,12 @@ pub fn Pipeline(comptime options: struct {
 
         const Self = @This();
 
-        const Bindings = core.pipeline.PipelineBindings(options.shader_path, .{ .raygen_bit_khr = true }, options.PushConstants, options.push_set_bindings, options.additional_descriptor_layout_count);
+        const Bindings = core.pipeline.PipelineBindings(options.shader_path, .{ .raygen_bit_khr = true }, options.PushConstants, options.PushSetBindings, options.additional_descriptor_layout_count);
 
         pub const SpecConstants = options.SpecConstants;
+        pub const PushSetBindings = options.PushSetBindings;
 
-        pub const PushDescriptorData = core.pipeline.CreatePushDescriptorDataType(options.push_set_bindings);
-
-        const PushSetLayout = descriptor.DescriptorLayout(options.push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, options.shader_path ++ " push descriptor");
-
-        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [PushSetLayout.sampler_count]vk.Sampler) !Self {
+        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler) !Self {
             var bindings = try Bindings.create(vc, samplers, additional_descriptor_layouts);
             errdefer bindings.destroy(vc);
 
@@ -249,8 +246,8 @@ pub fn Pipeline(comptime options: struct {
             command_buffer.traceRaysKHR(&self.sbt.getRaygenSBT(), &self.sbt.getMissSBT(), &self.sbt.getHitSBT(), &self.sbt.getCallableSBT(), extent.width, extent.height, 1);
         }
 
-        pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, data: PushDescriptorData) void {
-            const writes = core.pipeline.pushDescriptorDataToWriteDescriptor(options.push_set_bindings, data);
+        pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, bindings: options.PushSetBindings) void {
+            const writes = core.pipeline.pushDescriptorDataToWriteDescriptor(options.PushSetBindings, bindings);
             command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.bindings.layout, 0, writes.len, &writes.buffer);
         }
     };
@@ -262,25 +259,10 @@ pub const ObjectPickPipeline = Pipeline(.{
         lens: Camera.Lens,
         click_position: F32x2,
     },
-    .push_set_bindings = &.{
-        .{
-            .name = "tlas",
-            .descriptor_type = .acceleration_structure_khr,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-        },
-        .{
-            .name = "output_image",
-            .descriptor_type = .storage_image,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-        },
-        .{
-            .name = "click_data",
-            .descriptor_type = .storage_buffer,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-        },
+    .PushSetBindings = struct {
+        tlas: vk.AccelerationStructureKHR,
+        output_image: core.pipeline.StorageImage,
+        click_data: vk.Buffer,
     },
     .stages = &[_]Stage {
         .{ .type = .raygen, .entrypoint = "raygen" },
@@ -307,74 +289,17 @@ pub const StandardPipeline = Pipeline(.{
         sample_count: u32,
     },
     .additional_descriptor_layout_count = 1,
-    .push_set_bindings = &.{
-        .{
-            .name = "tlas",
-            .descriptor_type = .acceleration_structure_khr,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-            .binding_flags = .{ .partially_bound_bit = true },
-        },
-        .{
-            .name = "instances",
-            .descriptor_type = .storage_buffer,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-            .binding_flags = .{ .partially_bound_bit = true },
-        },
-        .{
-            .name = "world_to_instances",
-            .descriptor_type = .storage_buffer,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-            .binding_flags = .{ .partially_bound_bit = true },
-        },
-        .{
-            .name = "emitter_alias_table",
-            .descriptor_type = .storage_buffer,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-            .binding_flags = .{ .partially_bound_bit = true },
-        },
-        .{
-            .name = "meshes",
-            .descriptor_type = .storage_buffer,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-            .binding_flags = .{ .partially_bound_bit = true },
-        },
-        .{
-            .name = "geometries",
-            .descriptor_type = .storage_buffer,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-            .binding_flags = .{ .partially_bound_bit = true },
-        },
-        .{
-            .name = "material_values",
-            .descriptor_type = .storage_buffer,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-            .binding_flags = .{ .partially_bound_bit = true },
-        },
-        .{
-            .name = "background_rgb_image",
-            .descriptor_type = .combined_image_sampler,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-        },
-        .{
-            .name = "background_luminance_image",
-            .descriptor_type = .sampled_image,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-        },
-        .{
-            .name = "output_image",
-            .descriptor_type = .storage_image,
-            .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
-        },
+    .PushSetBindings = struct {
+        tlas: ?vk.AccelerationStructureKHR,
+        instances: ?vk.Buffer,
+        world_to_instances: ?vk.Buffer,
+        emitter_alias_table: ?vk.Buffer,
+        meshes: ?vk.Buffer,
+        geometries: ?vk.Buffer,
+        material_values: ?vk.Buffer,
+        background_rgb_image: core.pipeline.CombinedImageSampler,
+        background_luminance_image: core.pipeline.SampledImage,
+        output_image: core.pipeline.StorageImage,
     },
     .stages = &[_]Stage {
         .{ .type = .raygen, .entrypoint = "raygen" },

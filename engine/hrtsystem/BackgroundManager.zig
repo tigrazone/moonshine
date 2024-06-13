@@ -26,49 +26,19 @@ fn luminance(rgb: [3]f32) f32 {
     return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
 }
 
-const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/equirectangular_to_equal_area.hlsl", .push_set_bindings = &.{
-    .{
-        .name = "src_texture",
-        .descriptor_type = .combined_image_sampler,
-        .descriptor_count = 1,
-        .stage_flags = .{ .compute_bit = true },
-    },
-    .{
-        .name = "dst_image",
-        .descriptor_type = .storage_image,
-        .descriptor_count = 1,
-        .stage_flags = .{ .compute_bit = true },
-    },
+const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/equirectangular_to_equal_area.hlsl", .PushSetBindings = struct {
+    src_texture: engine.core.pipeline.CombinedImageSampler,
+    dst_image: engine.core.pipeline.StorageImage,
 }});
 
-const LuminancePipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/luminance.hlsl", .push_set_bindings = &.{
-    .{
-        .name = "src_color_image",
-        .descriptor_type = .sampled_image,
-        .descriptor_count = 1,
-        .stage_flags = .{ .compute_bit = true },
-    },
-    .{
-        .name = "dst_luminance_image",
-        .descriptor_type = .storage_image,
-        .descriptor_count = 1,
-        .stage_flags = .{ .compute_bit = true },
-    },
+const LuminancePipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/luminance.hlsl", .PushSetBindings = struct {
+    src_color_image: engine.core.pipeline.SampledImage,
+    dst_luminance_image: engine.core.pipeline.StorageImage,
 }});
 
-const FoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/fold.hlsl", .push_set_bindings = &.{
-    .{
-        .name = "src_mip",
-        .descriptor_type = .sampled_image,
-        .descriptor_count = 1,
-        .stage_flags = .{ .compute_bit = true },
-    },
-    .{
-        .name = "dst_mip",
-        .descriptor_type = .storage_image,
-        .descriptor_count = 1,
-        .stage_flags = .{ .compute_bit = true },
-    },
+const FoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "background/fold.hlsl", .PushSetBindings = struct {
+    src_mip: engine.core.pipeline.SampledImage,
+    dst_mip: engine.core.pipeline.StorageImage,
 }});
 
 pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator) !Self {
@@ -288,8 +258,8 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
     // do conversion
     self.equirectangular_to_equal_area_pipeline.recordBindPipeline(commands.buffer);
     self.equirectangular_to_equal_area_pipeline.recordPushDescriptors(commands.buffer, .{
-        .src_texture = equirectangular_image.view,
-        .dst_image = equal_area_image.view,
+        .src_texture = .{ .view = equirectangular_image.view },
+        .dst_image = .{ .view = equal_area_image.view },
     });
     const dispatch_size = if (equal_area_map_size > shader_local_size) @divExact(equal_area_map_size, shader_local_size) else 1;
     self.equirectangular_to_equal_area_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
@@ -320,8 +290,8 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
 
     self.luminance_pipeline.recordBindPipeline(commands.buffer);
     self.luminance_pipeline.recordPushDescriptors(commands.buffer, .{
-        .src_color_image = equal_area_image.view,
-        .dst_luminance_image = luminance_image.view,
+        .src_color_image = .{ .view = equal_area_image.view },
+        .dst_luminance_image = .{ .view = luminance_image.view },
     });
     self.luminance_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
 
@@ -351,8 +321,8 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
             },
         });
         self.fold_pipeline.recordPushDescriptors(commands.buffer, .{
-            .src_mip = luminance_mips_views.get(dst_mip_level - 1),
-            .dst_mip = luminance_mips_views.get(dst_mip_level),
+            .src_mip = .{ .view = luminance_mips_views.get(dst_mip_level - 1) },
+            .dst_mip = .{ .view = luminance_mips_views.get(dst_mip_level) },
         });
         const dst_mip_size = std.math.pow(u32, 2, @intCast(luminance_mips_views.len - dst_mip_level));
         const mip_dispatch_size = if (dst_mip_size > shader_local_size) @divExact(dst_mip_size, shader_local_size) else 1;

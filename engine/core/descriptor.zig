@@ -4,15 +4,14 @@ const core = @import("../engine.zig").core;
 const vk_helpers = core.vk_helpers;
 const VulkanContext = core.VulkanContext;
 
-pub const DescriptorBindingInfo = struct {
-    name: [:0]const u8,
-    descriptor_type: vk.DescriptorType, // todo: could be more type safe, e.g., have buffer inner type
+pub const Binding = struct {
+    descriptor_type: vk.DescriptorType,
     descriptor_count: u32,
     stage_flags: vk.ShaderStageFlags,
     binding_flags: vk.DescriptorBindingFlags = .{},
 };
 
-pub fn DescriptorLayout(comptime bindings: []const DescriptorBindingInfo, comptime layout_flags: vk.DescriptorSetLayoutCreateFlags, comptime max_sets: comptime_int, comptime debug_name: [*:0]const u8) type {
+pub fn DescriptorLayout(comptime bindings: []const Binding, comptime layout_flags: vk.DescriptorSetLayoutCreateFlags, comptime max_sets: comptime_int, comptime debug_name: [*:0]const u8) type {
     return struct {
         handle: vk.DescriptorSetLayout,
         pool: if (is_push_descriptor) void else vk.DescriptorPool,

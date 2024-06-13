@@ -435,7 +435,6 @@ pub fn endFrame(self: *Self, command_buffer: VulkanContext.CommandBuffer, swapch
 
 pub const GuiDescriptorLayout = DescriptorLayout(&.{
     .{
-        .name = "texture",
         .descriptor_type = .combined_image_sampler,
         .descriptor_count = 1,
         .stage_flags = .{ .fragment_bit = true },

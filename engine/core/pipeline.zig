@@ -57,52 +57,67 @@ pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: [:0]co
     return module;
 }
 
-pub fn CreatePushDescriptorDataType(comptime bindings: []const descriptor.DescriptorBindingInfo) type {
-    var fields: [bindings.len]std.builtin.Type.StructField = undefined;
-    for (bindings, &fields) |binding, *field| {
-        const InnerType = switch (binding.descriptor_type) {
-            .storage_buffer => vk.Buffer,
-            .acceleration_structure_khr => vk.AccelerationStructureKHR,
-            .storage_image, .combined_image_sampler, .sampled_image => vk.ImageView,
-            else => @compileError("unknown descriptor type " ++ @tagName(binding.descriptor_type)), // TODO
-        };
-        field.* = std.builtin.Type.StructField {
-            .name = binding.name,
-            .type = InnerType,
-            .default_value = null,
-            .is_comptime = false,
-            .alignment = @alignOf(InnerType),
+pub const StorageImage= struct {
+    view: vk.ImageView,
+};
+
+pub const SampledImage = struct {
+    view: vk.ImageView,
+};
+
+pub const CombinedImageSampler = struct {
+    view: vk.ImageView,
+};
+
+fn typeToDescriptorType(comptime t: type) vk.DescriptorType {
+    return switch (t) {
+        vk.Buffer => .storage_buffer,
+        vk.AccelerationStructureKHR => .acceleration_structure_khr,
+        StorageImage => .storage_image,
+        SampledImage => .sampled_image,
+        CombinedImageSampler => .combined_image_sampler,
+        else => @compileError("unknown descriptor type " ++ @typeName(t)),
+    };
+}
+
+fn createPushDescriptorBindings(comptime Bindings: type, comptime stage_flags: vk.ShaderStageFlags) [@typeInfo(Bindings).Struct.fields.len]descriptor.Binding {
+    var bindings: [@typeInfo(Bindings).Struct.fields.len]descriptor.Binding = undefined;
+    for (@typeInfo(Bindings).Struct.fields, &bindings) |field, *binding| {
+        const descriptor_type = typeToDescriptorType(switch (@typeInfo(field.type)) {
+            .Optional => |optional| optional.child,
+            else => field.type,
+        });
+        binding.* = descriptor.Binding {
+            .descriptor_type = descriptor_type,
+            .descriptor_count = 1,
+            .stage_flags = stage_flags,
+            .binding_flags = if (@typeInfo(field.type) == .Optional) .{ .partially_bound_bit = true } else .{},
         };
     }
 
-    const info = std.builtin.Type {
-        .Struct = std.builtin.Type.Struct {
-            .fields = &fields,
-            .layout = .auto,
-            .decls = &.{},
-            .is_tuple = false,
-        },
-    };
-    return @Type(info);
+    return bindings;
 }
 
-// this really should be a member function of the above -- hope zig lets me do that eventually
-//
 // inline so that the temporaries here end up in the parent function
 // not sure if this is part of the spec but seems to work
-pub inline fn pushDescriptorDataToWriteDescriptor(comptime bindings: []const descriptor.DescriptorBindingInfo, data: CreatePushDescriptorDataType(bindings)) std.BoundedArray(vk.WriteDescriptorSet, bindings.len) {
-    var writes: [bindings.len]vk.WriteDescriptorSet = undefined;
-    inline for (bindings, &writes, 0..) |binding, *write, i| {
-        write.* = switch (binding.descriptor_type) {
+pub inline fn pushDescriptorDataToWriteDescriptor(BindingsType: type, bindings: BindingsType) std.BoundedArray(vk.WriteDescriptorSet, @typeInfo(BindingsType).Struct.fields.len) {
+    var writes: [@typeInfo(BindingsType).Struct.fields.len]vk.WriteDescriptorSet = undefined;
+    inline for (@typeInfo(BindingsType).Struct.fields, &writes, 0..) |binding, *write, i| {
+        const descriptor_type = comptime typeToDescriptorType(switch (@typeInfo(binding.type)) {
+            .Optional => |optional| optional.child,
+            else => binding.type,
+        });
+        const binding_value = if (@typeInfo(binding.type) == .Optional) @field(bindings, binding.name).? else @field(bindings, binding.name);
+        write.* = switch (descriptor_type) {
             .storage_buffer => vk.WriteDescriptorSet {
                 .dst_set = undefined,
                 .dst_binding = i,
                 .dst_array_element = 0,
                 .descriptor_count = 1,
-                .descriptor_type = binding.descriptor_type,
+                .descriptor_type = descriptor_type,
                 .p_image_info = undefined,
                 .p_buffer_info = @ptrCast(&vk.DescriptorBufferInfo {
-                    .buffer = @field(data, binding.name),
+                    .buffer = binding_value,
                     .offset = 0,
                     .range = vk.WHOLE_SIZE,
                 }),
@@ -113,13 +128,13 @@ pub inline fn pushDescriptorDataToWriteDescriptor(comptime bindings: []const des
                 .dst_binding = i,
                 .dst_array_element = 0,
                 .descriptor_count = 1,
-                .descriptor_type = binding.descriptor_type,
+                .descriptor_type = descriptor_type,
                 .p_image_info = undefined,
                 .p_buffer_info = undefined,
                 .p_texel_buffer_view = undefined,
                 .p_next = &vk.WriteDescriptorSetAccelerationStructureKHR {
                     .acceleration_structure_count = 1,
-                    .p_acceleration_structures = @ptrCast(&@field(data, binding.name)),
+                    .p_acceleration_structures = @ptrCast(&binding_value),
                 },
             },
             .storage_image => vk.WriteDescriptorSet {
@@ -127,10 +142,10 @@ pub inline fn pushDescriptorDataToWriteDescriptor(comptime bindings: []const des
                 .dst_binding = i,
                 .dst_array_element = 0,
                 .descriptor_count = 1,
-                .descriptor_type = binding.descriptor_type,
+                .descriptor_type = descriptor_type,
                 .p_image_info = @ptrCast(&vk.DescriptorImageInfo {
                     .sampler = .null_handle,
-                    .image_view = @field(data, binding.name),
+                    .image_view = binding_value.view,
                     .image_layout = .general,
                 }),
                 .p_buffer_info = undefined,
@@ -141,10 +156,10 @@ pub inline fn pushDescriptorDataToWriteDescriptor(comptime bindings: []const des
                 .dst_binding = i,
                 .dst_array_element = 0,
                 .descriptor_count = 1,
-                .descriptor_type = binding.descriptor_type,
+                .descriptor_type = descriptor_type,
                 .p_image_info = @ptrCast(&vk.DescriptorImageInfo {
                     .sampler = .null_handle,
-                    .image_view = @field(data, binding.name),
+                    .image_view = binding_value.view,
                     .image_layout = .shader_read_only_optimal,
                 }),
                 .p_buffer_info = undefined,
@@ -156,7 +171,7 @@ pub inline fn pushDescriptorDataToWriteDescriptor(comptime bindings: []const des
 
     // remove any writes we may not actually want, e.g.,
     // samplers or zero-size things
-    var pruned_writes = std.BoundedArray(vk.WriteDescriptorSet, bindings.len) {};
+    var pruned_writes = std.BoundedArray(vk.WriteDescriptorSet, @typeInfo(BindingsType).Struct.fields.len) {};
     for (writes) |write| {
         if (write.descriptor_type == .sampler) continue;
         if (write.descriptor_count == 0) continue;
@@ -174,11 +189,11 @@ pub fn PipelineBindings(
     comptime name: [:0]const u8,
     comptime stages: vk.ShaderStageFlags,
     comptime PushConstants: type,
-    comptime push_set_bindings: []const descriptor.DescriptorBindingInfo,
+    comptime PushSetBindings: type,
     comptime additional_descriptor_layout_count: comptime_int,
 ) type {
-
-    const PushSetLayout = descriptor.DescriptorLayout(push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, name ++ " push descriptor");
+    const push_set_bindings = createPushDescriptorBindings(PushSetBindings, stages);
+    const PushSetLayout = descriptor.DescriptorLayout(&push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, name ++ " push descriptor");
 
     return struct {
         push_set_layout: PushSetLayout,
@@ -225,7 +240,7 @@ pub fn Pipeline(comptime options: struct {
     shader_path: [:0]const u8,
     SpecConstants: type = struct {},
     PushConstants: type = struct {},
-    push_set_bindings: []const descriptor.DescriptorBindingInfo = &.{},
+    PushSetBindings: type, // todo: should be specified in higher level types rather than raw vk ones
     additional_descriptor_layout_count: comptime_int = 0,
 }) type {
     return struct {
@@ -234,11 +249,10 @@ pub fn Pipeline(comptime options: struct {
 
         const Self = @This();
 
-        const Bindings = PipelineBindings(options.shader_path, .{ .compute_bit = true }, options.PushConstants, options.push_set_bindings, options.additional_descriptor_layout_count);
+        const Bindings = PipelineBindings(options.shader_path, .{ .compute_bit = true }, options.PushConstants, options.PushSetBindings, options.additional_descriptor_layout_count);
 
         pub const SpecConstants = options.SpecConstants;
-
-        pub const PushDescriptorData = CreatePushDescriptorDataType(options.push_set_bindings);
+        pub const PushSetBindings = options.PushSetBindings;
 
         pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout) !Self {
             var bindings = try Bindings.create(vc, samplers, additional_descriptor_layouts);
@@ -326,8 +340,8 @@ pub fn Pipeline(comptime options: struct {
             }
         } else struct {};
 
-        pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, data: PushDescriptorData) void {
-            const writes = pushDescriptorDataToWriteDescriptor(options.push_set_bindings, data);
+        pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, bindings: options.PushSetBindings) void {
+            const writes = pushDescriptorDataToWriteDescriptor(options.PushSetBindings, bindings);
             command_buffer.pushDescriptorSetKHR(.compute, self.bindings.layout, 0, writes.len, &writes.buffer);
         }
     };
