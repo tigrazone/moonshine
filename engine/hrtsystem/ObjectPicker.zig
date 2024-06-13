@@ -55,7 +55,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     const buffer = try vk_allocator.createHostBuffer(vc, ClickDataShader, 1, .{ .storage_buffer_bit = true });
     errdefer buffer.destroy(vc);
 
-    var pipeline = try Pipeline.create(vc, vk_allocator, allocator, commands, {}, .{}, .{});
+    var pipeline = try Pipeline.create(vc, vk_allocator, allocator, commands, .{}, .{}, .{});
     errdefer pipeline.destroy(vc);
 
     const command_pool = try vc.device.createCommandPool(&.{

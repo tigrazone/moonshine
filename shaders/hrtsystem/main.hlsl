@@ -7,21 +7,21 @@
 // because as a functional programmer impure functions scare me
 
 // GEOMETRY
-[[vk::binding(0, 1)]] RaytracingAccelerationStructure dTLAS;
-[[vk::binding(1, 1)]] StructuredBuffer<Instance> dInstances;
-[[vk::binding(2, 1)]] StructuredBuffer<row_major float3x4> dWorldToInstance;
-[[vk::binding(3, 1)]] StructuredBuffer<AliasEntry<LightAliasData> > dEmitterAliasTable;
-[[vk::binding(4, 1)]] StructuredBuffer<Mesh> dMeshes;
-[[vk::binding(5, 1)]] StructuredBuffer<Geometry> dGeometries;
-[[vk::binding(6, 1)]] StructuredBuffer<MaterialVariantData> dMaterials;
+[[vk::binding(0, 0)]] RaytracingAccelerationStructure dTLAS;
+[[vk::binding(1, 0)]] StructuredBuffer<Instance> dInstances;
+[[vk::binding(2, 0)]] StructuredBuffer<row_major float3x4> dWorldToInstance;
+[[vk::binding(3, 0)]] StructuredBuffer<AliasEntry<LightAliasData> > dEmitterAliasTable;
+[[vk::binding(4, 0)]] StructuredBuffer<Mesh> dMeshes;
+[[vk::binding(5, 0)]] StructuredBuffer<Geometry> dGeometries;
+[[vk::binding(6, 0)]] StructuredBuffer<MaterialVariantData> dMaterials;
 
 // BACKGROUND
-[[vk::combinedImageSampler]] [[vk::binding(7, 1)]] Texture2D<float3> dBackgroundRgbTexture;
-[[vk::combinedImageSampler]] [[vk::binding(7, 1)]] SamplerState dBackgroundSampler;
-[[vk::binding(8, 1)]] Texture2D<float> dBackgroundLuminanceTexture;
+[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] Texture2D<float3> dBackgroundRgbTexture;
+[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] SamplerState dBackgroundSampler;
+[[vk::binding(8, 0)]] Texture2D<float> dBackgroundLuminanceTexture;
 
 // OUTPUT
-[[vk::binding(9, 1)]] RWTexture2D<float4> dOutputImage;
+[[vk::binding(9, 0)]] RWTexture2D<float4> dOutputImage;
 
 // PUSH CONSTANTS
 struct PushConsts {

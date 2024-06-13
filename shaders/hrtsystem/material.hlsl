@@ -1,7 +1,7 @@
 #pragma once
 
-[[vk::binding(0, 0)]] Texture2D dTextures[];
-[[vk::binding(1, 0)]] SamplerState dTextureSampler;
+[[vk::binding(0, 1)]] Texture2D dTextures[];
+[[vk::binding(1, 1)]] SamplerState dTextureSampler;
 
 #include "../utils/math.hlsl"
 #include "../utils/mappings.hlsl"

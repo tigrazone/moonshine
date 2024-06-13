@@ -61,7 +61,7 @@ const TestingContext = struct {
 
         // bind our stuff
         pipeline.recordBindPipeline(self.commands.buffer);
-        pipeline.recordBindTextureDescriptorSet(self.commands.buffer, scene.world.materials.textures.descriptor_set);
+        pipeline.recordBindAdditionalDescriptorSets(self.commands.buffer, .{ scene.world.materials.textures.descriptor_set });
 
         // push our stuff
         pipeline.recordPushDescriptors(self.commands.buffer, scene.pushDescriptors(0, 0));
@@ -327,7 +327,7 @@ test "white sphere on white background is white" {
     };
     defer scene.destroy(&tc.vc, allocator);
 
-    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, scene.world.materials.textures.descriptor_layout, .{
+    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
         .samples_per_run = 512,
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
@@ -437,7 +437,7 @@ test "inside illuminating sphere is white" {
     };
     defer scene.destroy(&tc.vc, allocator);
 
-    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, scene.world.materials.textures.descriptor_layout, .{
+    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
         .samples_per_run = 1024,
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,

@@ -12,10 +12,6 @@ const descriptor = core.descriptor;
 
 const Camera = @import("./Camera.zig");
 
-const SceneDescriptorLayout = engine.hrtsystem.Scene.DescriptorLayout;
-const InputDescriptorLayout = engine.hrtsystem.ObjectPicker.DescriptorLayout;
-const TextureDescriptorLayout = engine.hrtsystem.MaterialManager.TextureManager.DescriptorLayout;
-
 const vector = engine.vector;
 const F32x2 = vector.Vec2(f32);
 const F32x3 = vector.Vec3(f32);
@@ -63,7 +59,7 @@ pub fn Pipeline(
         comptime shader_name: [:0]const u8,
         comptime SpecConstantsT: type,
         comptime PushConstants: type,
-        comptime has_textures: bool,
+        comptime additional_descriptor_layout_count: comptime_int,
         comptime push_set_bindings: []const descriptor.DescriptorBindingInfo,
         comptime stages: []const Stage,
     ) type {
@@ -82,12 +78,9 @@ pub fn Pipeline(
 
         const PushSetLayout = descriptor.DescriptorLayout(push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, shader_name ++ " push descriptor");
 
-        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, texture_layout: if (has_textures) TextureDescriptorLayout else void, constants: SpecConstants, samplers: [PushSetLayout.sampler_count]vk.Sampler) !Self {
+        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, additional_descriptor_layouts: [additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [PushSetLayout.sampler_count]vk.Sampler) !Self {
             const push_set_layout = try PushSetLayout.create(vc, samplers);
-            const set_layout_handles = if (has_textures) [2]vk.DescriptorSetLayout {
-                texture_layout.handle,
-                push_set_layout.handle,
-            } else [1]vk.DescriptorSetLayout { push_set_layout.handle };
+            const set_layout_handles = .{ push_set_layout.handle } ++ additional_descriptor_layouts;
 
             const push_constants = if (@sizeOf(PushConstants) != 0) [1]vk.PushConstantRange {
                 .{
@@ -256,9 +249,9 @@ pub fn Pipeline(
             command_buffer.bindPipeline(.ray_tracing_khr, self.handle);
         }
 
-        pub usingnamespace if (has_textures) struct {
-            pub fn recordBindTextureDescriptorSet(self: *const Self, command_buffer: VulkanContext.CommandBuffer, set: vk.DescriptorSet) void {
-                command_buffer.bindDescriptorSets(.ray_tracing_khr, self.layout, 0, 1, &[_]vk.DescriptorSet { set }, 0, undefined);
+        pub usingnamespace if (additional_descriptor_layout_count != 0) struct {
+            pub fn recordBindAdditionalDescriptorSets(self: *const Self, command_buffer: VulkanContext.CommandBuffer, sets: [additional_descriptor_layout_count]vk.DescriptorSet) void {
+                command_buffer.bindDescriptorSets(.ray_tracing_khr, self.layout, 1, sets.len, &sets, 0, undefined);
             }
         } else struct {};
 
@@ -275,7 +268,7 @@ pub fn Pipeline(
 
         pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, data: PushDescriptorData) void {
             const writes = core.pipeline.pushDescriptorDataToWriteDescriptor(push_set_bindings, data);
-            command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.layout, if (has_textures) 1 else 0, writes.len, &writes.buffer);
+            command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.layout, 0, writes.len, &writes.buffer);
         }
     };
 }
@@ -287,7 +280,7 @@ pub const ObjectPickPipeline = Pipeline(
         lens: Camera.Lens,
         click_position: F32x2,
     },
-    false,
+    0,
     &.{
         .{
             .name = "tlas",
@@ -332,7 +325,7 @@ pub const StandardPipeline = Pipeline(
         lens: Camera.Lens,
         sample_count: u32,
     },
-    true,
+    1,
     &.{
         .{
             .name = "tlas",
