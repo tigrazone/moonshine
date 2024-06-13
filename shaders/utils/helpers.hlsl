@@ -13,6 +13,20 @@ uint2 textureDimensions(RWTexture2D<T> texture) {
 }
 
 template<typename T>
+uint textureDimensions(Texture1D<T> texture) {
+    uint dimension;
+    texture.GetDimensions(dimension);
+    return dimension;
+}
+
+template<typename T>
+uint textureDimensions(RWTexture1D<T> texture) {
+    uint dimension;
+    texture.GetDimensions(dimension);
+    return dimension;
+}
+
+template<typename T>
 uint bufferDimensions(StructuredBuffer<T> buffer) {
     uint size;
     uint stride;

@@ -121,7 +121,7 @@ pub const HdMoonshine = struct {
         self.vk_allocator = VkAllocator.create(&self.vc, self.allocator.allocator()) catch return null;
         errdefer self.vk_allocator.destroy(&self.vc, self.allocator.allocator());
 
-        self.world = World.createEmpty(&self.vc) catch return null;
+        self.world = World.createEmpty(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands) catch return null;
         errdefer self.world.destroy(&self.vc, self.allocator.allocator());
 
         self.camera = Camera {};
@@ -322,7 +322,7 @@ pub const HdMoonshine = struct {
         self.pipeline.recordPushDescriptors(self.commands.buffer, (Scene { .background = self.background, .camera = self.camera, .world = self.world }).pushDescriptors(sensor, 0));
 
         // push our stuff
-        self.pipeline.recordPushConstants(self.commands.buffer, .{ .lens = self.camera.lenses.items[lens], .sample_count = self.camera.sensors.items[sensor].sample_count });
+        self.pipeline.recordPushConstants(self.commands.buffer, .{ .lens = self.camera.lenses.items[lens], .sample_count = self.camera.sensors.items[sensor].sample_count, .emissive_triangle_count = self.world.accel.triangle_power_count });
 
         // trace our stuff
         self.pipeline.recordTraceRays(self.commands.buffer, self.camera.sensors.items[sensor].extent);
@@ -488,7 +488,7 @@ pub const HdMoonshine = struct {
             .geometries = geometries[0..geometry_count],
         };
         self.camera.clearAllSensors();
-        return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, self.world.meshes, instance) catch unreachable; // TODO: error handling
+        return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, self.world.meshes, self.world.materials, instance) catch unreachable; // TODO: error handling
     }
 
     pub export fn HdMoonshineDestroyInstance(self: *HdMoonshine, handle: Accel.Handle) void {

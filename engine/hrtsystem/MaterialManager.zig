@@ -213,13 +213,13 @@ pub const TextureManager = struct {
         .{
             .descriptor_type = .sampled_image,
             .descriptor_count = max_descriptors,
-            .stage_flags = .{ .raygen_bit_khr = true },
+            .stage_flags = .{ .raygen_bit_khr = true, .compute_bit = true },
             .binding_flags = .{ .partially_bound_bit = true, .update_unused_while_pending_bit = true },
         },
         .{
             .descriptor_type = .sampler,
             .descriptor_count = 1,
-            .stage_flags = .{ .raygen_bit_khr = true },
+            .stage_flags = .{ .raygen_bit_khr = true, .compute_bit = true },
         }
     }, .{}, 1, "Textures");
 

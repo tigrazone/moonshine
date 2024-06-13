@@ -75,7 +75,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
         } else try textures.upload(vc, vk_allocator, allocator, commands, TextureManager.Source {
             .f32x2 = Material.default_normal,
         }, "default normal");
-        
+
         material.emissive = if (gltf_material.emissive_texture) |texture| emissive: {
             const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
             std.debug.assert(std.mem.eql(u8, image.mime_type.?, "image/png"));
@@ -109,7 +109,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
                 .f32x3 = constant,
             }, debug_name);
         };
-        
+
         break :blk material;
     };
 
@@ -240,7 +240,7 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
             _ = try materials.upload(vc, vk_allocator, allocator, commands, mat);
         }
 
-        break :blk materials; 
+        break :blk materials;
     };
     errdefer materials.destroy(vc, allocator);
 
@@ -261,7 +261,6 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
                 geometry.* = Geometry {
                     .mesh = @intCast(objects.items.len),
                     .material = @intCast(primitive.material.?),
-                    .sampled = std.mem.startsWith(u8, gltf.data.materials.items[primitive.material.?].name, "Emitter"),
                 };
                 // get indices
                 const indices = blk2: {
@@ -348,10 +347,10 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
         _ = try meshes.upload(vc, vk_allocator, allocator, commands, object);
     }
 
-    var accel = Accel {};
+    var accel = try Accel.createEmpty(vc, vk_allocator, allocator, materials.textures.descriptor_layout, commands);
     errdefer accel.destroy(vc, allocator);
     for (instances.items) |instance| {
-        _ = try accel.uploadInstance(vc, vk_allocator, allocator, commands, meshes, instance);
+        _ = try accel.uploadInstance(vc, vk_allocator, allocator, commands, meshes, materials, instance);
     }
 
     return Self {
@@ -362,11 +361,14 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
     };
 }
 
-pub fn createEmpty(vc: *const VulkanContext) !Self {
+pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands) !Self {
+    var materials = try MaterialManager.createEmpty(vc);
+    errdefer materials.destroy(vc, allocator);
+
     return Self {
-        .materials = try MaterialManager.createEmpty(vc),
+        .materials = materials,
         .meshes = .{},
-        .accel = .{},
+        .accel = try Accel.createEmpty(vc, vk_allocator, allocator, materials.textures.descriptor_layout, commands),
     };
 }
 

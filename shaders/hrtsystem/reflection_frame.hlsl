@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../utils/math.hlsl"
+
 struct Frame {
     float3 n; // normal
     float3 s; // tangent

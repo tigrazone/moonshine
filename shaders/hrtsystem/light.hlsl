@@ -2,6 +2,7 @@
 
 #include "world.hlsl"
 #include "material.hlsl"
+#include "intersection.hlsl"
 
 struct LightSample {
     float3 dirWs;
@@ -14,13 +15,10 @@ struct LightEval {
     float pdf;
 };
 
-template <class Data>
-struct AliasEntry {
-    uint alias;
-    float select;
-    Data data;
+struct TriangleMetadata {
+	uint instanceIndex;
+	uint geometryIndex;
 };
-
 
 interface Light {
     // samples a light direction based on given position and geometric normal, returning
@@ -109,20 +107,20 @@ float areaMeasureToSolidAngleMeasure(float3 pos1, float3 pos2, float3 dir1, floa
     return lightCos > 0.0f ? r2 / lightCos : 0.0f;
 }
 
-struct LightAliasData {
-    uint instanceIndex;
-    uint geometryIndex;
-    uint primitiveIndex;
-};
-
 // all mesh lights in scene
 struct MeshLights : Light {
-    StructuredBuffer<AliasEntry<LightAliasData> > aliasTable;
+    Texture1D<float> power;
+    StructuredBuffer<TriangleMetadata> metadata;
+    StructuredBuffer<uint> geometryToTrianglePowerOffset;
+    uint emissiveTriangleCount;
     World world;
 
-    static MeshLights create(StructuredBuffer<AliasEntry<LightAliasData> > aliasTable, World world) {
+    static MeshLights create(Texture1D<float> power, StructuredBuffer<TriangleMetadata> metadata, StructuredBuffer<uint> geometryToTrianglePowerOffset, uint emissiveTriangleCount, World world) {
         MeshLights lights;
-        lights.aliasTable = aliasTable;
+        lights.power = power;
+        lights.metadata = metadata;
+        lights.geometryToTrianglePowerOffset = geometryToTrianglePowerOffset;
+        lights.emissiveTriangleCount = emissiveTriangleCount;
         lights.world = world;
         return lights;
     }
@@ -131,29 +129,56 @@ struct MeshLights : Light {
         LightSample lightSample;
         lightSample.pdf = 0.0;
 
-        uint entryCount = aliasTable[0].alias;
-        float sum = aliasTable[0].select;
-        if (entryCount == 0 || sum == 0) return lightSample;
+        if (integral() == 0.0) return lightSample;
 
-        uint idx;
-        LightAliasData data = sampleAlias<LightAliasData, AliasEntry<LightAliasData> >(aliasTable, entryCount, 1, rand.x, idx);
-        uint instanceID = world.instances[data.instanceIndex].instanceID();
+        const uint mipCount = uint(ceil(log2(emissiveTriangleCount))) + 1;
 
-        float2 barycentrics = squareToTriangle(rand);
-        MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, data.instanceIndex, data.geometryIndex, data.primitiveIndex, barycentrics).inWorld(world, data.instanceIndex);
+        uint idx = 0;
+        for (uint level = mipCount; level-- > 0;) {
+            idx *= 2;
+            const float2 probs = float2(
+                power.Load(uint2(idx + 0, level)),
+                power.Load(uint2(idx + 1, level))
+            );
+            idx += coinFlipRemap(probs.y / (probs.x + probs.y), rand.x);
+        }
+        const TriangleMetadata meta = metadata[idx];
 
-        lightSample.radiance = getEmissive(world, world.materialIdx(instanceID, data.geometryIndex), attrs.texcoord);
+        const uint instanceID = world.instances[meta.instanceIndex].instanceID();
+        const uint primitiveIndex = idx - geometryToTrianglePowerOffset[instanceID + meta.geometryIndex];
+
+        const float2 barycentrics = squareToTriangle(rand);
+        const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, meta.instanceIndex, meta.geometryIndex, primitiveIndex, barycentrics).inWorld(world, meta.instanceIndex);
+
+        lightSample.radiance = getEmissive(world, world.materialIdx(instanceID, meta.geometryIndex), attrs.texcoord);
         lightSample.dirWs = normalize(attrs.position - positionWs);
-        lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) / sum;
+        lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) * areaPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
 
         // compute precise ray endpoints
-        float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, attrs.triangleFrame.n);
-        float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs));
-        float tmax = distance(offsetLightPositionWs, offsetShadingPositionWs);
+        const float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, attrs.triangleFrame.n);
+        const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs));
+        const float tmax = distance(offsetLightPositionWs, offsetShadingPositionWs);
 
         if (lightSample.pdf > 0.0 && ShadowIntersection::hit(accel, offsetShadingPositionWs, normalize(offsetLightPositionWs - offsetShadingPositionWs), tmax)) {
             lightSample.pdf = 0.0;
         }
         return lightSample;
+    }
+
+    float areaPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
+        const uint instanceID = world.instances[instanceIndex].instanceID();
+        const uint idx = geometryToTrianglePowerOffset[instanceID + geometryIndex] + primitiveIndex;
+        const float triangleSelectionPdf = power.Load(uint2(idx, 0)) / integral();
+        const float triangleAreaPdf = 1.0 / MeshAttributes::triangleArea(world, instanceIndex, geometryIndex, primitiveIndex);
+        return triangleSelectionPdf * triangleAreaPdf;
+    }
+
+    float integral() {
+        const uint size = emissiveTriangleCount;
+
+        if (size == 0) return 0;
+
+        const uint mipCount = uint(ceil(log2(emissiveTriangleCount))) + 1;
+        return power.Load(uint2(0, mipCount - 1));
     }
 };

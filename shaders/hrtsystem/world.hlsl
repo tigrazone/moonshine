@@ -17,7 +17,6 @@ struct Instance { // same required by vulkan on host side
 struct Geometry {
     uint meshIdx;
     uint materialIdx;
-    bool sampled;
 };
 
 struct Mesh {
@@ -161,6 +160,21 @@ struct MeshAttributes {
         }
 
         return attrs;
+    }
+
+    static float triangleArea(World world, uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
+        float3x4 toWorld = world.instances[NonUniformResourceIndex(instanceIndex)].transform;
+        uint instanceID = world.instances[instanceIndex].instanceID();
+        uint meshIndex = world.meshIdx(instanceID, geometryIndex);
+        Mesh mesh = world.meshes[NonUniformResourceIndex(meshIndex)];
+
+        uint3 ind = vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex);
+
+        float3 p0 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.x), 1.0));
+        float3 p1 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.y), 1.0));
+        float3 p2 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.z), 1.0));
+
+        return length(cross(p1 - p0, p2 - p0)) / 2.0;
     }
 
     MeshAttributes inWorld(World world, uint instanceIndex) {

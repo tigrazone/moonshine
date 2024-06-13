@@ -10,23 +10,28 @@
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure dTLAS;
 [[vk::binding(1, 0)]] StructuredBuffer<Instance> dInstances;
 [[vk::binding(2, 0)]] StructuredBuffer<row_major float3x4> dWorldToInstance;
-[[vk::binding(3, 0)]] StructuredBuffer<AliasEntry<LightAliasData> > dEmitterAliasTable;
-[[vk::binding(4, 0)]] StructuredBuffer<Mesh> dMeshes;
-[[vk::binding(5, 0)]] StructuredBuffer<Geometry> dGeometries;
-[[vk::binding(6, 0)]] StructuredBuffer<MaterialVariantData> dMaterials;
+[[vk::binding(3, 0)]] StructuredBuffer<Mesh> dMeshes;
+[[vk::binding(4, 0)]] StructuredBuffer<Geometry> dGeometries;
+[[vk::binding(5, 0)]] StructuredBuffer<MaterialVariantData> dMaterials;
+
+// EMISSIVE TRIANGLES
+[[vk::binding(6, 0)]] Texture1D<float> dTrianglePower;
+[[vk::binding(7, 0)]] StructuredBuffer<TriangleMetadata> dTriangleMetadata;
+[[vk::binding(8, 0)]] StructuredBuffer<uint> dGeometryToTrianglePowerOffset;
 
 // BACKGROUND
-[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] Texture2D<float3> dBackgroundRgbTexture;
-[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] SamplerState dBackgroundSampler;
-[[vk::binding(8, 0)]] Texture2D<float> dBackgroundLuminanceTexture;
+[[vk::combinedImageSampler]] [[vk::binding(9, 0)]] Texture2D<float3> dBackgroundRgbTexture;
+[[vk::combinedImageSampler]] [[vk::binding(9, 0)]] SamplerState dBackgroundSampler;
+[[vk::binding(10, 0)]] Texture2D<float> dBackgroundLuminanceTexture;
 
 // OUTPUT
-[[vk::binding(9, 0)]] RWTexture2D<float4> dOutputImage;
+[[vk::binding(11, 0)]] RWTexture2D<float4> dOutputImage;
 
 // PUSH CONSTANTS
 struct PushConsts {
 	Camera camera;
 	uint sampleCount;
+	uint emissiveTriangleCount;
 };
 [[vk::push_constant]] PushConsts pushConsts;
 
@@ -75,7 +80,7 @@ void raygen() {
     scene.tlas = dTLAS;
     scene.world = world;
     scene.envMap = EnvMap::create(dBackgroundRgbTexture, dBackgroundSampler, dBackgroundLuminanceTexture);
-    scene.meshLights = MeshLights::create(dEmitterAliasTable, world);
+    scene.meshLights = MeshLights::create(dTrianglePower, dTriangleMetadata, dGeometryToTrianglePowerOffset, pushConsts.emissiveTriangleCount, world);
 
     for (uint sampleCount = 0; sampleCount < samples_per_run; sampleCount++) {
         // create rng for this sample

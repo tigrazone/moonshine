@@ -5,10 +5,11 @@ const engine = @import("../engine.zig");
 const VulkanContext = engine.core.VulkanContext;
 const Commands = engine.core.Commands;
 const VkAllocator = engine.core.Allocator;
+const Image = engine.core.Image;
 const vk_helpers = engine.core.vk_helpers;
 
 const MeshManager = @import("./MeshManager.zig");
-const AliasTable = @import("./alias_table.zig").AliasTable;
+const MaterialManager = @import("./MaterialManager.zig");
 
 const vector = @import("../vector.zig");
 const Mat3x4 = vector.Mat3x4(f32);
@@ -29,7 +30,6 @@ const F32x3 = vector.Vec3(f32);
 // each geometry (BLAS) has:
 // - a mesh
 // - a material
-// - a sampled (for emitted light) flag
 
 pub const Instance = struct {
     transform: Mat3x4, // transform of this instance
@@ -40,7 +40,6 @@ pub const Instance = struct {
 pub const Geometry = extern struct {
     mesh: u32, // idx of mesh that this geometry uses
     material: u32, // idx of material that this geometry uses
-    sampled: bool, // whether this geometry is explicitly sampled for emitted light
 };
 
 const BottomLevelAccels = std.MultiArrayList(struct {
@@ -48,12 +47,49 @@ const BottomLevelAccels = std.MultiArrayList(struct {
     buffer: VkAllocator.DeviceBuffer(u8),
 });
 
-const TableData = extern struct {
-    instance: u32,
-    geometry: u32,
-    primitive: u32,
+const TrianglePowerPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "hrtsystem/mesh_sampling/power.hlsl",
+    .SpecConstants = extern struct {
+        indexed_attributes: bool align(@alignOf(vk.Bool32)) = true,
+        two_component_normal_texture: bool align(@alignOf(vk.Bool32)) = true,
+    },
+    .PushConstants = extern struct {
+        instance_index: u32,
+        geometry_index: u32,
+        dst_offset: u32,
+        src_primitive_count: u32,
+    },
+    .PushSetBindings = struct {
+        instances: vk.Buffer,
+        world_to_instances: vk.Buffer,
+        meshes: vk.Buffer,
+        geometries: vk.Buffer,
+        material_values: vk.Buffer,
+        dst_power: engine.core.pipeline.StorageImage,
+        dst_triangle_metadata: vk.Buffer,
+    },
+    .additional_descriptor_layout_count = 1,
+});
+
+const TrianglePowerFoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "hrtsystem/mesh_sampling/fold.hlsl",
+    .PushSetBindings = struct {
+        src_mip: engine.core.pipeline.SampledImage,
+        dst_mip: engine.core.pipeline.StorageImage,
+    },
+});
+
+const TriangleMetadata = extern struct {
+    instance_index: u32,
+    geometry_index: u32,
 };
-const AliasTableT = AliasTable(TableData);
+
+triangle_power_pipeline: TrianglePowerPipeline,
+triangle_power_fold_pipeline: TrianglePowerFoldPipeline,
+triangle_power_count: u32 = 0,
+// TODO: this needs to be 2D and possibly aliased
+triangle_powers_meta: VkAllocator.DeviceBuffer(TriangleMetadata),
+triangle_powers: Image,
+triangle_powers_mips: [std.math.log2(max_triangles) + 1]vk.ImageView,
+geometry_to_triangle_power_offset: VkAllocator.DeviceBuffer(u32) = .{},
 
 blases: BottomLevelAccels = .{},
 
@@ -81,12 +117,12 @@ tlas_buffer: VkAllocator.DeviceBuffer(u8) = .{},
 tlas_update_scratch_buffer: VkAllocator.DeviceBuffer(u8) = .{},
 tlas_update_scratch_address: vk.DeviceAddress = 0,
 
-alias_table: VkAllocator.DeviceBuffer(AliasTableT.TableEntry) = .{}, // to sample lights
-
 const Self = @This();
 
-const max_instances = 4096; // TODO: resizable buffers
-const max_geometries = 4096; // TODO: resizable buffers
+// TODO: resizable buffers
+const max_instances = std.math.powi(u32, 2, 12) catch unreachable;
+const max_geometries = std.math.powi(u32, 2, 12) catch unreachable;
+const max_triangles = std.math.powi(u32, 2, 15) catch unreachable;
 
 // lots of temp memory allocations here
 // commands must be in recording state
@@ -183,10 +219,108 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     return scratch_buffers;
 }
 
+pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, texture_descriptor_layout: MaterialManager.TextureManager.DescriptorLayout, commands: *Commands) !Self {
+    var triangle_power_pipeline = try TrianglePowerPipeline.create(vc, allocator, .{}, .{}, .{ texture_descriptor_layout.handle });
+    errdefer triangle_power_pipeline.destroy(vc);
+
+    var triangle_power_fold_pipeline = try TrianglePowerFoldPipeline.create(vc, allocator, .{}, .{}, .{});
+    errdefer triangle_power_fold_pipeline.destroy(vc);
+
+    const triangle_powers_meta = try vk_allocator.createDeviceBuffer(vc, allocator, TriangleMetadata, max_triangles, .{ .shader_device_address_bit = true, .storage_buffer_bit = true });
+    errdefer triangle_powers_meta.destroy(vc);
+
+    const triangle_powers = try Image.create(vc, vk_allocator, vk.Extent2D { .width = max_triangles, .height = 1 }, .{ .storage_bit = true, .sampled_bit = true, .transfer_dst_bit = true }, .r32_sfloat, true, "triangle powers");
+    errdefer triangle_powers.destroy(vc);
+
+    try commands.startRecording(vc);
+    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        .image_memory_barrier_count = 1,
+        .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
+            .{
+                .dst_stage_mask = .{ .clear_bit = true },
+                .dst_access_mask = .{ .transfer_write_bit = true },
+                .old_layout = .undefined,
+                .new_layout = .transfer_dst_optimal,
+                .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                .image = triangle_powers.handle,
+                .subresource_range = .{
+                    .aspect_mask = .{ .color_bit = true },
+                    .base_mip_level = 0,
+                    .level_count = vk.REMAINING_MIP_LEVELS,
+                    .base_array_layer = 0,
+                    .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                },
+            }
+        },
+    });
+    commands.buffer.clearColorImage(triangle_powers.handle, .transfer_dst_optimal, &vk.ClearColorValue { .float_32 = .{ 0, 0, 0, 0 }}, 1, &[1]vk.ImageSubresourceRange{
+        .{
+            .aspect_mask = .{ .color_bit = true },
+            .base_mip_level = 0,
+            .level_count = vk.REMAINING_MIP_LEVELS,
+            .base_array_layer = 0,
+            .layer_count = vk.REMAINING_ARRAY_LAYERS,
+        }
+    });
+    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        .image_memory_barrier_count = 1,
+        .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
+            .{
+                .src_stage_mask = .{ .clear_bit = true },
+                .src_access_mask = .{ .transfer_write_bit = true },
+                .old_layout = .transfer_dst_optimal,
+                .new_layout = .shader_read_only_optimal,
+                .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                .image = triangle_powers.handle,
+                .subresource_range = .{
+                    .aspect_mask = .{ .color_bit = true },
+                    .base_mip_level = 0,
+                    .level_count = vk.REMAINING_MIP_LEVELS,
+                    .base_array_layer = 0,
+                    .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                },
+            }
+        },
+    });
+    try commands.submitAndIdleUntilDone(vc);
+
+    var triangle_powers_mips: [std.math.log2(max_triangles) + 1]vk.ImageView = undefined;
+    for (&triangle_powers_mips, 0..) |*view, level_index| {
+        view.* = try vc.device.createImageView(&vk.ImageViewCreateInfo {
+            .flags = .{},
+            .image = triangle_powers.handle,
+            .view_type = vk.ImageViewType.@"1d",
+            .format = .r32_sfloat,
+            .components = .{
+                .r = .identity,
+                .g = .identity,
+                .b = .identity,
+                .a = .identity,
+            },
+            .subresource_range = .{
+                .aspect_mask = .{ .color_bit = true },
+                .base_mip_level = @intCast(level_index),
+                .level_count = 1,
+                .base_array_layer = 0,
+                .layer_count = vk.REMAINING_ARRAY_LAYERS,
+            },
+        }, null);
+    }
+
+    return Self {
+        .triangle_power_pipeline = triangle_power_pipeline,
+        .triangle_power_fold_pipeline = triangle_power_fold_pipeline,
+        .triangle_powers_meta = triangle_powers_meta,
+        .triangle_powers = triangle_powers,
+        .triangle_powers_mips = triangle_powers_mips,
+    };
+}
+
 // accel must not be in use
-// alias table currently unimplemented
 pub const Handle = u32;
-pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands, mesh_manager: MeshManager, instance: Instance) !Handle {
+pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands, mesh_manager: MeshManager, material_manager: MaterialManager, instance: Instance) !Handle {
     std.debug.assert(self.geometry_count + instance.geometries.len <= max_geometries);
     std.debug.assert(self.instance_count < max_instances);
 
@@ -200,11 +334,11 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         if (self.geometries.is_null()) {
             self.geometries = try vk_allocator.createDeviceBuffer(vc, allocator, Geometry, max_geometries, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
             try vk_helpers.setDebugName(vc, self.geometries.handle, "geometries");
+            self.geometry_to_triangle_power_offset = try vk_allocator.createDeviceBuffer(vc, allocator, u32, max_geometries, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
+            try vk_helpers.setDebugName(vc, self.geometry_to_triangle_power_offset.handle, "geometry to triangle power offset");
         }
 
         commands.recordUpdateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
-
-        self.geometry_count += @intCast(instance.geometries.len);
     }
 
     // upload instance
@@ -216,13 +350,12 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
             self.instances_address = self.instances_device.getAddress(vc);
         }
 
-        const custom_index: u24 = self.geometry_count - @as(u24, @intCast(instance.geometries.len));
         const vk_instance = vk.AccelerationStructureInstanceKHR {
             .transform = vk.TransformMatrixKHR {
                 .matrix = @bitCast(instance.transform),
             },
             .instance_custom_index_and_mask = .{
-                .instance_custom_index = custom_index,
+                .instance_custom_index = self.geometry_count,
                 .mask = if (instance.visible) 0xFF else 0x00,
             },
             .instance_shader_binding_table_record_offset_and_flags = .{
@@ -303,7 +436,137 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         .primitive_offset = 0,
         .transform_offset = 0,
     })});
+
+    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        .image_memory_barrier_count = 1,
+        .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
+            .{
+                .dst_stage_mask = .{ .compute_shader_bit = true },
+                .dst_access_mask = .{ .shader_write_bit = true },
+                .old_layout = .shader_read_only_optimal,
+                .new_layout = .general,
+                .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                .image = self.triangle_powers.handle,
+                .subresource_range = .{
+                    .aspect_mask = .{ .color_bit = true },
+                    .base_mip_level = 0,
+                    .level_count = 1,
+                    .base_array_layer = 0,
+                    .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                },
+            }
+        },
+    });
+
+    self.triangle_power_pipeline.recordBindPipeline(commands.buffer);
+    self.triangle_power_pipeline.recordBindAdditionalDescriptorSets(commands.buffer, .{ material_manager.textures.descriptor_set });
+    self.triangle_power_pipeline.recordPushDescriptors(commands.buffer, .{
+        .instances = self.instances_device.handle,
+        .world_to_instances = self.world_to_instance_device.handle,
+        .meshes = mesh_manager.addresses_buffer.handle,
+        .geometries = self.geometries.handle,
+        .material_values = material_manager.materials.handle,
+        .dst_power = .{ .view = self.triangle_powers_mips[0] },
+        .dst_triangle_metadata = self.triangle_powers_meta.handle,
+    });
+
+    for (instance.geometries, 0..) |geometry, i| {
+        const index_count = mesh_manager.meshes.get(geometry.mesh).index_count;
+        std.debug.assert(self.triangle_power_count + index_count < max_triangles);
+        self.triangle_power_pipeline.recordPushConstants(commands.buffer, .{
+            .instance_index = @intCast(self.instance_count - 1),
+            .geometry_index = @intCast(i),
+            .dst_offset = self.triangle_power_count,
+            .src_primitive_count = index_count,
+        });
+        const shader_local_size = 32; // must be kept in sync with shader -- looks like HLSL doesn't support setting this via spec constants
+        const dispatch_size = std.math.divCeil(u32, index_count, shader_local_size) catch unreachable;
+        self.triangle_power_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = 1, .depth = 1 });
+        commands.buffer.updateBuffer(self.geometry_to_triangle_power_offset.handle, @sizeOf(u32) * (self.geometry_count + i), @sizeOf(u32), &self.triangle_power_count);
+        self.triangle_power_count += index_count;
+    }
+
+    self.triangle_power_fold_pipeline.recordBindPipeline(commands.buffer);
+
+    // TODO: cull geometries without any emission
+    for (1..self.triangle_powers_mips.len) |dst_mip_level| {
+        commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+            .image_memory_barrier_count = 2,
+            .p_image_memory_barriers = &[2]vk.ImageMemoryBarrier2 {
+                .{
+                    .src_stage_mask = .{ .compute_shader_bit = true },
+                    .src_access_mask = .{ .shader_write_bit = true },
+                    .dst_stage_mask = .{ .compute_shader_bit = true },
+                    .dst_access_mask = .{ .shader_read_bit = true },
+                    .old_layout = .general,
+                    .new_layout = .shader_read_only_optimal,
+                    .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                    .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                    .image = self.triangle_powers.handle,
+                    .subresource_range = .{
+                        .aspect_mask = .{ .color_bit = true },
+                        .base_mip_level = @intCast(dst_mip_level - 1),
+                        .level_count = 1,
+                        .base_array_layer = 0,
+                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                    },
+                },
+                .{
+                    .dst_stage_mask = .{ .compute_shader_bit = true },
+                    .dst_access_mask = .{ .shader_read_bit = true },
+                    .old_layout = .shader_read_only_optimal,
+                    .new_layout = .general,
+                    .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                    .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                    .image = self.triangle_powers.handle,
+                    .subresource_range = .{
+                        .aspect_mask = .{ .color_bit = true },
+                        .base_mip_level = @intCast(dst_mip_level),
+                        .level_count = 1,
+                        .base_array_layer = 0,
+                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                    },
+                }
+            },
+        });
+        self.triangle_power_fold_pipeline.recordPushDescriptors(commands.buffer, .{
+            .src_mip = .{ .view = self.triangle_powers_mips[dst_mip_level - 1] },
+            .dst_mip = .{ .view = self.triangle_powers_mips[dst_mip_level] },
+        });
+        const dst_mip_size = std.math.pow(u32, 2, @intCast(self.triangle_powers_mips.len - dst_mip_level));
+        const shader_local_size = 32; // must be kept in sync with shader -- looks like HLSL doesn't support setting this via spec constants
+        const mip_dispatch_size = std.math.divCeil(u32, dst_mip_size, shader_local_size) catch unreachable;
+        self.triangle_power_fold_pipeline.recordDispatch(commands.buffer, .{ .width = mip_dispatch_size, .height = 1, .depth = 1 });
+    }
+
+    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        .image_memory_barrier_count = 1,
+        .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
+            .{
+                .src_stage_mask = .{ .compute_shader_bit = true },
+                .src_access_mask = .{ .shader_write_bit = true },
+                .dst_stage_mask = .{ .compute_shader_bit = true },
+                .dst_access_mask = .{ .shader_read_bit = true },
+                .old_layout = .general,
+                .new_layout = .shader_read_only_optimal,
+                .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                .image = self.triangle_powers.handle,
+                .subresource_range = .{
+                    .aspect_mask = .{ .color_bit = true },
+                    .base_mip_level = self.triangle_powers_mips.len - 1,
+                    .level_count = 1,
+                    .base_array_layer = 0,
+                    .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                },
+            }
+        },
+    });
+
     try commands.submitAndIdleUntilDone(vc);
+
+    self.geometry_count += @intCast(instance.geometries.len);
 
     return @intCast(self.instance_count - 1);
 }
@@ -432,9 +695,18 @@ pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocat
 
     self.geometries.destroy(vc);
 
-    self.alias_table.destroy(vc);
+    self.triangle_powers.destroy(vc);
+    self.triangle_powers_meta.destroy(vc);
+    self.geometry_to_triangle_power_offset.destroy(vc);
+
+    self.triangle_power_pipeline.destroy(vc);
+    self.triangle_power_fold_pipeline.destroy(vc);
 
     self.tlas_update_scratch_buffer.destroy(vc);
+
+    for (self.triangle_powers_mips) |view| {
+        vc.device.destroyImageView(view, null);
+    }
 
     const blases_slice = self.blases.slice();
     const blases_handles = blases_slice.items(.handle);

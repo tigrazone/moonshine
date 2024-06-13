@@ -221,7 +221,6 @@ pub fn main() !void {
                     scene.world.accel.recordUpdateSingleMaterial(command_buffer, accel_geometry_index, geometry.material);
                     scene.camera.sensors.items[active_sensor].clear();
                 }
-                try imgui.textFmt("Sampled: {}", .{geometry.sampled});
                 imgui.separatorText("mesh");
                 const mesh = scene.world.meshes.meshes.get(geometry.mesh);
                 try imgui.textFmt("Vertex count: {d}", .{mesh.vertex_count});
@@ -322,7 +321,7 @@ pub fn main() !void {
 
             // push some stuff
             pipeline.recordPushDescriptors(command_buffer, scene.pushDescriptors(active_sensor, 0));
-            pipeline.recordPushConstants(command_buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[active_sensor].sample_count });
+            pipeline.recordPushConstants(command_buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[active_sensor].sample_count, .emissive_triangle_count = scene.world.accel.triangle_power_count });
 
             // trace some stuff
             pipeline.recordTraceRays(command_buffer, scene.camera.sensors.items[active_sensor].extent);

@@ -130,7 +130,7 @@ pub fn main() !void {
 
         for (0..config.spp) |sample_count| {
             // push our stuff
-            pipeline.recordPushConstants(commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
+            pipeline.recordPushConstants(commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count, .emissive_triangle_count = scene.world.accel.triangle_power_count });
 
             // trace our stuff
             pipeline.recordTraceRays(commands.buffer, scene.camera.sensors.items[0].extent);

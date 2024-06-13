@@ -65,7 +65,7 @@ const TestingContext = struct {
 
         // push our stuff
         pipeline.recordPushDescriptors(self.commands.buffer, scene.pushDescriptors(0, 0));
-        pipeline.recordPushConstants(self.commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
+        pipeline.recordPushConstants(self.commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count, .emissive_triangle_count = scene.world.accel.triangle_power_count });
 
         // trace our stuff
         pipeline.recordTraceRays(self.commands.buffer, scene.camera.sensors.items[0].extent);
@@ -260,7 +260,7 @@ test "white sphere on white background is white" {
     var tc = try TestingContext.create(allocator, extent);
     defer tc.destroy(allocator);
 
-    var world = try World.createEmpty(&tc.vc);
+    var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, &tc.commands);
 
     // add sphere to world
     {
@@ -285,14 +285,13 @@ test "white sphere on white background is white" {
             }
         });
 
-        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, world.meshes, Accel.Instance {
+        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, world.meshes, world.materials, Accel.Instance {
             .visible = true,
             .transform = Mat3x4.identity,
             .geometries = &[1]Accel.Geometry {
                 .{
                     .material = material_handle,
                     .mesh = mesh_handle,
-                    .sampled = false,
                 }
             },
         });
@@ -370,7 +369,7 @@ test "inside illuminating sphere is white" {
     var tc = try TestingContext.create(allocator, extent);
     defer tc.destroy(allocator);
 
-    var world = try World.createEmpty(&tc.vc);
+    var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, &tc.commands);
 
     // add sphere to world
     {
@@ -395,14 +394,13 @@ test "inside illuminating sphere is white" {
             }
         });
 
-        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, world.meshes, Accel.Instance {
+        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, world.meshes, world.materials, Accel.Instance {
             .visible = true,
             .transform = Mat3x4.identity,
             .geometries = &[1]Accel.Geometry {
                 .{
                     .material = material_handle,
                     .mesh = mesh_handle,
-                    .sampled = false,
                 }
             },
         });

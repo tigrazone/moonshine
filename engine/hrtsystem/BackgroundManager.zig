@@ -7,8 +7,6 @@ const Commands = engine.core.Commands;
 const VkAllocator = engine.core.Allocator;
 const Image = engine.core.Image;
 
-const AliasTable = @import("./alias_table.zig").NormalizedAliasTable;
-
 const Rgba2D = engine.fileformats.exr.helpers.Rgba2D;
 
 data: std.ArrayListUnmanaged(struct {

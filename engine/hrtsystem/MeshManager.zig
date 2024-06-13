@@ -31,7 +31,7 @@ pub const Mesh = struct {
     }
 };
 
-// actual data we have per each mesh, CPU-side info
+// actual data we have per each mesh, GPU-side info
 // probably doesn't make sense to cache addresses?
 const Meshes = std.MultiArrayList(struct {
     position_buffer: VkAllocator.DeviceBuffer(F32x3),
@@ -42,10 +42,6 @@ const Meshes = std.MultiArrayList(struct {
 
     index_buffer: VkAllocator.DeviceBuffer(U32x3),
     index_count: u32,
-
-    // data on host side -- atm only used for alias table construction for explicit samping
-    positions: []const F32x3,
-    indices: []const U32x3,
 });
 
 // store seperately to be able to get pointers to geometry data in shader
@@ -147,9 +143,6 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
 
         .index_buffer = index_buffer,
         .index_count = @intCast(host_mesh.indices.len),
-
-        .positions = try allocator.dupe(F32x3, host_mesh.positions),
-        .indices = try allocator.dupe(U32x3, host_mesh.indices),
     });
 
     return @intCast(self.meshes.len - 1);
@@ -161,16 +154,12 @@ pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocat
     const texcoord_buffers = slice.items(.texcoord_buffer);
     const normal_buffers = slice.items(.normal_buffer);
     const index_buffers = slice.items(.index_buffer);
-    const positions = slice.items(.positions);
-    const indices = slice.items(.indices);
 
-    for (position_buffers, texcoord_buffers, normal_buffers, index_buffers, positions, indices) |position_buffer, texcoord_buffer, normal_buffer, index_buffer, position, index| {
+    for (position_buffers, texcoord_buffers, normal_buffers, index_buffers) |position_buffer, texcoord_buffer, normal_buffer, index_buffer| {
         position_buffer.destroy(vc);
         texcoord_buffer.destroy(vc);
         normal_buffer.destroy(vc);
         index_buffer.destroy(vc);
-        allocator.free(position);
-        allocator.free(index);
     }
     self.meshes.deinit(allocator);
 
