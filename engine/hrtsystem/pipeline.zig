@@ -56,7 +56,7 @@ const Stage = struct {
 };
 
 pub fn Pipeline(
-        comptime shader_name: [:0]const u8,
+        comptime shader_path: [:0]const u8,
         comptime SpecConstantsT: type,
         comptime PushConstants: type,
         comptime additional_descriptor_layout_count: comptime_int,
@@ -65,40 +65,25 @@ pub fn Pipeline(
     ) type {
 
     return struct {
-        push_set_layout: PushSetLayout,
-        layout: vk.PipelineLayout,
+        bindings: Bindings,
         handle: vk.Pipeline,
         sbt: ShaderBindingTable,
 
         const Self = @This();
 
+        const Bindings = core.pipeline.PipelineBindings(shader_path, .{ .raygen_bit_khr = true }, PushConstants, push_set_bindings, additional_descriptor_layout_count);
+
         pub const SpecConstants = SpecConstantsT;
 
         pub const PushDescriptorData = core.pipeline.CreatePushDescriptorDataType(push_set_bindings);
 
-        const PushSetLayout = descriptor.DescriptorLayout(push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, shader_name ++ " push descriptor");
+        const PushSetLayout = descriptor.DescriptorLayout(push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, shader_path ++ " push descriptor");
 
         pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, additional_descriptor_layouts: [additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [PushSetLayout.sampler_count]vk.Sampler) !Self {
-            const push_set_layout = try PushSetLayout.create(vc, samplers);
-            const set_layout_handles = .{ push_set_layout.handle } ++ additional_descriptor_layouts;
+            var bindings = try Bindings.create(vc, samplers, additional_descriptor_layouts);
+            errdefer bindings.destroy(vc);
 
-            const push_constants = if (@sizeOf(PushConstants) != 0) [1]vk.PushConstantRange {
-                .{
-                    .offset = 0,
-                    .size = @sizeOf(PushConstants),
-                    .stage_flags = .{ .raygen_bit_khr = true }, // push constants only for raygen
-                }
-            } else [0]vk.PushConstantRange {};
-            const layout = try vc.device.createPipelineLayout(&.{
-                .set_layout_count = set_layout_handles.len,
-                .p_set_layouts = &set_layout_handles,
-                .push_constant_range_count = push_constants.len,
-                .p_push_constant_ranges = &push_constants,
-            }, null);
-            errdefer vc.device.destroyPipelineLayout(layout, null);
-            try core.vk_helpers.setDebugName(vc, layout, shader_name);
-
-            const module = try core.pipeline.createShaderModule(vc, "hrtsystem/" ++ shader_name ++ ".hlsl", allocator, .ray_tracing);
+            const module = try core.pipeline.createShaderModule(vc, shader_path, allocator, .ray_tracing);
             defer vc.device.destroyShaderModule(module, null);
 
             var vk_stages: [stages.len]vk.PipelineShaderStageCreateInfo = undefined;
@@ -149,22 +134,21 @@ pub fn Pipeline(
                 .group_count = vk_groups.len,
                 .p_groups = &vk_groups,
                 .max_pipeline_ray_recursion_depth = 1,
-                .layout = layout,
+                .layout = bindings.layout,
                 .base_pipeline_handle = .null_handle,
                 .base_pipeline_index = -1,
             };
             var handle: vk.Pipeline = undefined;
             _ = try vc.device.createRayTracingPipelinesKHR(.null_handle, .null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&handle));
             errdefer vc.device.destroyPipeline(handle, null);
-            try core.vk_helpers.setDebugName(vc, handle, shader_name);
+            try core.vk_helpers.setDebugName(vc, handle, shader_path);
 
             const shader_info = comptime ShaderInfo.find(stages);
             const sbt = try ShaderBindingTable.create(vc, vk_allocator, allocator, handle, cmd, shader_info.raygen_count, shader_info.miss_count, shader_info.hit_count, shader_info.callable_count);
             errdefer sbt.destroy(vc);
 
             return Self {
-                .push_set_layout = push_set_layout,
-                .layout = layout,
+                .bindings = bindings,
                 .handle = handle,
 
                 .sbt = sbt,
@@ -173,7 +157,7 @@ pub fn Pipeline(
 
         // returns old handle which must be cleaned up
         pub fn recreate(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, constants: SpecConstants) !vk.Pipeline {
-            const module = try core.pipeline.createShaderModule(vc, "hrtsystem/" ++ shader_name ++ ".hlsl", allocator, .ray_tracing);
+            const module = try core.pipeline.createShaderModule(vc, shader_path, allocator, .ray_tracing);
             defer vc.device.destroyShaderModule(module, null);
 
             var vk_stages: [stages.len]vk.PipelineShaderStageCreateInfo = undefined;
@@ -224,14 +208,14 @@ pub fn Pipeline(
                 .group_count = vk_groups.len,
                 .p_groups = &vk_groups,
                 .max_pipeline_ray_recursion_depth = 1,
-                .layout = self.layout,
+                .layout = self.bindings.layout,
                 .base_pipeline_handle = .null_handle,
                 .base_pipeline_index = -1,
             };
             const old_handle = self.handle;
             _ = try vc.device.createRayTracingPipelinesKHR(.null_handle, .null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&self.handle));
             errdefer vc.device.destroyPipeline(self.handle, null);
-            try core.vk_helpers.setDebugName(vc, self.handle, shader_name);
+            try core.vk_helpers.setDebugName(vc, self.handle, shader_path);
 
             try self.sbt.recreate(vc, vk_allocator, self.handle, cmd);
 
@@ -240,9 +224,8 @@ pub fn Pipeline(
 
         pub fn destroy(self: *Self, vc: *const VulkanContext) void {
             self.sbt.destroy(vc);
-            vc.device.destroyPipelineLayout(self.layout, null);
             vc.device.destroyPipeline(self.handle, null);
-            self.push_set_layout.destroy(vc);
+            self.bindings.destroy(vc);
         }
 
         pub fn recordBindPipeline(self: *const Self, command_buffer: VulkanContext.CommandBuffer) void {
@@ -251,14 +234,14 @@ pub fn Pipeline(
 
         pub usingnamespace if (additional_descriptor_layout_count != 0) struct {
             pub fn recordBindAdditionalDescriptorSets(self: *const Self, command_buffer: VulkanContext.CommandBuffer, sets: [additional_descriptor_layout_count]vk.DescriptorSet) void {
-                command_buffer.bindDescriptorSets(.ray_tracing_khr, self.layout, 1, sets.len, &sets, 0, undefined);
+                command_buffer.bindDescriptorSets(.ray_tracing_khr, self.bindings.layout, 1, sets.len, &sets, 0, undefined);
             }
         } else struct {};
 
         pub usingnamespace if (@sizeOf(PushConstants) != 0) struct {
             pub fn recordPushConstants(self: *const Self, command_buffer: VulkanContext.CommandBuffer, constants: PushConstants) void {
                 const bytes = std.mem.asBytes(&constants);
-                command_buffer.pushConstants(self.layout, .{ .raygen_bit_khr = true }, 0, bytes.len, bytes);
+                command_buffer.pushConstants(self.bindings.layout, .{ .raygen_bit_khr = true }, 0, bytes.len, bytes);
             }
         } else struct {};
 
@@ -268,13 +251,13 @@ pub fn Pipeline(
 
         pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, data: PushDescriptorData) void {
             const writes = core.pipeline.pushDescriptorDataToWriteDescriptor(push_set_bindings, data);
-            command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.layout, 0, writes.len, &writes.buffer);
+            command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.bindings.layout, 0, writes.len, &writes.buffer);
         }
     };
 }
 
 pub const ObjectPickPipeline = Pipeline(
-    "input",
+    "hrtsystem/input.hlsl",
     extern struct {},
     extern struct {
         lens: Camera.Lens,
@@ -311,7 +294,7 @@ pub const ObjectPickPipeline = Pipeline(
 // a "standard" pipeline -- that is, the one we use for most
 // rendering operations
 pub const StandardPipeline = Pipeline(
-    "main",
+    "hrtsystem/main.hlsl",
     extern struct {
         samples_per_run: u32 = 1,
         max_bounces: u32 = 4,

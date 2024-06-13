@@ -40,7 +40,7 @@ const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline("backgr
         .descriptor_count = 1,
         .stage_flags = .{ .compute_bit = true },
     },
-});
+}, 0);
 
 const LuminancePipeline = engine.core.pipeline.Pipeline("background/luminance.hlsl", struct {}, struct {},
 &.{
@@ -56,7 +56,7 @@ const LuminancePipeline = engine.core.pipeline.Pipeline("background/luminance.hl
         .descriptor_count = 1,
         .stage_flags = .{ .compute_bit = true },
     },
-});
+}, 0);
 
 const FoldPipeline = engine.core.pipeline.Pipeline("background/fold.hlsl", struct {}, struct {},
 &.{
@@ -72,7 +72,7 @@ const FoldPipeline = engine.core.pipeline.Pipeline("background/fold.hlsl", struc
         .descriptor_count = 1,
         .stage_flags = .{ .compute_bit = true },
     },
-});
+}, 0);
 
 pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator) !Self {
     const sampler = try vc.device.createSampler(&.{
@@ -95,13 +95,13 @@ pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator) !Self {
     }, null);
     errdefer vc.device.destroySampler(sampler, null);
 
-    var equirectangular_to_equal_area_pipeline = try EquirectangularToEqualAreaPipeline.create(vc, allocator, .{}, .{ sampler });
+    var equirectangular_to_equal_area_pipeline = try EquirectangularToEqualAreaPipeline.create(vc, allocator, .{}, .{ sampler }, .{});
     errdefer equirectangular_to_equal_area_pipeline.destroy(vc);
 
-    var luminance_pipeline = try LuminancePipeline.create(vc, allocator, .{}, .{});
+    var luminance_pipeline = try LuminancePipeline.create(vc, allocator, .{}, .{}, .{});
     errdefer luminance_pipeline.destroy(vc);
 
-    var fold_pipeline = try FoldPipeline.create(vc, allocator, .{}, .{});
+    var fold_pipeline = try FoldPipeline.create(vc, allocator, .{}, .{}, .{});
     errdefer fold_pipeline.destroy(vc);
 
     return Self {

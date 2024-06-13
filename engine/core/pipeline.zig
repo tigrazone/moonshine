@@ -170,35 +170,33 @@ pub inline fn pushDescriptorDataToWriteDescriptor(comptime bindings: []const des
     return pruned_writes;
 }
 
-pub fn Pipeline(
-        comptime shader_path: [:0]const u8,
-        comptime SpecConstantsT: type,
-        comptime PushConstants: type,
-        comptime push_set_bindings: []const descriptor.DescriptorBindingInfo,
-    ) type {
+pub fn PipelineBindings(
+    comptime name: [:0]const u8,
+    comptime stages: vk.ShaderStageFlags,
+    comptime PushConstants: type,
+    comptime push_set_bindings: []const descriptor.DescriptorBindingInfo,
+    comptime additional_descriptor_layout_count: comptime_int,
+) type {
+
+    const PushSetLayout = descriptor.DescriptorLayout(push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, name ++ " push descriptor");
 
     return struct {
         push_set_layout: PushSetLayout,
         layout: vk.PipelineLayout,
-        handle: vk.Pipeline,
 
         const Self = @This();
 
-        pub const SpecConstants = SpecConstantsT;
+        pub const sampler_count = PushSetLayout.sampler_count;
 
-        pub const PushDescriptorData = CreatePushDescriptorDataType(push_set_bindings);
-
-        const PushSetLayout = descriptor.DescriptorLayout(push_set_bindings, .{ .push_descriptor_bit_khr = true }, 1, shader_path ++ " push descriptor");
-
-        pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator, constants: SpecConstants, samplers: [PushSetLayout.sampler_count]vk.Sampler) !Self {
+        pub fn create(vc: *const VulkanContext, samplers: [sampler_count]vk.Sampler, additional_descriptor_layouts: [additional_descriptor_layout_count]vk.DescriptorSetLayout) !Self {
             const push_set_layout = try PushSetLayout.create(vc, samplers);
-            const set_layout_handles = [1]vk.DescriptorSetLayout { push_set_layout.handle };
+            const set_layout_handles = .{ push_set_layout.handle } ++ additional_descriptor_layouts;
 
             const push_constants = if (@sizeOf(PushConstants) != 0) [1]vk.PushConstantRange {
                 .{
                     .offset = 0,
                     .size = @sizeOf(PushConstants),
-                    .stage_flags = .{ .compute_bit = true },
+                    .stage_flags = stages,
                 }
             } else [0]vk.PushConstantRange {};
             const layout = try vc.device.createPipelineLayout(&.{
@@ -208,11 +206,46 @@ pub fn Pipeline(
                 .p_push_constant_ranges = &push_constants,
             }, null);
             errdefer vc.device.destroyPipelineLayout(layout, null);
-            try core.vk_helpers.setDebugName(vc, layout, shader_path);
+            try core.vk_helpers.setDebugName(vc, layout, name);
 
-            var self = Self {
+            return Self {
                 .push_set_layout = push_set_layout,
                 .layout = layout,
+            };
+        }
+
+        pub fn destroy(self: *Self, vc: *const VulkanContext) void {
+            vc.device.destroyPipelineLayout(self.layout, null);
+            self.push_set_layout.destroy(vc);
+        }
+    };
+}
+
+pub fn Pipeline(
+    comptime shader_path: [:0]const u8,
+    comptime SpecConstantsT: type,
+    comptime PushConstants: type,
+    comptime push_set_bindings: []const descriptor.DescriptorBindingInfo,
+    comptime additional_descriptor_layout_count: comptime_int,
+) type {
+    return struct {
+        bindings: Bindings,
+        handle: vk.Pipeline,
+
+        const Self = @This();
+
+        const Bindings = PipelineBindings(shader_path, .{ .compute_bit = true }, PushConstants, push_set_bindings, additional_descriptor_layout_count);
+
+        pub const SpecConstants = SpecConstantsT;
+
+        pub const PushDescriptorData = CreatePushDescriptorDataType(push_set_bindings);
+
+        pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler, additional_descriptor_layouts: [additional_descriptor_layout_count]vk.DescriptorSetLayout) !Self {
+            var bindings = try Bindings.create(vc, samplers, additional_descriptor_layouts);
+            errdefer bindings.destroy(vc);
+
+            var self = Self {
+                .bindings = bindings,
                 .handle = undefined,
             };
 
@@ -253,7 +286,7 @@ pub fn Pipeline(
 
             const create_info = vk.ComputePipelineCreateInfo {
                 .stage = stage,
-                .layout = self.layout,
+                .layout = self.bindings.layout,
                 .base_pipeline_handle = .null_handle,
                 .base_pipeline_index = -1,
             };
@@ -267,9 +300,8 @@ pub fn Pipeline(
         }
 
         pub fn destroy(self: *Self, vc: *const VulkanContext) void {
-            vc.device.destroyPipelineLayout(self.layout, null);
             vc.device.destroyPipeline(self.handle, null);
-            self.push_set_layout.destroy(vc);
+            self.bindings.destroy(vc);
         }
 
         pub fn recordBindPipeline(self: *const Self, command_buffer: VulkanContext.CommandBuffer) void {
@@ -281,16 +313,22 @@ pub fn Pipeline(
             command_buffer.dispatch(extent.width, extent.height, extent.depth);
         }
 
+        pub usingnamespace if (additional_descriptor_layout_count != 0) struct {
+            pub fn recordBindAdditionalDescriptorSets(self: *const Self, command_buffer: VulkanContext.CommandBuffer, sets: [additional_descriptor_layout_count]vk.DescriptorSet) void {
+                command_buffer.bindDescriptorSets(.ray_tracing_khr, self.bindings.layout, 1, sets.len, &sets, 0, undefined);
+            }
+        } else struct {};
+
         pub usingnamespace if (@sizeOf(PushConstants) != 0) struct {
             pub fn recordPushConstants(self: *const Self, command_buffer: VulkanContext.CommandBuffer, constants: PushConstants) void {
                 const bytes = std.mem.asBytes(&constants);
-                command_buffer.pushConstants(self.layout, .{ .compute_bit = true }, 0, bytes.len, bytes);
+                command_buffer.pushConstants(self.bindings.layout, .{ .compute_bit = true }, 0, bytes.len, bytes);
             }
         } else struct {};
 
         pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, data: PushDescriptorData) void {
             const writes = pushDescriptorDataToWriteDescriptor(push_set_bindings, data);
-            command_buffer.pushDescriptorSetKHR(.compute, self.layout, 0, writes.len, &writes.buffer);
+            command_buffer.pushDescriptorSetKHR(.compute, self.bindings.layout, 0, writes.len, &writes.buffer);
         }
     };
 }
