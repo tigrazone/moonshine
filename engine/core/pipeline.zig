@@ -329,7 +329,7 @@ pub fn Pipeline(comptime options: struct {
 
         pub usingnamespace if (options.additional_descriptor_layout_count != 0) struct {
             pub fn recordBindAdditionalDescriptorSets(self: *const Self, command_buffer: VulkanContext.CommandBuffer, sets: [options.additional_descriptor_layout_count]vk.DescriptorSet) void {
-                command_buffer.bindDescriptorSets(.ray_tracing_khr, self.bindings.layout, 1, sets.len, &sets, 0, undefined);
+                command_buffer.bindDescriptorSets(.compute, self.bindings.layout, 1, sets.len, &sets, 0, undefined);
             }
         } else struct {};
 
