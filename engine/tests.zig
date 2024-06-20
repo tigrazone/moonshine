@@ -450,36 +450,21 @@ test "inside illuminating sphere is white" {
             if (!std.math.approxEqAbs(f32, component, 1.0, 0.02)) return error.NonWhitePixel;
         }
     }
+
+    // do that again but with mesh sampling
+    const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, .{
+        .samples_per_run = 1024,
+        .max_bounces = 1024,
+        .env_samples_per_bounce = 0,
+        .mesh_samples_per_bounce = 1,
+    });
+    defer tc.vc.device.destroyPipeline(other_pipeline, null);
+
+    try tc.renderToOutput(&pipeline, &scene);
+
+    for (tc.output_buffer.data) |pixel| {
+        for (pixel[0..3]) |component| {
+            if (!std.math.approxEqAbs(f32, component, 1.0, 0.02)) return error.NonWhitePixel;
+        }
+    }
 }
-
-// TODO: revive this once mesh sampling works with instance upload API
-// test "inside illuminating sphere is white with mesh sampling" {
-//     const allocator = std.testing.allocator;
-
-//     const extent = vk.Extent2D { .width = 32, .height = 32 };
-//     var tc = try TestingContext.create(allocator, extent);
-//     defer tc.destroy(allocator);
-
-//     var scene = try Scene.fromGlbExr(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, "assets/sphere_internal.glb", "assets/white.exr", extent, false);
-//     defer scene.destroy(&tc.vc, allocator);
-
-//     var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.commands, .{ scene.world.descriptor_layout, scene.background.descriptor_layout, scene.camera.descriptor_layout }, .{
-//         .@"0" = .{
-//             .samples_per_run = 512,
-//             .max_bounces = 1024,
-//             .env_samples_per_bounce = 0,
-//             .mesh_samples_per_bounce = 1,
-//         }
-//     });
-//     defer pipeline.destroy(&tc.vc);
-
-//     try tc.renderToOutput(&pipeline, &scene);
-
-//     for (tc.output_buffer.data) |pixel| {
-//         for (pixel[0..3]) |component| {
-//             // TODO: this should be able to have tighter error bounds but is weird on my GPU for some reason
-//             // first upgrade GPU then determine if bug actually exists
-//             if (!std.math.approxEqAbs(f32, component, 1.0, 0.1)) return error.NonWhitePixel;
-//         }
-//     }
-// }
