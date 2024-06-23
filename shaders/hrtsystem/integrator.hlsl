@@ -106,18 +106,15 @@ struct PathTracingIntegrator : Integrator {
             float3 outgoingDirSs = shadingFrame.worldToFrame(outgoingDirWs);
 
             // collect light from emissive meshes
-            if (mesh_samples_per_bounce == 0 || bounceCount == 0 || isLastMaterialDelta || scene.meshLights.integral() == 0) {
-                // add emissive light at point if light not explicitly sampled or initial bounce
-                if (dot(outgoingDirWs, attrs.triangleFrame.n) > 0.0) {
-                    // lights only emit from front face
-                    accumulatedColor += throughput * emissiveLight;
-                }
-            } else {
-                // MIS emissive light if it is sampled at later bounces
+            // lights only emit from front face
+            if (dot(outgoingDirWs, attrs.triangleFrame.n) > 0.0) {
                 const float areaPdf = scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * areaPdf;
-
-                if (lightPdf > 0.0 && dot(outgoingDirWs, attrs.triangleFrame.n) > 0.0) {
+                if (mesh_samples_per_bounce == 0 || bounceCount == 0 || isLastMaterialDelta || areaPdf == 0) {
+                    // add emissive light at point if light not explicitly sampled or initial bounce
+                    accumulatedColor += throughput * emissiveLight;
+                } else {
+                    // MIS emissive light if it is sampled at later bounces
+                    const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * areaPdf;
                     const float weight = powerHeuristic(1, lastMaterialPdf, mesh_samples_per_bounce, lightPdf);
                     accumulatedColor += throughput * emissiveLight * weight;
                 }

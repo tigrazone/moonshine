@@ -448,34 +448,39 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         .transform_offset = 0,
     })});
 
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
-        .image_memory_barrier_count = 1,
-        .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
-            .{
-                .dst_stage_mask = .{ .compute_shader_bit = true },
-                .dst_access_mask = .{ .shader_write_bit = true },
-                .old_layout = .shader_read_only_optimal,
-                .new_layout = .general,
-                .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                .image = self.triangle_powers.handle,
-                .subresource_range = .{
-                    .aspect_mask = .{ .color_bit = true },
-                    .base_mip_level = 0,
-                    .level_count = 1,
-                    .base_array_layer = 0,
-                    .layer_count = vk.REMAINING_ARRAY_LAYERS,
-                },
-            }
-        },
-    });
-
-    // TODO: this very likely does not work with multiple geometries per instance
     for (instance.geometries, 0..) |geometry, i| {
         const index_count = mesh_manager.meshes.get(geometry.mesh).index_count;
-        // technically should be asserting that total (in the whole scene) emissive triangle count is less than
-        // the maximum number of emissive triangles, but we don't have access to that info on the host
-        std.debug.assert(index_count < max_emissive_triangles);
+
+        // this mesh is too big to importance sample...
+        // it may still emit without importance sampling, though
+        //
+        // TODO: technically this should check that the that total (in the whole scene) emissive triangle count is less than
+        // the maximum number of emissive triangles, but we don't have access to that info on the host.
+        // probably we will just get a GPU crash instead :(
+        if (index_count > max_emissive_triangles) continue;
+
+        commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+            .image_memory_barrier_count = 1,
+            .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
+                .{
+                    .dst_stage_mask = .{ .compute_shader_bit = true },
+                    .dst_access_mask = .{ .shader_write_bit = true },
+                    .old_layout = .shader_read_only_optimal,
+                    .new_layout = .general,
+                    .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                    .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                    .image = self.triangle_powers.handle,
+                    .subresource_range = .{
+                        .aspect_mask = .{ .color_bit = true },
+                        .base_mip_level = 0,
+                        .level_count = 1,
+                        .base_array_layer = 0,
+                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                    },
+                }
+            },
+        });
+
         self.triangle_power_pipeline.recordBindPipeline(commands.buffer);
         self.triangle_power_pipeline.recordBindAdditionalDescriptorSets(commands.buffer, .{ material_manager.textures.descriptor_set });
         self.triangle_power_pipeline.recordPushDescriptors(commands.buffer, .{
@@ -552,31 +557,31 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
             const mip_dispatch_size = std.math.divCeil(u32, dst_mip_size, shader_local_size) catch unreachable;
             self.triangle_power_fold_pipeline.recordDispatch(commands.buffer, .{ .width = mip_dispatch_size, .height = 1, .depth = 1 });
         }
-    }
 
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
-        .image_memory_barrier_count = 1,
-        .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
-            .{
-                .src_stage_mask = .{ .compute_shader_bit = true },
-                .src_access_mask = .{ .shader_write_bit = true },
-                .dst_stage_mask = .{ .compute_shader_bit = true },
-                .dst_access_mask = .{ .shader_read_bit = true },
-                .old_layout = .general,
-                .new_layout = .shader_read_only_optimal,
-                .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                .image = self.triangle_powers.handle,
-                .subresource_range = .{
-                    .aspect_mask = .{ .color_bit = true },
-                    .base_mip_level = self.triangle_powers_mips.len - 1,
-                    .level_count = 1,
-                    .base_array_layer = 0,
-                    .layer_count = vk.REMAINING_ARRAY_LAYERS,
-                },
-            }
-        },
-    });
+        commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+            .image_memory_barrier_count = 1,
+            .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
+                .{
+                    .src_stage_mask = .{ .compute_shader_bit = true },
+                    .src_access_mask = .{ .shader_write_bit = true },
+                    .dst_stage_mask = .{ .compute_shader_bit = true },
+                    .dst_access_mask = .{ .shader_read_bit = true },
+                    .old_layout = .general,
+                    .new_layout = .shader_read_only_optimal,
+                    .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                    .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                    .image = self.triangle_powers.handle,
+                    .subresource_range = .{
+                        .aspect_mask = .{ .color_bit = true },
+                        .base_mip_level = self.triangle_powers_mips.len - 1,
+                        .level_count = 1,
+                        .base_array_layer = 0,
+                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                    },
+                }
+            },
+        });
+    }
 
     try commands.submitAndIdleUntilDone(vc);
 
