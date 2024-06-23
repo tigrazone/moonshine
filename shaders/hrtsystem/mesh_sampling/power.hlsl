@@ -10,19 +10,19 @@
 [[vk::binding(2, 0)]] StructuredBuffer<Mesh> dMeshes;
 [[vk::binding(3, 0)]] StructuredBuffer<Geometry> dGeometries;
 [[vk::binding(4, 0)]] StructuredBuffer<MaterialVariantData> dMaterials;
+[[vk::binding(5, 0)]] StructuredBuffer<uint> emissiveTriangleCount;
+
+// dst
+[[vk::binding(6, 0)]] RWTexture1D<float> dstPower;
+[[vk::binding(7, 0)]] RWStructuredBuffer<TriangleMetadata> dstTriangleMetadata;
 
 // mesh info
 struct PushConsts {
 	uint instanceIndex;
 	uint geometryIndex;
-	uint dstOffset;
 	uint srcPrimitiveCount;
 };
 [[vk::push_constant]] PushConsts pushConsts;
-
-// dst
-[[vk::binding(5, 0)]] RWTexture1D<float> dstPower;
-[[vk::binding(6, 0)]] RWStructuredBuffer<TriangleMetadata> dstTriangleMetadata;
 
 [numthreads(32, 1, 1)]
 void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
@@ -55,7 +55,8 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 
 	const float power = PI * MeshAttributes::triangleArea(world, pushConsts.instanceIndex, pushConsts.geometryIndex, srcIndex) * average_emissive;
 
-	dstPower[pushConsts.dstOffset + srcIndex] = power;
-	dstTriangleMetadata[pushConsts.dstOffset + srcIndex].instanceIndex = pushConsts.instanceIndex;
-	dstTriangleMetadata[pushConsts.dstOffset + srcIndex].geometryIndex = pushConsts.geometryIndex;
+	const uint dstOffset = emissiveTriangleCount[0];
+	dstPower[dstOffset + srcIndex] = power;
+	dstTriangleMetadata[dstOffset + srcIndex].instanceIndex = pushConsts.instanceIndex;
+	dstTriangleMetadata[dstOffset + srcIndex].geometryIndex = pushConsts.geometryIndex;
 }

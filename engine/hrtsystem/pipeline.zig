@@ -287,7 +287,6 @@ pub const StandardPipeline = Pipeline(.{
     .PushConstants = extern struct {
         lens: Camera.Lens,
         sample_count: u32,
-        emissive_triangle_count: u32,
     },
     .additional_descriptor_layout_count = 1,
     .PushSetBindings = struct {
@@ -300,6 +299,7 @@ pub const StandardPipeline = Pipeline(.{
         triangle_power_image: core.pipeline.SampledImage,
         triangle_meta: vk.Buffer,
         geometry_to_triangle_power_offset: vk.Buffer,
+        emissive_triangle_count: vk.Buffer,
         background_rgb_image: core.pipeline.CombinedImageSampler,
         background_luminance_image: core.pipeline.SampledImage,
         output_image: core.pipeline.StorageImage,

@@ -321,7 +321,7 @@ pub fn main() !void {
 
             // push some stuff
             pipeline.recordPushDescriptors(command_buffer, scene.pushDescriptors(active_sensor, 0));
-            pipeline.recordPushConstants(command_buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[active_sensor].sample_count, .emissive_triangle_count = scene.world.accel.triangle_power_count });
+            pipeline.recordPushConstants(command_buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[active_sensor].sample_count });
 
             // trace some stuff
             pipeline.recordTraceRays(command_buffer, scene.camera.sensors.items[active_sensor].extent);

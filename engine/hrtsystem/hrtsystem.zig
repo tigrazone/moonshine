@@ -37,6 +37,7 @@ pub const required_vulkan_functions = [_]vk.ApiInfo {
             .cmdWriteAccelerationStructuresPropertiesKHR = true,
             .cmdCopyAccelerationStructureKHR = true,
             .cmdClearColorImage = true,
+            .cmdFillBuffer = true,
         },
     },
 };

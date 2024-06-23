@@ -75,6 +75,7 @@ pub fn pushDescriptors(self: *const Self, sensor: u32, background: u32) Standard
         .triangle_power_image = .{ .view = self.world.accel.triangle_powers.view },
         .triangle_meta = self.world.accel.triangle_powers_meta.handle,
         .geometry_to_triangle_power_offset = self.world.accel.geometry_to_triangle_power_offset.handle,
+        .emissive_triangle_count = self.world.accel.emissive_triangle_count.handle,
         .background_rgb_image = .{ .view = self.background.data.items[background].rgb_image.view },
         .background_luminance_image = .{ .view = self.background.data.items[background].luminance_image.view },
         .output_image = .{ .view = self.camera.sensors.items[sensor].image.view },

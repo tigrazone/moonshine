@@ -55,7 +55,6 @@ const TrianglePowerPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "h
     .PushConstants = extern struct {
         instance_index: u32,
         geometry_index: u32,
-        dst_offset: u32,
         src_primitive_count: u32,
     },
     .PushSetBindings = struct {
@@ -64,6 +63,7 @@ const TrianglePowerPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "h
         meshes: vk.Buffer,
         geometries: vk.Buffer,
         material_values: vk.Buffer,
+        emissive_triangle_count: vk.Buffer,
         dst_power: engine.core.pipeline.StorageImage,
         dst_triangle_metadata: vk.Buffer,
     },
@@ -74,6 +74,12 @@ const TrianglePowerFoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path 
     .PushSetBindings = struct {
         src_mip: engine.core.pipeline.SampledImage,
         dst_mip: engine.core.pipeline.StorageImage,
+        geometry_to_triangle_power_offset: vk.Buffer,
+        emissive_triangle_count: vk.Buffer,
+    },
+    .PushConstants = extern struct {
+        geometry_index: u32,
+        triangle_count: u32,
     },
 });
 
@@ -84,12 +90,12 @@ const TriangleMetadata = extern struct {
 
 triangle_power_pipeline: TrianglePowerPipeline,
 triangle_power_fold_pipeline: TrianglePowerFoldPipeline,
-triangle_power_count: u32 = 0,
 // TODO: this needs to be 2D and possibly aliased
 triangle_powers_meta: VkAllocator.DeviceBuffer(TriangleMetadata),
 triangle_powers: Image,
-triangle_powers_mips: [std.math.log2(max_triangles) + 1]vk.ImageView,
+triangle_powers_mips: [std.math.log2(max_emissive_triangles) + 1]vk.ImageView,
 geometry_to_triangle_power_offset: VkAllocator.DeviceBuffer(u32) = .{},
+emissive_triangle_count: VkAllocator.DeviceBuffer(u32), // size 1
 
 blases: BottomLevelAccels = .{},
 
@@ -122,7 +128,7 @@ const Self = @This();
 // TODO: resizable buffers
 const max_instances = std.math.powi(u32, 2, 12) catch unreachable;
 const max_geometries = std.math.powi(u32, 2, 12) catch unreachable;
-const max_triangles = std.math.powi(u32, 2, 15) catch unreachable;
+const max_emissive_triangles = std.math.powi(u32, 2, 15) catch unreachable;
 
 // lots of temp memory allocations here
 // commands must be in recording state
@@ -226,10 +232,13 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
     var triangle_power_fold_pipeline = try TrianglePowerFoldPipeline.create(vc, allocator, .{}, .{}, .{});
     errdefer triangle_power_fold_pipeline.destroy(vc);
 
-    const triangle_powers_meta = try vk_allocator.createDeviceBuffer(vc, allocator, TriangleMetadata, max_triangles, .{ .shader_device_address_bit = true, .storage_buffer_bit = true });
+    const triangle_powers_meta = try vk_allocator.createDeviceBuffer(vc, allocator, TriangleMetadata, max_emissive_triangles, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
     errdefer triangle_powers_meta.destroy(vc);
 
-    const triangle_powers = try Image.create(vc, vk_allocator, vk.Extent2D { .width = max_triangles, .height = 1 }, .{ .storage_bit = true, .sampled_bit = true, .transfer_dst_bit = true }, .r32_sfloat, true, "triangle powers");
+    const emissive_triangle_count = try vk_allocator.createDeviceBuffer(vc, allocator, u32, 1, .{ .storage_buffer_bit = true });
+    errdefer emissive_triangle_count.destroy(vc);
+
+    const triangle_powers = try Image.create(vc, vk_allocator, vk.Extent2D { .width = max_emissive_triangles, .height = 1 }, .{ .storage_bit = true, .sampled_bit = true, .transfer_dst_bit = true }, .r32_sfloat, true, "triangle powers");
     errdefer triangle_powers.destroy(vc);
 
     try commands.startRecording(vc);
@@ -263,6 +272,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
             .layer_count = vk.REMAINING_ARRAY_LAYERS,
         }
     });
+    commands.buffer.fillBuffer(triangle_powers_meta.handle, 0, @sizeOf(u32), 0);
     commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
@@ -286,7 +296,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
     });
     try commands.submitAndIdleUntilDone(vc);
 
-    var triangle_powers_mips: [std.math.log2(max_triangles) + 1]vk.ImageView = undefined;
+    var triangle_powers_mips: [std.math.log2(max_emissive_triangles) + 1]vk.ImageView = undefined;
     for (&triangle_powers_mips, 0..) |*view, level_index| {
         view.* = try vc.device.createImageView(&vk.ImageViewCreateInfo {
             .flags = .{},
@@ -315,6 +325,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
         .triangle_powers_meta = triangle_powers_meta,
         .triangle_powers = triangle_powers,
         .triangle_powers_mips = triangle_powers_mips,
+        .emissive_triangle_count = emissive_triangle_count,
     };
 }
 
@@ -334,7 +345,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         if (self.geometries.is_null()) {
             self.geometries = try vk_allocator.createDeviceBuffer(vc, allocator, Geometry, max_geometries, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
             try vk_helpers.setDebugName(vc, self.geometries.handle, "geometries");
-            self.geometry_to_triangle_power_offset = try vk_allocator.createDeviceBuffer(vc, allocator, u32, max_geometries, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
+            self.geometry_to_triangle_power_offset = try vk_allocator.createDeviceBuffer(vc, allocator, u32, max_geometries, .{ .storage_buffer_bit = true });
             try vk_helpers.setDebugName(vc, self.geometry_to_triangle_power_offset.handle, "geometry to triangle power offset");
         }
 
@@ -459,85 +470,88 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         },
     });
 
-    self.triangle_power_pipeline.recordBindPipeline(commands.buffer);
-    self.triangle_power_pipeline.recordBindAdditionalDescriptorSets(commands.buffer, .{ material_manager.textures.descriptor_set });
-    self.triangle_power_pipeline.recordPushDescriptors(commands.buffer, .{
-        .instances = self.instances_device.handle,
-        .world_to_instances = self.world_to_instance_device.handle,
-        .meshes = mesh_manager.addresses_buffer.handle,
-        .geometries = self.geometries.handle,
-        .material_values = material_manager.materials.handle,
-        .dst_power = .{ .view = self.triangle_powers_mips[0] },
-        .dst_triangle_metadata = self.triangle_powers_meta.handle,
-    });
-
     for (instance.geometries, 0..) |geometry, i| {
         const index_count = mesh_manager.meshes.get(geometry.mesh).index_count;
-        std.debug.assert(self.triangle_power_count + index_count < max_triangles);
+        // technically should be asserting that total (in the whole scene) emissive triangle count is less than
+        // the maximum number of emissive triangles, but we don't have access to that info on the host
+        std.debug.assert(index_count < max_emissive_triangles);
+        self.triangle_power_pipeline.recordBindPipeline(commands.buffer);
+        self.triangle_power_pipeline.recordBindAdditionalDescriptorSets(commands.buffer, .{ material_manager.textures.descriptor_set });
+        self.triangle_power_pipeline.recordPushDescriptors(commands.buffer, .{
+            .instances = self.instances_device.handle,
+            .world_to_instances = self.world_to_instance_device.handle,
+            .meshes = mesh_manager.addresses_buffer.handle,
+            .geometries = self.geometries.handle,
+            .material_values = material_manager.materials.handle,
+            .emissive_triangle_count = self.emissive_triangle_count.handle,
+            .dst_power = .{ .view = self.triangle_powers_mips[0] },
+            .dst_triangle_metadata = self.triangle_powers_meta.handle,
+        });
         self.triangle_power_pipeline.recordPushConstants(commands.buffer, .{
             .instance_index = @intCast(self.instance_count - 1),
             .geometry_index = @intCast(i),
-            .dst_offset = self.triangle_power_count,
             .src_primitive_count = index_count,
         });
         const shader_local_size = 32; // must be kept in sync with shader -- looks like HLSL doesn't support setting this via spec constants
         const dispatch_size = std.math.divCeil(u32, index_count, shader_local_size) catch unreachable;
         self.triangle_power_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = 1, .depth = 1 });
-        commands.buffer.updateBuffer(self.geometry_to_triangle_power_offset.handle, @sizeOf(u32) * (self.geometry_count + i), @sizeOf(u32), &self.triangle_power_count);
-        self.triangle_power_count += index_count;
-    }
+        self.triangle_power_fold_pipeline.recordBindPipeline(commands.buffer);
 
-    self.triangle_power_fold_pipeline.recordBindPipeline(commands.buffer);
-
-    // TODO: cull geometries without any emission
-    for (1..self.triangle_powers_mips.len) |dst_mip_level| {
-        commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
-            .image_memory_barrier_count = 2,
-            .p_image_memory_barriers = &[2]vk.ImageMemoryBarrier2 {
-                .{
-                    .src_stage_mask = .{ .compute_shader_bit = true },
-                    .src_access_mask = .{ .shader_write_bit = true },
-                    .dst_stage_mask = .{ .compute_shader_bit = true },
-                    .dst_access_mask = .{ .shader_read_bit = true },
-                    .old_layout = .general,
-                    .new_layout = .shader_read_only_optimal,
-                    .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                    .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                    .image = self.triangle_powers.handle,
-                    .subresource_range = .{
-                        .aspect_mask = .{ .color_bit = true },
-                        .base_mip_level = @intCast(dst_mip_level - 1),
-                        .level_count = 1,
-                        .base_array_layer = 0,
-                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
+        // TODO: cull geometries without any emission
+        for (1..self.triangle_powers_mips.len) |dst_mip_level| {
+            commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+                .image_memory_barrier_count = 2,
+                .p_image_memory_barriers = &[2]vk.ImageMemoryBarrier2 {
+                    .{
+                        .src_stage_mask = .{ .compute_shader_bit = true },
+                        .src_access_mask = .{ .shader_write_bit = true },
+                        .dst_stage_mask = .{ .compute_shader_bit = true },
+                        .dst_access_mask = .{ .shader_read_bit = true },
+                        .old_layout = .general,
+                        .new_layout = .shader_read_only_optimal,
+                        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                        .image = self.triangle_powers.handle,
+                        .subresource_range = .{
+                            .aspect_mask = .{ .color_bit = true },
+                            .base_mip_level = @intCast(dst_mip_level - 1),
+                            .level_count = 1,
+                            .base_array_layer = 0,
+                            .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                        },
                     },
+                    .{
+                        .dst_stage_mask = .{ .compute_shader_bit = true },
+                        .dst_access_mask = .{ .shader_read_bit = true },
+                        .old_layout = .shader_read_only_optimal,
+                        .new_layout = .general,
+                        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                        .image = self.triangle_powers.handle,
+                        .subresource_range = .{
+                            .aspect_mask = .{ .color_bit = true },
+                            .base_mip_level = @intCast(dst_mip_level),
+                            .level_count = 1,
+                            .base_array_layer = 0,
+                            .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                        },
+                    }
                 },
-                .{
-                    .dst_stage_mask = .{ .compute_shader_bit = true },
-                    .dst_access_mask = .{ .shader_read_bit = true },
-                    .old_layout = .shader_read_only_optimal,
-                    .new_layout = .general,
-                    .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                    .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                    .image = self.triangle_powers.handle,
-                    .subresource_range = .{
-                        .aspect_mask = .{ .color_bit = true },
-                        .base_mip_level = @intCast(dst_mip_level),
-                        .level_count = 1,
-                        .base_array_layer = 0,
-                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
-                    },
-                }
-            },
-        });
-        self.triangle_power_fold_pipeline.recordPushDescriptors(commands.buffer, .{
-            .src_mip = .{ .view = self.triangle_powers_mips[dst_mip_level - 1] },
-            .dst_mip = .{ .view = self.triangle_powers_mips[dst_mip_level] },
-        });
-        const dst_mip_size = std.math.pow(u32, 2, @intCast(self.triangle_powers_mips.len - dst_mip_level));
-        const shader_local_size = 32; // must be kept in sync with shader -- looks like HLSL doesn't support setting this via spec constants
-        const mip_dispatch_size = std.math.divCeil(u32, dst_mip_size, shader_local_size) catch unreachable;
-        self.triangle_power_fold_pipeline.recordDispatch(commands.buffer, .{ .width = mip_dispatch_size, .height = 1, .depth = 1 });
+            });
+            self.triangle_power_fold_pipeline.recordPushDescriptors(commands.buffer, .{
+                .src_mip = .{ .view = self.triangle_powers_mips[dst_mip_level - 1] },
+                .dst_mip = .{ .view = self.triangle_powers_mips[dst_mip_level] },
+                .geometry_to_triangle_power_offset = self.geometry_to_triangle_power_offset.handle,
+                .emissive_triangle_count = self.emissive_triangle_count.handle,
+            });
+            self.triangle_power_fold_pipeline.recordPushConstants(commands.buffer, .{
+                .geometry_index = self.geometry_count + @as(u32, @intCast(i)),
+                .triangle_count = index_count,
+            });
+            const dst_mip_size = std.math.pow(u32, 2, @intCast(self.triangle_powers_mips.len - dst_mip_level));
+            const mip_dispatch_size = std.math.divCeil(u32, dst_mip_size, shader_local_size) catch unreachable;
+            self.triangle_power_fold_pipeline.recordDispatch(commands.buffer, .{ .width = mip_dispatch_size, .height = 1, .depth = 1 });
+        }
     }
 
     commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
@@ -698,6 +712,7 @@ pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocat
     self.triangle_powers.destroy(vc);
     self.triangle_powers_meta.destroy(vc);
     self.geometry_to_triangle_power_offset.destroy(vc);
+    self.emissive_triangle_count.destroy(vc);
 
     self.triangle_power_pipeline.destroy(vc);
     self.triangle_power_fold_pipeline.destroy(vc);

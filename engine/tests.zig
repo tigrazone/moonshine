@@ -65,7 +65,7 @@ const TestingContext = struct {
 
         // push our stuff
         pipeline.recordPushDescriptors(self.commands.buffer, scene.pushDescriptors(0, 0));
-        pipeline.recordPushConstants(self.commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count, .emissive_triangle_count = scene.world.accel.triangle_power_count });
+        pipeline.recordPushConstants(self.commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
 
         // trace our stuff
         pipeline.recordTraceRays(self.commands.buffer, scene.camera.sensors.items[0].extent);

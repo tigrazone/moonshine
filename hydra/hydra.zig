@@ -322,7 +322,7 @@ pub const HdMoonshine = struct {
         self.pipeline.recordPushDescriptors(self.commands.buffer, (Scene { .background = self.background, .camera = self.camera, .world = self.world }).pushDescriptors(sensor, 0));
 
         // push our stuff
-        self.pipeline.recordPushConstants(self.commands.buffer, .{ .lens = self.camera.lenses.items[lens], .sample_count = self.camera.sensors.items[sensor].sample_count, .emissive_triangle_count = self.world.accel.triangle_power_count });
+        self.pipeline.recordPushConstants(self.commands.buffer, .{ .lens = self.camera.lenses.items[lens], .sample_count = self.camera.sensors.items[sensor].sample_count });
 
         // trace our stuff
         self.pipeline.recordTraceRays(self.commands.buffer, self.camera.sensors.items[sensor].extent);
