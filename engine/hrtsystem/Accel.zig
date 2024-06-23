@@ -470,6 +470,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         },
     });
 
+    // TODO: this very likely does not work with multiple geometries per instance
     for (instance.geometries, 0..) |geometry, i| {
         const index_count = mesh_manager.meshes.get(geometry.mesh).index_count;
         // technically should be asserting that total (in the whole scene) emissive triangle count is less than
@@ -497,7 +498,6 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         self.triangle_power_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = 1, .depth = 1 });
         self.triangle_power_fold_pipeline.recordBindPipeline(commands.buffer);
 
-        // TODO: cull geometries without any emission
         for (1..self.triangle_powers_mips.len) |dst_mip_level| {
             commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
                 .image_memory_barrier_count = 2,

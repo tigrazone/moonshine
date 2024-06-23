@@ -19,10 +19,16 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 	if (any(dstIndex >= dstImageSize)) return;
 
 	if (dstImageSize == 1) {
-		// TODO: emissiveTriangleCount has a relatively small (32k maximum), which will probably only show up as a crash.
-		// need to make maximum higher so this isn't a feasible problem.
-		dGeometryToTrianglePowerOffset[pushConsts.geometryIndex] = emissiveTriangleCount[0];
-		emissiveTriangleCount[0] += pushConsts.triangleCount;
+		const float newSum = srcMip[2 * dstIndex + 0] + srcMip[2 * dstIndex + 1];
+		const float oldSum = dstMip[dstIndex];
+		// if this conditional fails it means this mesh is not actually emissive at all
+		// in this case, not adding it to our sum will effectively cull it
+		if (newSum != oldSum) {
+			// TODO: emissiveTriangleCount has a relatively small (32k maximum), which will probably only show up as a crash.
+			// need to make maximum higher so this isn't a feasible problem.
+			dGeometryToTrianglePowerOffset[pushConsts.geometryIndex] = emissiveTriangleCount[0];
+			emissiveTriangleCount[0] += pushConsts.triangleCount;
+		}
 	}
 
 	dstMip[dstIndex] = srcMip[2 * dstIndex + 0]
