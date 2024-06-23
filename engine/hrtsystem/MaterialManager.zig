@@ -124,7 +124,7 @@ pub const Handle = u32;
 
 const Self = @This();
 
-const max_materials = 512; // TODO: resizable buffers
+const max_materials = 2048; // TODO: resizable buffers
 
 pub fn createEmpty(vc: *const VulkanContext) !Self {
     return Self {
@@ -207,7 +207,7 @@ pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocat
 
 // TODO: individual texture destruction
 pub const TextureManager = struct {
-    const max_descriptors = 1024; // TODO: consider using VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT, reallocation
+    const max_descriptors = 4096; // TODO: consider using VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT, reallocation
     // must be kept in sync with shader
     pub const DescriptorLayout = core.descriptor.DescriptorLayout(&.{
         .{
