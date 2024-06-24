@@ -20,7 +20,7 @@
 struct PushConsts {
 	uint instanceIndex;
 	uint geometryIndex;
-	uint srcPrimitiveCount;
+	uint triangleCount;
 };
 [[vk::push_constant]] PushConsts pushConsts;
 
@@ -28,7 +28,7 @@ struct PushConsts {
 void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 	const uint srcIndex = dispatchXYZ.x;
 
-	if (any(srcIndex >= pushConsts.srcPrimitiveCount)) return;
+	if (any(srcIndex >= pushConsts.triangleCount)) return;
 
 	World world;
     world.instances = dInstances;

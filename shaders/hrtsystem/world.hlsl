@@ -2,7 +2,6 @@
 
 #include "reflection_frame.hlsl"
 
-
 struct Instance { // same required by vulkan on host side
     row_major float3x4 transform;
     uint instanceCustomIndexAndMask;

@@ -55,7 +55,7 @@ const TrianglePowerPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "h
     .PushConstants = extern struct {
         instance_index: u32,
         geometry_index: u32,
-        src_primitive_count: u32,
+        triangle_count: u32,
     },
     .PushSetBindings = struct {
         instances: vk.Buffer,
@@ -74,10 +74,12 @@ const TrianglePowerFoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path 
     .PushSetBindings = struct {
         src_mip: engine.core.pipeline.SampledImage,
         dst_mip: engine.core.pipeline.StorageImage,
+        instances: vk.Buffer,
         geometry_to_triangle_power_offset: vk.Buffer,
         emissive_triangle_count: vk.Buffer,
     },
     .PushConstants = extern struct {
+        instance_index: u32,
         geometry_index: u32,
         triangle_count: u32,
     },
@@ -496,7 +498,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         self.triangle_power_pipeline.recordPushConstants(commands.buffer, .{
             .instance_index = @intCast(self.instance_count - 1),
             .geometry_index = @intCast(i),
-            .src_primitive_count = index_count,
+            .triangle_count = index_count,
         });
         const shader_local_size = 32; // must be kept in sync with shader -- looks like HLSL doesn't support setting this via spec constants
         const dispatch_size = std.math.divCeil(u32, index_count, shader_local_size) catch unreachable;
@@ -546,11 +548,13 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
             self.triangle_power_fold_pipeline.recordPushDescriptors(commands.buffer, .{
                 .src_mip = .{ .view = self.triangle_powers_mips[dst_mip_level - 1] },
                 .dst_mip = .{ .view = self.triangle_powers_mips[dst_mip_level] },
+                .instances = self.instances_device.handle,
                 .geometry_to_triangle_power_offset = self.geometry_to_triangle_power_offset.handle,
                 .emissive_triangle_count = self.emissive_triangle_count.handle,
             });
             self.triangle_power_fold_pipeline.recordPushConstants(commands.buffer, .{
-                .geometry_index = self.geometry_count + @as(u32, @intCast(i)),
+                .instance_index = @intCast(self.instance_count - 1),
+                .geometry_index = @intCast(i),
                 .triangle_count = index_count,
             });
             const dst_mip_size = std.math.pow(u32, 2, @intCast(self.triangle_powers_mips.len - dst_mip_level));
