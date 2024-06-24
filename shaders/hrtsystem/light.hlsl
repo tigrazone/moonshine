@@ -166,6 +166,7 @@ struct MeshLights : Light {
     }
 
     float areaPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
+        if (integral() == 0.0) return 0.0;
         const uint instanceID = world.instances[instanceIndex].instanceID();
         const uint idx = geometryToTrianglePowerOffset[instanceID + geometryIndex] + primitiveIndex;
         const float triangleSelectionPdf = power.Load(uint2(idx, 0)) / integral();
