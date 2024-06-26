@@ -27,11 +27,17 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 		// if this conditional fails it means this mesh is not actually emissive at all
 		// in this case, not adding it to our sum will effectively cull it
 		if (newSum != oldSum) {
-			// TODO: emissiveTriangleCount has a relatively small (32k maximum), which will probably only show up as a crash.
-			// need to make maximum higher so this isn't a feasible problem.
 			const uint flatGeometryIndex = instances[pushConsts.instanceIndex].instanceID() + pushConsts.geometryIndex;
-			dGeometryToTrianglePowerOffset[flatGeometryIndex] = emissiveTriangleCount[0];
-			emissiveTriangleCount[0] += pushConsts.triangleCount;
+			const uint existingOffset = dGeometryToTrianglePowerOffset[flatGeometryIndex];
+
+			// only update offset and emissive triangle count if this geometry is not already tracked for emissive light
+			const uint invalidOffset = 0xFFFFFFFF;
+			if (existingOffset == invalidOffset) {
+				// TODO: emissiveTriangleCount has a relatively small (32k maximum), which will probably only show up as a crash.
+				// need to make maximum higher so this isn't a feasible problem.
+				dGeometryToTrianglePowerOffset[flatGeometryIndex] = emissiveTriangleCount[0];
+				emissiveTriangleCount[0] += pushConsts.triangleCount;
+			}
 		}
 	}
 
