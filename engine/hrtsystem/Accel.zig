@@ -102,21 +102,21 @@ emissive_triangle_count: VkAllocator.DeviceBuffer(u32), // size 1
 blases: BottomLevelAccels = .{},
 
 instance_count: u32 = 0,
-instances_device: VkAllocator.DeviceBuffer(vk.AccelerationStructureInstanceKHR) = .{},
-instances_host: VkAllocator.HostBuffer(vk.AccelerationStructureInstanceKHR) = .{},
-instances_address: vk.DeviceAddress = 0,
+instances_device: VkAllocator.DeviceBuffer(vk.AccelerationStructureInstanceKHR),
+instances_host: VkAllocator.HostBuffer(vk.AccelerationStructureInstanceKHR),
+instances_address: vk.DeviceAddress,
 
 // keep track of inverse transform -- non-inverse we can get from instances_device
 // transforms provided by shader only in hit/intersection shaders but we need them
 // in raygen
 // ray queries provide them in any shader which would be a benefit of using them
-world_to_instance_device: VkAllocator.DeviceBuffer(Mat3x4) = .{},
-world_to_instance_host: VkAllocator.HostBuffer(Mat3x4) = .{},
+world_to_instance_device: VkAllocator.DeviceBuffer(Mat3x4),
+world_to_instance_host: VkAllocator.HostBuffer(Mat3x4),
 
 // flat jagged array for geometries --
 // use instanceCustomIndex + GeometryID() here to get geometry
 geometry_count: u24 = 0,
-geometries: VkAllocator.DeviceBuffer(Geometry) = .{},
+geometries: VkAllocator.DeviceBuffer(Geometry),
 
 // tlas stuff
 tlas_handle: vk.AccelerationStructureKHR = .null_handle,
@@ -321,6 +321,26 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
         }, null);
     }
 
+
+    const geometries = try vk_allocator.createDeviceBuffer(vc, allocator, Geometry, max_geometries, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
+    errdefer geometries.destroy(vc);
+    try vk_helpers.setDebugName(vc, geometries.handle, "geometries");
+    const geometry_to_triangle_power_offset = try vk_allocator.createDeviceBuffer(vc, allocator, u32, max_geometries, .{ .storage_buffer_bit = true });
+    errdefer geometry_to_triangle_power_offset.destroy(vc);
+    try vk_helpers.setDebugName(vc, geometry_to_triangle_power_offset.handle, "geometry to triangle power offset");
+
+    const instances_device = try vk_allocator.createDeviceBuffer(vc, allocator, vk.AccelerationStructureInstanceKHR, max_instances, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .acceleration_structure_build_input_read_only_bit_khr = true, .storage_buffer_bit = true });
+    errdefer instances_device.destroy(vc);
+    const instances_host = try vk_allocator.createHostBuffer(vc, vk.AccelerationStructureInstanceKHR, max_instances, .{ .transfer_src_bit = true });
+    errdefer instances_host.destroy(vc);
+    try vk_helpers.setDebugName(vc, instances_device.handle, "instances");
+    const instances_address = instances_device.getAddress(vc);
+
+    const world_to_instance_device = try vk_allocator.createDeviceBuffer(vc, allocator, Mat3x4, max_instances, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
+    errdefer world_to_instance_device.destroy(vc);
+    const world_to_instance_host = try vk_allocator.createHostBuffer(vc, Mat3x4, max_instances, .{ .transfer_src_bit = true });
+    errdefer world_to_instance_host.destroy(vc);
+
     return Self {
         .triangle_power_pipeline = triangle_power_pipeline,
         .triangle_power_fold_pipeline = triangle_power_fold_pipeline,
@@ -328,6 +348,13 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
         .triangle_powers = triangle_powers,
         .triangle_powers_mips = triangle_powers_mips,
         .emissive_triangle_count = emissive_triangle_count,
+        .geometries = geometries,
+        .geometry_to_triangle_power_offset = geometry_to_triangle_power_offset,
+        .instances_device = instances_device,
+        .instances_host = instances_host,
+        .instances_address = instances_address,
+        .world_to_instance_device = world_to_instance_device,
+        .world_to_instance_host = world_to_instance_host,
     };
 }
 
@@ -343,26 +370,10 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     defer for (scratch_buffers) |scratch_buffer| scratch_buffer.destroy(vc);
 
     // update geometries flat jagged array
-    {
-        if (self.geometries.is_null()) {
-            self.geometries = try vk_allocator.createDeviceBuffer(vc, allocator, Geometry, max_geometries, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
-            try vk_helpers.setDebugName(vc, self.geometries.handle, "geometries");
-            self.geometry_to_triangle_power_offset = try vk_allocator.createDeviceBuffer(vc, allocator, u32, max_geometries, .{ .storage_buffer_bit = true });
-            try vk_helpers.setDebugName(vc, self.geometry_to_triangle_power_offset.handle, "geometry to triangle power offset");
-        }
-
-        commands.recordUpdateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
-    }
+    commands.recordUpdateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
 
     // upload instance
     {
-        if (self.instances_device.is_null()) {
-            self.instances_device = try vk_allocator.createDeviceBuffer(vc, allocator, vk.AccelerationStructureInstanceKHR, max_instances, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .acceleration_structure_build_input_read_only_bit_khr = true, .storage_buffer_bit = true });
-            self.instances_host = try vk_allocator.createHostBuffer(vc, vk.AccelerationStructureInstanceKHR, max_instances, .{ .transfer_src_bit = true });
-            try vk_helpers.setDebugName(vc, self.instances_device.handle, "instances");
-            self.instances_address = self.instances_device.getAddress(vc);
-        }
-
         const vk_instance = vk.AccelerationStructureInstanceKHR {
             .transform = vk.TransformMatrixKHR {
                 .matrix = @bitCast(instance.transform),
@@ -387,11 +398,6 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
 
     // upload world_to_instance matrix
     {
-        if (self.world_to_instance_device.is_null()) {
-            self.world_to_instance_device = try vk_allocator.createDeviceBuffer(vc, allocator, Mat3x4, max_instances, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
-            self.world_to_instance_host = try vk_allocator.createHostBuffer(vc, Mat3x4, max_instances, .{ .transfer_src_bit = true });
-        }
-
         self.world_to_instance_host.data[self.instance_count] = instance.transform.inverse_affine();
 
         commands.recordUpdateBuffer(Mat3x4, self.world_to_instance_device, &.{ instance.transform.inverse_affine() }, self.instance_count);
