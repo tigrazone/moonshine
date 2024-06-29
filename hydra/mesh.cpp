@@ -232,11 +232,6 @@ void HdMoonshineMesh::Sync(HdSceneDelegate* sceneDelegate, HdRenderParam* hdRend
         }
         _instances.clear();
 
-        const Geometry geometry = Geometry {
-            .mesh = _mesh,
-            .material = _material,
-            .sampled = false,
-        };
         for (size_t i = 0; i < _instancesTransforms.size(); i++) {
             GfMatrix4f instanceTransform = _transform * _instancesTransforms[i];
             const Mat3x4 matrix = Mat3x4 {
@@ -244,7 +239,7 @@ void HdMoonshineMesh::Sync(HdSceneDelegate* sceneDelegate, HdRenderParam* hdRend
                 .y = F32x4 { .x = instanceTransform[0][1], .y = instanceTransform[1][1], .z = instanceTransform[2][1], .w = instanceTransform[3][1] },
                 .z = F32x4 { .x = instanceTransform[0][2], .y = instanceTransform[1][2], .z = instanceTransform[2][2], .w = instanceTransform[3][2] },
             };
-            _instances.push_back(HdMoonshineCreateInstance(msne, matrix, &geometry, 1, new_visibility));
+            _instances.push_back(HdMoonshineCreateInstance(msne, matrix, _mesh, _material, new_visibility));
         }
     } else {
         if (transform_changed) {

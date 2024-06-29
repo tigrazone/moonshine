@@ -34,12 +34,6 @@ typedef struct Mat3x4 {
     F32x4 x, y, z;
 } Mat3x4;
 
-typedef struct Geometry {
-    MeshHandle mesh;
-    MaterialHandle material;
-    bool sampled;
-} Geometry;
-
 typedef struct Extent2D {
     uint32_t width;
     uint32_t height;
@@ -85,7 +79,7 @@ extern "C" void HdMoonshineSetMaterialColor(HdMoonshine*, MaterialHandle, ImageH
 extern "C" void HdMoonshineSetMaterialMetalness(HdMoonshine*, MaterialHandle, ImageHandle);
 extern "C" void HdMoonshineSetMaterialRoughness(HdMoonshine*, MaterialHandle, ImageHandle);
 extern "C" void HdMoonshineSetMaterialIOR(HdMoonshine*, MaterialHandle, float);
-extern "C" InstanceHandle HdMoonshineCreateInstance(HdMoonshine*, Mat3x4, const Geometry*, size_t, bool);
+extern "C" InstanceHandle HdMoonshineCreateInstance(HdMoonshine*, Mat3x4, MeshHandle, MaterialHandle, bool);
 extern "C" void HdMoonshineDestroyInstance(HdMoonshine*, InstanceHandle);
 extern "C" void HdMoonshineSetInstanceTransform(HdMoonshine*, InstanceHandle, Mat3x4);
 extern "C" void HdMoonshineSetInstanceVisibility(HdMoonshine*, InstanceHandle, bool);

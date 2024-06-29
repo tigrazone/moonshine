@@ -87,7 +87,6 @@ pub const HdMoonshine = struct {
 
     const PowerUpdate = struct {
         instance: u32,
-        geometry: u32,
         mesh: u32,
     };
 
@@ -324,7 +323,7 @@ pub const HdMoonshine = struct {
 
         while (self.power_updates.items.len != 0) {
             const update = self.power_updates.pop();
-            self.world.accel.recordUpdatePower(&self.commands, self.world.meshes, self.world.materials, update.instance, update.geometry, update.mesh);
+            self.world.accel.recordUpdatePower(&self.commands, self.world.meshes, self.world.materials, update.instance, 0, update.mesh);
         }
 
         // TODO: this memory barrier is a little more extreme than neccessary
@@ -506,23 +505,24 @@ pub const HdMoonshine = struct {
         result.value_ptr.ior = ior;
     }
 
-    pub export fn HdMoonshineCreateInstance(self: *HdMoonshine, transform: Mat3x4, geometries_ptr: [*]const Accel.Geometry, geometry_count: usize, visible: bool) Accel.Handle {
+    pub export fn HdMoonshineCreateInstance(self: *HdMoonshine, transform: Mat3x4, mesh: MeshManager.Handle, material: MaterialManager.Handle, visible: bool) Accel.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        const geometries = geometries_ptr[0..geometry_count];
         const instance = Accel.Instance {
             .transform = transform,
             .visible = visible,
-            .geometries = geometries,
+            .geometries = &[1]Accel.Geometry {
+                .{
+                    .mesh = mesh,
+                    .material = material,
+                }
+            },
         };
         self.camera.clearAllSensors();
-        for (geometries, 0..) |geometry, i| {
-            self.power_updates.append(self.allocator.allocator(), PowerUpdate {
-                .instance = self.world.accel.instance_count,
-                .geometry = @intCast(i),
-                .mesh = geometry.mesh,
-            }) catch unreachable;
-        }
+        self.power_updates.append(self.allocator.allocator(), PowerUpdate {
+            .instance = self.world.accel.instance_count,
+            .mesh = mesh,
+        }) catch unreachable;
         return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, self.world.meshes, self.world.materials, instance) catch unreachable; // TODO: error handling
     }
 
