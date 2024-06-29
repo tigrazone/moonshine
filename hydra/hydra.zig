@@ -79,6 +79,8 @@ pub const HdMoonshine = struct {
 
     material_updates: std.AutoArrayHashMapUnmanaged(MaterialManager.Handle, MaterialUpdate),
 
+    instance_to_mesh: std.ArrayListUnmanaged(MeshManager.Handle),
+
     power_updates: std.ArrayListUnmanaged(PowerUpdate),
 
     // only keep a single bit for deciding if we should update all --
@@ -144,8 +146,9 @@ pub const HdMoonshine = struct {
         self.output_buffers = .{};
         self.mutex = .{};
         self.material_updates = .{};
-        self.need_instance_update = false;
         self.power_updates = .{};
+        self.instance_to_mesh = .{};
+        self.need_instance_update = false;
 
         return self;
     }
@@ -523,6 +526,7 @@ pub const HdMoonshine = struct {
             .instance = self.world.accel.instance_count,
             .mesh = mesh,
         }) catch unreachable;
+        self.instance_to_mesh.append(self.allocator.allocator(), mesh) catch unreachable;
         return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, self.world.meshes, self.world.materials, instance) catch unreachable; // TODO: error handling
     }
 
@@ -538,10 +542,19 @@ pub const HdMoonshine = struct {
         self.camera.clearAllSensors();
     }
 
-    // TODO: update power on scaling
     pub export fn HdMoonshineSetInstanceTransform(self: *HdMoonshine, handle: Accel.Handle, new_transform: Mat3x4) void {
         self.mutex.lock();
         defer self.mutex.unlock();
+        const old_transform: Mat3x4 = @bitCast(self.world.accel.instances_host.data[handle].transform);
+        if (!std.math.approxEqRel(f32, @abs(old_transform.truncate().determinant()), @abs(new_transform.truncate().determinant()), 0.001)) {
+            // should tell us if this matrix was scaled
+            // though may run into precision issues and rotation might seem like a scale
+            // TODO: this could theoretically slip away if an object is veeeerrry slowly scaled
+            self.power_updates.append(self.allocator.allocator(), PowerUpdate {
+                .instance = handle,
+                .mesh = self.instance_to_mesh.items[handle],
+            }) catch unreachable;
+        }
         self.world.accel.instances_host.data[handle].transform = @bitCast(new_transform);
         self.need_instance_update = true;
         self.camera.clearAllSensors();
@@ -577,6 +590,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineDestroy(self: *HdMoonshine) void {
         self.power_updates.deinit(self.allocator.allocator());
         self.material_updates.deinit(self.allocator.allocator());
+        self.instance_to_mesh.deinit(self.allocator.allocator());
         for (self.output_buffers.items) |output_buffer| {
             output_buffer.destroy(&self.vc);
         }

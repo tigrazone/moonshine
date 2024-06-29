@@ -1,5 +1,6 @@
 // TODO: should this be replaced by/use @Vector?
 // TODO: make sure everything here is consistent in naming/structure
+// TODO: the column/row major conventions here are a little messy
 
 const std = @import("std");
 const math = std.math;
@@ -305,6 +306,10 @@ pub fn Mat3x4(comptime T: type) type {
 
         pub fn extract_translation(self: Self) Vec3T {
             return Vec3T.new(self.x.w, self.y.w, self.z.w);
+        }
+
+        pub fn truncate(self: Self) Mat3T {
+            return Mat3T.new(self.x.truncate(), self.y.truncate(), self.z.truncate());
         }
 
         pub fn with_translation(self: Self, v: Vec3T) Self {
