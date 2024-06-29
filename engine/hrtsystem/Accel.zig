@@ -468,7 +468,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     return @intCast(self.instance_count - 1);
 }
 
-fn recordUpdatePower(self: *Self, commands: *Commands, mesh_manager: MeshManager, material_manager: MaterialManager, instance_index: u32, geometry_index: u32, mesh_index: u32) void {
+pub fn recordUpdatePower(self: *Self, commands: *Commands, mesh_manager: MeshManager, material_manager: MaterialManager, instance_index: u32, geometry_index: u32, mesh_index: u32) void {
     const index_count = mesh_manager.meshes.get(mesh_index).index_count;
 
     // this mesh is too big to importance sample...

@@ -79,9 +79,17 @@ pub const HdMoonshine = struct {
 
     material_updates: std.AutoArrayHashMapUnmanaged(MaterialManager.Handle, MaterialUpdate),
 
+    power_updates: std.ArrayListUnmanaged(PowerUpdate),
+
     // only keep a single bit for deciding if we should update all --
     // could technically be more granular
     need_instance_update: bool,
+
+    const PowerUpdate = struct {
+        instance: u32,
+        geometry: u32,
+        mesh: u32,
+    };
 
     const MaterialUpdate = struct {
         normal: ?TextureManager.Handle = null,
@@ -98,7 +106,7 @@ pub const HdMoonshine = struct {
         .samples_per_run = samples_per_run,
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
-        .mesh_samples_per_bounce = 0,
+        .mesh_samples_per_bounce = 1,
         .flip_image = false,
         .indexed_attributes = false,
         .two_component_normal_texture = false,
@@ -138,6 +146,7 @@ pub const HdMoonshine = struct {
         self.mutex = .{};
         self.material_updates = .{};
         self.need_instance_update = false;
+        self.power_updates = .{};
 
         return self;
     }
@@ -313,6 +322,24 @@ pub const HdMoonshine = struct {
             self.need_instance_update = false;
         }
 
+        while (self.power_updates.items.len != 0) {
+            const update = self.power_updates.pop();
+            self.world.accel.recordUpdatePower(&self.commands, self.world.meshes, self.world.materials, update.instance, update.geometry, update.mesh);
+        }
+
+        // TODO: this memory barrier is a little more extreme than neccessary
+        self.commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+            .memory_barrier_count = 1,
+            .p_memory_barriers = &[1]vk.MemoryBarrier2 {
+                .{
+                    .src_stage_mask = .{ .compute_shader_bit = true },
+                    .src_access_mask = .{ .shader_write_bit = true },
+                    .dst_stage_mask = .{ .ray_tracing_shader_bit_khr = true },
+                    .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true },
+                }
+            },
+        });
+
         // prepare our stuff
         self.camera.sensors.items[sensor].recordPrepareForCapture(self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
 
@@ -479,15 +506,23 @@ pub const HdMoonshine = struct {
         result.value_ptr.ior = ior;
     }
 
-    pub export fn HdMoonshineCreateInstance(self: *HdMoonshine, transform: Mat3x4, geometries: [*]const Accel.Geometry, geometry_count: usize, visible: bool) Accel.Handle {
+    pub export fn HdMoonshineCreateInstance(self: *HdMoonshine, transform: Mat3x4, geometries_ptr: [*]const Accel.Geometry, geometry_count: usize, visible: bool) Accel.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
+        const geometries = geometries_ptr[0..geometry_count];
         const instance = Accel.Instance {
             .transform = transform,
             .visible = visible,
-            .geometries = geometries[0..geometry_count],
+            .geometries = geometries,
         };
         self.camera.clearAllSensors();
+        for (geometries, 0..) |geometry, i| {
+            self.power_updates.append(self.allocator.allocator(), PowerUpdate {
+                .instance = self.world.accel.instance_count,
+                .geometry = @intCast(i),
+                .mesh = geometry.mesh,
+            }) catch unreachable;
+        }
         return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, self.world.meshes, self.world.materials, instance) catch unreachable; // TODO: error handling
     }
 
@@ -503,6 +538,7 @@ pub const HdMoonshine = struct {
         self.camera.clearAllSensors();
     }
 
+    // TODO: update power on scaling
     pub export fn HdMoonshineSetInstanceTransform(self: *HdMoonshine, handle: Accel.Handle, new_transform: Mat3x4) void {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -539,6 +575,7 @@ pub const HdMoonshine = struct {
     }
 
     pub export fn HdMoonshineDestroy(self: *HdMoonshine) void {
+        self.power_updates.deinit(self.allocator.allocator());
         self.material_updates.deinit(self.allocator.allocator());
         for (self.output_buffers.items) |output_buffer| {
             output_buffer.destroy(&self.vc);
