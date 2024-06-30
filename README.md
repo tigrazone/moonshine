@@ -55,7 +55,6 @@
 * Lights
   * Experiment with sampling triangle via solid angle after selecting it via area
   * Experiment with unifying sampling mesh lights and environment map
-  * Build sampling data structures on GPU
 * Testing
   * Proper statistical tests GPU sampling routines
   * Proper statistical tests to make sure images have expected mean/variance
