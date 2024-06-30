@@ -80,15 +80,18 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
             const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
             std.debug.assert(std.mem.eql(u8, image.mime_type.?, "image/png"));
 
-            // this gives us rgb --> need to convert to rgba
             var img = try zigimg.Image.fromMemory(allocator, image.data.?);
             defer img.deinit();
 
-            var rgba = try zigimg.color.PixelStorage.init(allocator, .rgba32, img.pixels.len());
-            defer rgba.deinit(allocator);
-            for (img.pixels.rgb24, rgba.rgba32) |pixel, *rgba32| {
-                rgba32.* = zigimg.color.Rgba32.initRgba(pixel.r, pixel.g, pixel.b, std.math.maxInt(u8));
+            // image may be rgba32 or rgb24
+            var rgba = if (img.pixels == .rgb24) try zigimg.color.PixelStorage.init(allocator, .rgba32, img.pixels.len()) else img.pixels;
+            defer if (img.pixels == .rgb24) rgba.deinit(allocator);
+            if (img.pixels == .rgb24) {
+                for (img.pixels.rgb24, rgba.rgba32) |pixel, *rgba32| {
+                    rgba32.* = zigimg.color.Rgba32.initRgba(pixel.r, pixel.g, pixel.b, std.math.maxInt(u8));
+                }
             }
+
             const debug_name = try std.fmt.allocPrintZ(allocator, "{s} emissive", .{ gltf_material.name });
             defer allocator.free(debug_name);
             break :emissive try textures.upload(vc, vk_allocator, allocator, commands, TextureManager.Source {
@@ -125,15 +128,18 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
         const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
         std.debug.assert(std.mem.eql(u8, image.mime_type.?, "image/png"));
 
-        // this gives us rgb --> need to convert to rgba
         var img = try zigimg.Image.fromMemory(allocator, image.data.?);
         defer img.deinit();
 
-        var rgba = try zigimg.color.PixelStorage.init(allocator, .rgba32, img.pixels.len());
-        defer rgba.deinit(allocator);
-        for (img.pixels.rgb24, rgba.rgba32) |pixel, *rgba32| {
-            rgba32.* = zigimg.color.Rgba32.initRgba(pixel.r, pixel.g, pixel.b, std.math.maxInt(u8));
+        // image may be rgba32 or rgb24
+        var rgba = if (img.pixels == .rgb24) try zigimg.color.PixelStorage.init(allocator, .rgba32, img.pixels.len()) else img.pixels;
+        defer if (img.pixels == .rgb24) rgba.deinit(allocator);
+        if (img.pixels == .rgb24) {
+            for (img.pixels.rgb24, rgba.rgba32) |pixel, *rgba32| {
+                rgba32.* = zigimg.color.Rgba32.initRgba(pixel.r, pixel.g, pixel.b, std.math.maxInt(u8));
+            }
         }
+
         const debug_name = try std.fmt.allocPrintZ(allocator, "{s} color", .{ gltf_material.name });
         defer allocator.free(debug_name);
         break :blk try textures.upload(vc, vk_allocator, allocator, commands, TextureManager.Source {
@@ -264,18 +270,32 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
                 };
                 // get indices
                 const indices = blk2: {
-                    var indices = std.ArrayList(u16).init(allocator);
-                    defer indices.deinit();
-
                     const accessor = gltf.data.accessors.items[primitive.indices.?];
-                    gltf.getDataFromBufferView(u16, &indices, accessor, gltf.glb_binary.?);
 
-                    // convert to U32x3
-                    const actual_indices = try allocator.alloc(U32x3, indices.items.len / 3);
-                    for (actual_indices, 0..) |*index, i| {
-                        index.* = U32x3.new(indices.items[i * 3 + 0], indices.items[i * 3 + 1], indices.items[i * 3 + 2]);
-                    }
-                    break :blk2 actual_indices;
+                    break :blk2 switch (accessor.component_type) {
+                        .unsigned_short => blk3: {
+                            var indices = std.ArrayList(u16).init(allocator);
+                            defer indices.deinit();
+
+                            gltf.getDataFromBufferView(u16, &indices, accessor, gltf.glb_binary.?);
+
+                            // convert to U32x3
+                            const actual_indices = try allocator.alloc(U32x3, indices.items.len / 3);
+                            for (actual_indices, 0..) |*index, i| {
+                                index.* = U32x3.new(indices.items[i * 3 + 0], indices.items[i * 3 + 1], indices.items[i * 3 + 2]);
+                            }
+                            break :blk3 actual_indices;
+                        },
+                        .unsigned_integer => blk3: {
+                            var indices = std.ArrayList(u32).init(allocator);
+                            defer indices.deinit();
+
+                            gltf.getDataFromBufferView(u32, &indices, accessor, gltf.glb_binary.?);
+
+                            break :blk3 std.mem.bytesAsSlice(U32x3, std.mem.sliceAsBytes(try indices.toOwnedSlice()));
+                        },
+                        else => unreachable,
+                    };
                 };
                 errdefer allocator.free(indices);
 
