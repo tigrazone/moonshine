@@ -80,7 +80,7 @@ pub fn idleUntilDone(self: *Self, vc: *const VulkanContext) !void {
     try vc.device.resetCommandPool(self.pool, .{});
 }
 
-pub fn recordUploadDataToImage(self: *Self, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(u8), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
+pub fn uploadDataToImage(self: *Self, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(u8), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
     self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
@@ -143,13 +143,13 @@ pub fn recordUploadDataToImage(self: *Self, dst_image: vk.Image, src_data: VkAll
 }
 
 // buffers must have appropriate flags
-pub fn recordCopyBuffer(self: *Self, vc: *const VulkanContext, dst: vk.Buffer, src: vk.Buffer, regions: []const vk.BufferCopy) void {
+pub fn copyBuffer(self: *Self, vc: *const VulkanContext, dst: vk.Buffer, src: vk.Buffer, regions: []const vk.BufferCopy) void {
     vc.device.cmdCopyBuffer(self.buffer, src, dst, @intCast(regions.len), regions.ptr);
 }
 
 // buffers must have appropriate flags
 // uploads whole host buffer to gpu buffer
-pub fn recordUploadBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: VkAllocator.HostBuffer(T)) void {
+pub fn uploadBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: VkAllocator.HostBuffer(T)) void {
     const region = vk.BufferCopy {
         .src_offset = 0,
         .dst_offset = 0,
@@ -159,7 +159,7 @@ pub fn recordUploadBuffer(self: *Self, comptime T: type, dst: VkAllocator.Device
     self.buffer.copyBuffer(src.handle, dst.handle, 1, @ptrCast(&region));
 }
 
-pub fn recordUpdateBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: []const T, offset: vk.DeviceSize) void {
+pub fn updateBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: []const T, offset: vk.DeviceSize) void {
     const bytes = std.mem.sliceAsBytes(src);
     self.buffer.updateBuffer(dst.handle, offset * @sizeOf(T), bytes.len, src.ptr);
 }

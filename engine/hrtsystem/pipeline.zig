@@ -403,7 +403,7 @@ const ShaderBindingTable = struct {
         errdefer handle.destroy(vc);
 
         try encoder.begin();
-        encoder.recordUploadBuffer(u8, handle, sbt);
+        encoder.uploadBuffer(u8, handle, sbt);
         try encoder.submit(vc);
 
         const raygen_address = handle.getAddress(vc);
@@ -472,7 +472,7 @@ const ShaderBindingTable = struct {
         std.mem.copyBackwards(u8, sbt.data[miss_index..miss_index + miss_size], sbt.data[raygen_size..raygen_size + miss_size]);
 
         try encoder.begin();
-        encoder.recordUploadBuffer(u8, self.handle, sbt);
+        encoder.uploadBuffer(u8, self.handle, sbt);
         try encoder.submitAndIdleUntilDone(vc);
     }
 

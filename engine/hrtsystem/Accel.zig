@@ -371,7 +371,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     defer for (scratch_buffers) |scratch_buffer| scratch_buffer.destroy(vc);
 
     // update geometries flat jagged array
-    encoder.recordUpdateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
+    encoder.updateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
 
     // upload instance
     {
@@ -394,14 +394,14 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
 
         self.instances_host.data[self.instance_count] = vk_instance;
 
-        encoder.recordUpdateBuffer(vk.AccelerationStructureInstanceKHR, self.instances_device, &.{ vk_instance }, self.instance_count); // TODO: can copy
+        encoder.updateBuffer(vk.AccelerationStructureInstanceKHR, self.instances_device, &.{ vk_instance }, self.instance_count); // TODO: can copy
     }
 
     // upload world_to_instance matrix
     {
         self.world_to_instance_host.data[self.instance_count] = instance.transform.inverse_affine();
 
-        encoder.recordUpdateBuffer(Mat3x4, self.world_to_instance_device, &.{ instance.transform.inverse_affine() }, self.instance_count);
+        encoder.updateBuffer(Mat3x4, self.world_to_instance_device, &.{ instance.transform.inverse_affine() }, self.instance_count);
     }
 
     self.instance_count += 1;

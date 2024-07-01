@@ -149,7 +149,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
                     variant_buffer.buffer = try vk_allocator.createDeviceBuffer(vc, allocator, field.type, max_materials, .{ .shader_device_address_bit = true, .transfer_dst_bit = true });
                     variant_buffer.addr = variant_buffer.buffer.getAddress(vc);
                 }
-                encoder.recordUpdateBuffer(field.type, variant_buffer.buffer, &.{ @field(info.variant, field.name) }, variant_buffer.len);
+                encoder.updateBuffer(field.type, variant_buffer.buffer, &.{ @field(info.variant, field.name) }, variant_buffer.len);
                 variant_buffer.len += 1;
             }
 
@@ -160,7 +160,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
                 .addr = @field(self.variant_buffers, field.name).addr + (@field(self.variant_buffers, field.name).len - 1) * @sizeOf(field.type),
             };
             if (self.materials.is_null()) self.materials = try vk_allocator.createDeviceBuffer(vc, allocator, Material, max_materials, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
-            encoder.recordUpdateBuffer(Material, self.materials, &.{ gpu_material }, self.material_count);
+            encoder.updateBuffer(Material, self.materials, &.{ gpu_material }, self.material_count);
         }
     }
     try encoder.submitAndIdleUntilDone(vc);
@@ -316,7 +316,7 @@ pub const TextureManager = struct {
         defer staging_buffer.destroy(vc);
         @memcpy(staging_buffer.data, bytes);
         try encoder.begin();
-        encoder.recordUploadDataToImage(image.handle, staging_buffer, extent, .shader_read_only_optimal);
+        encoder.uploadDataToImage(image.handle, staging_buffer, extent, .shader_read_only_optimal);
         try encoder.submitAndIdleUntilDone(vc);
 
         vc.device.updateDescriptorSets(1, @ptrCast(&.{

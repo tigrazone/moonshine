@@ -238,8 +238,8 @@ pub const HdMoonshine = struct {
                 actual_size_instances.data.len = self.world.accel.instance_count;
                 var actual_size_world_to_instance = self.world.accel.world_to_instance_host;
                 actual_size_world_to_instance.data.len = self.world.accel.instance_count;
-                self.encoder.recordUploadBuffer(vk.AccelerationStructureInstanceKHR, self.world.accel.instances_device, actual_size_instances);
-                self.encoder.recordUploadBuffer(Mat3x4, self.world.accel.world_to_instance_device, actual_size_world_to_instance);
+                self.encoder.uploadBuffer(vk.AccelerationStructureInstanceKHR, self.world.accel.instances_device, actual_size_instances);
+                self.encoder.uploadBuffer(Mat3x4, self.world.accel.world_to_instance_device, actual_size_world_to_instance);
 
                 const update_barriers = [_]vk.BufferMemoryBarrier2 {
                     .{
