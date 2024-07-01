@@ -207,27 +207,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
             },
         },
     });
-    encoder.buffer.copyBufferToImage(equirectangular_image_host.handle, equirectangular_image.handle, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
-        .buffer_offset = 0,
-        .buffer_row_length = 0,
-        .buffer_image_height = 0,
-        .image_subresource = .{
-            .aspect_mask = .{ .color_bit = true },
-            .mip_level = 0,
-            .base_array_layer = 0,
-            .layer_count = 1,
-        },
-        .image_offset = .{
-            .x = 0,
-            .y = 0,
-            .z = 0,
-        },
-        .image_extent = .{
-            .width = equirectangular_extent.width,
-            .height = equirectangular_extent.height,
-            .depth = 1,
-        },
-    }));
+    encoder.copyBufferToImage(equirectangular_image_host.handle, equirectangular_image.handle, .transfer_dst_optimal, equirectangular_extent);
 
     encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,

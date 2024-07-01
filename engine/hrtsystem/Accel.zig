@@ -221,8 +221,8 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
             .buffer = buffer,
         });
     }
-
-    encoder.buffer.buildAccelerationStructuresKHR(@intCast(build_geometry_infos.len), build_geometry_infos.ptr, build_infos.ptr);
+    
+    encoder.buildAccelerationStructures(build_geometry_infos, build_infos);
 
     return scratch_buffers;
 }
@@ -307,17 +307,9 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
             }
         },
     });
-    encoder.buffer.clearColorImage(triangle_powers.handle, .transfer_dst_optimal, &vk.ClearColorValue { .float_32 = .{ 0, 0, 0, 0 }}, 1, &[1]vk.ImageSubresourceRange{
-        .{
-            .aspect_mask = .{ .color_bit = true },
-            .base_mip_level = 0,
-            .level_count = vk.REMAINING_MIP_LEVELS,
-            .base_array_layer = 0,
-            .layer_count = vk.REMAINING_ARRAY_LAYERS,
-        }
-    });
-    encoder.buffer.fillBuffer(emissive_triangle_count.handle, 0, @sizeOf(u32), 0);
-    encoder.buffer.fillBuffer(geometry_to_triangle_power_offset.handle, 0, @sizeOf(u32) * max_geometries, std.math.maxInt(u32));
+    encoder.clearColorImage(triangle_powers.handle, .transfer_dst_optimal, vk.ClearColorValue { .float_32 = .{ 0, 0, 0, 0 }});
+    encoder.fillBuffer(emissive_triangle_count.handle, 1, @as(u32, 0));
+    encoder.fillBuffer(geometry_to_triangle_power_offset.handle, max_geometries, @as(u32, std.math.maxInt(u32)));
     encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
@@ -449,8 +441,8 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     self.tlas_update_scratch_buffer.destroy(vc);
     self.tlas_update_scratch_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.update_scratch_size, .{ .shader_device_address_bit = true, .storage_buffer_bit = true });
     self.tlas_update_scratch_address = self.tlas_update_scratch_buffer.getAddress(vc);
-
-    encoder.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), &[_][*]const vk.AccelerationStructureBuildRangeInfoKHR{ @ptrCast(&vk.AccelerationStructureBuildRangeInfoKHR {
+    
+    encoder.buildAccelerationStructures(&.{ geometry_info }, &[_][*]const vk.AccelerationStructureBuildRangeInfoKHR{ @ptrCast(&vk.AccelerationStructureBuildRangeInfoKHR {
         .primitive_count = @intCast(self.instance_count),
         .first_vertex = 0,
         .primitive_offset = 0,

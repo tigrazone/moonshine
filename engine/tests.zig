@@ -74,28 +74,7 @@ const TestingContext = struct {
         scene.camera.sensors.items[0].recordPrepareForCopy(self.encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
 
         // copy output image to host-visible staging buffer
-        const copy = vk.BufferImageCopy {
-            .buffer_offset = 0,
-            .buffer_row_length = 0,
-            .buffer_image_height = 0,
-            .image_subresource = .{
-                .aspect_mask = .{ .color_bit = true },
-                .mip_level = 0,
-                .base_array_layer = 0,
-                .layer_count = 1,
-            },
-            .image_offset = .{
-                .x = 0,
-                .y = 0,
-                .z = 0,
-            },
-            .image_extent = .{
-                .width = scene.camera.sensors.items[0].extent.width,
-                .height = scene.camera.sensors.items[0].extent.height,
-                .depth = 1,
-            },
-        };
-        self.encoder.buffer.copyImageToBuffer(scene.camera.sensors.items[0].image.handle, .transfer_src_optimal, self.output_buffer.handle, 1, @ptrCast(&copy));
+        self.encoder.copyImageToBuffer(scene.camera.sensors.items[0].image.handle, .transfer_src_optimal, scene.camera.sensors.items[0].extent, self.output_buffer.handle);
 
         try self.encoder.submitAndIdleUntilDone(&self.vc);
     }

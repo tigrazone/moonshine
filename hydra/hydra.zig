@@ -283,7 +283,7 @@ pub const HdMoonshine = struct {
                     },
                 };
 
-                var geometry_info = vk.AccelerationStructureBuildGeometryInfoKHR {
+                const geometry_info = vk.AccelerationStructureBuildGeometryInfoKHR {
                     .type = .top_level_khr,
                     .flags = .{ .prefer_fast_trace_bit_khr = true, .allow_update_bit_khr = true },
                     .mode = .update_khr,
@@ -303,9 +303,7 @@ pub const HdMoonshine = struct {
                     .transform_offset = 0,
                 };
 
-                const build_info_ref = &build_info;
-
-                self.encoder.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), @ptrCast(&build_info_ref));
+                self.encoder.buildAccelerationStructures(&.{ geometry_info }, &.{ @ptrCast(&build_info) });
 
                 const ray_trace_barriers = [_]vk.MemoryBarrier2 {
                     .{
@@ -360,28 +358,7 @@ pub const HdMoonshine = struct {
         self.camera.sensors.items[sensor].recordPrepareForCopy(self.encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
 
         // copy rendered image to host-visible staging buffer
-        const copy = vk.BufferImageCopy {
-            .buffer_offset = 0,
-            .buffer_row_length = 0,
-            .buffer_image_height = 0,
-            .image_subresource = .{
-                .aspect_mask = .{ .color_bit = true },
-                .mip_level = 0,
-                .base_array_layer = 0,
-                .layer_count = 1,
-            },
-            .image_offset = .{
-                .x = 0,
-                .y = 0,
-                .z = 0,
-            },
-            .image_extent = .{
-                .width = self.camera.sensors.items[sensor].extent.width,
-                .height = self.camera.sensors.items[sensor].extent.height,
-                .depth = 1,
-            },
-        };
-        self.encoder.buffer.copyImageToBuffer(self.camera.sensors.items[sensor].image.handle, .transfer_src_optimal, self.output_buffers.items[sensor].handle, 1, @ptrCast(&copy));
+        self.encoder.copyImageToBuffer(self.camera.sensors.items[sensor].image.handle, .transfer_src_optimal, self.camera.sensors.items[sensor].extent, self.output_buffers.items[sensor].handle);
 
         self.encoder.submitAndIdleUntilDone(&self.vc) catch return false;
 
