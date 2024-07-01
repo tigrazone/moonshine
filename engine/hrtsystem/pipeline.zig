@@ -76,7 +76,7 @@ pub fn Pipeline(comptime options: struct {
         pub const SpecConstants = options.SpecConstants;
         pub const PushSetBindings = options.PushSetBindings;
 
-        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler) !Self {
+        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler) !Self {
             var bindings = try Bindings.create(vc, samplers, additional_descriptor_layouts);
             errdefer bindings.destroy(vc);
 
@@ -153,7 +153,7 @@ pub fn Pipeline(comptime options: struct {
         }
 
         // returns old handle which must be cleaned up
-        pub fn recreate(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, constants: SpecConstants) !vk.Pipeline {
+        pub fn recreate(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, constants: SpecConstants) !vk.Pipeline {
             const module = try core.pipeline.createShaderModule(vc, options.shader_path, allocator, .ray_tracing);
             defer vc.device.destroyShaderModule(module, null);
 
@@ -359,7 +359,7 @@ const ShaderBindingTable = struct {
 
     handle_size_aligned: u32,
 
-    fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, pipeline: vk.Pipeline, encoder: *Encoder, raygen_entry_count: u32, miss_entry_count: u32, hit_entry_count: u32, callable_entry_count: u32) !ShaderBindingTable {
+    fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, pipeline: vk.Pipeline, encoder: Encoder, raygen_entry_count: u32, miss_entry_count: u32, hit_entry_count: u32, callable_entry_count: u32) !ShaderBindingTable {
         const rt_properties = blk: {
             var rt_properties: vk.PhysicalDeviceRayTracingPipelinePropertiesKHR = undefined;
             rt_properties.s_type = .physical_device_ray_tracing_pipeline_properties_khr;
@@ -431,7 +431,7 @@ const ShaderBindingTable = struct {
     }
 
     // recreate with with same table entries but new pipeline
-    fn recreate(self: *ShaderBindingTable, vc: *const VulkanContext, vk_allocator: *VkAllocator, pipeline: vk.Pipeline, encoder: *Encoder) !void {
+    fn recreate(self: *ShaderBindingTable, vc: *const VulkanContext, vk_allocator: *VkAllocator, pipeline: vk.Pipeline, encoder: Encoder) !void {
         const rt_properties = blk: {
             var rt_properties: vk.PhysicalDeviceRayTracingPipelinePropertiesKHR = undefined;
             rt_properties.s_type = .physical_device_ray_tracing_pipeline_properties_khr;

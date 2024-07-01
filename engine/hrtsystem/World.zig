@@ -41,7 +41,7 @@ accel: Accel,
 const Self = @This();
 
 // TODO: consider just uploading all textures upfront rather than as part of this function
-fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, gltf: Gltf, gltf_material: Gltf.Material, textures: *TextureManager) !Material {
+fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, gltf: Gltf, gltf_material: Gltf.Material, textures: *TextureManager) !Material {
     // stuff that is in every material
     var material = blk: {
         var material: Material = undefined;
@@ -236,7 +236,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 // glTF doesn't correspond very well to the internal data structures here so this is very inefficient
 // also very inefficient because it's written very inefficiently, can remove a lot of copying, but that's a problem for another time
 // inspection bool specifies whether some buffers should be created with the `transfer_src_flag` for inspection
-pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, gltf: Gltf) !Self {
+pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, gltf: Gltf) !Self {
     var materials = blk: {
         var materials = try MaterialManager.createEmpty(vc);
         errdefer materials.destroy(vc, allocator);
@@ -381,7 +381,7 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
     };
 }
 
-pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) !Self {
+pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder) !Self {
     var materials = try MaterialManager.createEmpty(vc);
     errdefer materials.destroy(vc, allocator);
 

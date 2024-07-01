@@ -51,7 +51,7 @@ command_pool: vk.CommandPool,
 command_buffer: VulkanContext.CommandBuffer,
 ready_fence: vk.Fence,
 
-pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) !Self {
+pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder) !Self {
     const buffer = try vk_allocator.createHostBuffer(vc, ClickDataShader, 1, .{ .storage_buffer_bit = true });
     errdefer buffer.destroy(vc);
 

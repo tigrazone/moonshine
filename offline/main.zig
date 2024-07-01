@@ -98,12 +98,12 @@ pub fn main() !void {
 
     try logger.log("set up initial state");
 
-    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
+    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, encoder, config.in_filepath, config.skybox_filepath, config.extent);
     defer scene.destroy(&context, allocator);
 
     try logger.log("load world");
 
-    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, &encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
         .samples_per_run = 1,
         .max_bounces = 1024,
         .env_samples_per_bounce = 1,

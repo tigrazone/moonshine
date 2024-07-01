@@ -37,12 +37,12 @@ pub fn create(vc: *const VulkanContext, name: [*:0]const u8) !Self {
     };
 }
 
-pub fn destroy(self: *Self, vc: *const VulkanContext) void {
+pub fn destroy(self: Self, vc: *const VulkanContext) void {
     vc.device.destroyCommandPool(self.pool, null);
 }
 
 // start recording work
-pub fn begin(self: *Self) !void {
+pub fn begin(self: Self) !void {
     try self.buffer.beginCommandBuffer(&.{
         .flags = .{
             .one_time_submit_bit = true,
@@ -51,7 +51,7 @@ pub fn begin(self: *Self) !void {
 }
 
 // submit recorded work
-pub fn submit(self: *Self, vc: *const VulkanContext) !void {
+pub fn submit(self: Self, vc: *const VulkanContext) !void {
     try self.buffer.endCommandBuffer();
 
     const submit_info = vk.SubmitInfo2 {
@@ -69,18 +69,18 @@ pub fn submit(self: *Self, vc: *const VulkanContext) !void {
     try vc.queue.submit2(1, @ptrCast(&submit_info), .null_handle);
 }
 
-pub fn submitAndIdleUntilDone(self: *Self, vc: *const VulkanContext) !void {
+pub fn submitAndIdleUntilDone(self: Self, vc: *const VulkanContext) !void {
     try self.submit(vc);
     try self.idleUntilDone(vc);
 }
 
 // must be called at some point if you want a guarantee your work is actually done
-pub fn idleUntilDone(self: *Self, vc: *const VulkanContext) !void {
+pub fn idleUntilDone(self: Self, vc: *const VulkanContext) !void {
     try vc.queue.waitIdle();
     try vc.device.resetCommandPool(self.pool, .{});
 }
 
-pub fn uploadDataToImage(self: *Self, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(u8), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
+pub fn uploadDataToImage(self: Self, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(u8), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
     self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
@@ -123,13 +123,13 @@ pub fn uploadDataToImage(self: *Self, dst_image: vk.Image, src_data: VkAllocator
 }
 
 // buffers must have appropriate flags
-pub fn copyBuffer(self: *Self, vc: *const VulkanContext, dst: vk.Buffer, src: vk.Buffer, regions: []const vk.BufferCopy) void {
+pub fn copyBuffer(self: Self, vc: *const VulkanContext, dst: vk.Buffer, src: vk.Buffer, regions: []const vk.BufferCopy) void {
     vc.device.cmdCopyBuffer(self.buffer, src, dst, @intCast(regions.len), regions.ptr);
 }
 
 // buffers must have appropriate flags
 // uploads whole host buffer to gpu buffer
-pub fn uploadBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: VkAllocator.HostBuffer(T)) void {
+pub fn uploadBuffer(self: Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: VkAllocator.HostBuffer(T)) void {
     const region = vk.BufferCopy {
         .src_offset = 0,
         .dst_offset = 0,
@@ -139,18 +139,18 @@ pub fn uploadBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer
     self.buffer.copyBuffer(src.handle, dst.handle, 1, @ptrCast(&region));
 }
 
-pub fn updateBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: []const T, offset: vk.DeviceSize) void {
+pub fn updateBuffer(self: Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: []const T, offset: vk.DeviceSize) void {
     const bytes = std.mem.sliceAsBytes(src);
     self.buffer.updateBuffer(dst.handle, offset * @sizeOf(T), bytes.len, src.ptr);
 }
 
 // size in number of data to duplicate, not bytes
-pub fn fillBuffer(self: *Self, dst: vk.Buffer, size: vk.DeviceSize, data: anytype) void {
+pub fn fillBuffer(self: Self, dst: vk.Buffer, size: vk.DeviceSize, data: anytype) void {
     if (@sizeOf(@TypeOf(data)) != 4) @compileError("fill buffer requires data to be 4 bytes");
     self.buffer.fillBuffer(dst, 0, size * 4, @bitCast(data));
 }
 
-pub fn clearColorImage(self: *Self, dst: vk.Image, layout: vk.ImageLayout, color: vk.ClearColorValue) void {
+pub fn clearColorImage(self: Self, dst: vk.Image, layout: vk.ImageLayout, color: vk.ClearColorValue) void {
     self.buffer.clearColorImage(dst, layout, &color, 1, &[1]vk.ImageSubresourceRange{
         .{
             .aspect_mask = .{ .color_bit = true },
@@ -162,12 +162,12 @@ pub fn clearColorImage(self: *Self, dst: vk.Image, layout: vk.ImageLayout, color
     });
 }
 
-pub fn buildAccelerationStructures(self: *Self, infos: []const vk.AccelerationStructureBuildGeometryInfoKHR, build_range_infos: []const [*]const vk.AccelerationStructureBuildRangeInfoKHR) void {
+pub fn buildAccelerationStructures(self: Self, infos: []const vk.AccelerationStructureBuildGeometryInfoKHR, build_range_infos: []const [*]const vk.AccelerationStructureBuildRangeInfoKHR) void {
     std.debug.assert(infos.len == build_range_infos.len);
     self.buffer.buildAccelerationStructuresKHR(@intCast(infos.len), infos.ptr, build_range_infos.ptr);
 }
 
-pub fn copyImageToBuffer(self: *Self, src: vk.Image, layout: vk.ImageLayout, extent: vk.Extent2D, dst: vk.Buffer) void {
+pub fn copyImageToBuffer(self: Self, src: vk.Image, layout: vk.ImageLayout, extent: vk.Extent2D, dst: vk.Buffer) void {
     const copy = vk.BufferImageCopy {
         .buffer_offset = 0,
         .buffer_row_length = 0,
@@ -192,7 +192,7 @@ pub fn copyImageToBuffer(self: *Self, src: vk.Image, layout: vk.ImageLayout, ext
     self.buffer.copyImageToBuffer(src, layout, dst, 1, @ptrCast(&copy));
 }
 
-pub fn copyBufferToImage(self: *Self, src: vk.Buffer, dst: vk.Image, layout: vk.ImageLayout, extent: vk.Extent2D) void {
+pub fn copyBufferToImage(self: Self, src: vk.Buffer, dst: vk.Image, layout: vk.ImageLayout, extent: vk.Extent2D) void {
     const copy = vk.BufferImageCopy {
         .buffer_offset = 0,
         .buffer_row_length = 0,
