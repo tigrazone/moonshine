@@ -129,8 +129,8 @@ pub fn uploadDataToImage(self: Self, dst_image: vk.Image, src_data: VkAllocator.
 }
 
 // buffers must have appropriate flags
-pub fn copyBuffer(self: Self, dst: vk.Buffer, src: vk.Buffer, regions: []const vk.BufferCopy) void {
-    self.buffer.copyBuffer(src.handle, dst.handle, @intCast(regions.len), regions.ptr);
+pub fn copyBuffer(self: Self, src: vk.Buffer, dst: vk.Buffer, regions: []const vk.BufferCopy) void {
+    self.buffer.copyBuffer(src, dst, @intCast(regions.len), regions.ptr);
 }
 
 // buffers must have appropriate flags

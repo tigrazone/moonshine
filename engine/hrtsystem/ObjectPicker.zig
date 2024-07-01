@@ -47,29 +47,18 @@ pub const ClickedObject = struct {
 buffer: VkAllocator.HostBuffer(ClickDataShader),
 pipeline: Pipeline,
 
-command_pool: vk.CommandPool,
-command_buffer: VulkanContext.CommandBuffer,
+encoder: Encoder,
 ready_fence: vk.Fence,
 
-pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder) !Self {
+pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, transfer_encoder: Encoder) !Self {
     const buffer = try vk_allocator.createHostBuffer(vc, ClickDataShader, 1, .{ .storage_buffer_bit = true });
     errdefer buffer.destroy(vc);
 
-    var pipeline = try Pipeline.create(vc, vk_allocator, allocator, encoder, .{}, .{}, .{});
+    var pipeline = try Pipeline.create(vc, vk_allocator, allocator, transfer_encoder, .{}, .{}, .{});
     errdefer pipeline.destroy(vc);
 
-    const command_pool = try vc.device.createCommandPool(&.{
-        .queue_family_index = vc.physical_device.queue_family_index,
-        .flags = .{ .transient_bit = true },
-    }, null);
-    errdefer vc.device.destroyCommandPool(command_pool, null);
-
-    var command_buffer: vk.CommandBuffer = undefined;
-    try vc.device.allocateCommandBuffers(&.{
-        .level = vk.CommandBufferLevel.primary,
-        .command_pool = command_pool,
-        .command_buffer_count = 1,
-    }, @ptrCast(&command_buffer));
+    const encoder = try Encoder.create(vc, "object picker");
+    errdefer encoder.destroy(vc);
 
     const ready_fence = try vc.device.createFence(&.{
         .flags = .{},
@@ -80,49 +69,34 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         .buffer = buffer,
         .pipeline = pipeline,
 
-        .command_pool = command_pool,
-        .command_buffer = VulkanContext.CommandBuffer.init(command_buffer, vc.device_dispatch),
+        .encoder = encoder,
         .ready_fence = ready_fence,
     };
 }
 
 pub fn getClickedObject(self: *Self, vc: *const VulkanContext, normalized_coords: F32x2, camera: Camera, accel: vk.AccelerationStructureKHR, sensor: Sensor) !?ClickedObject {
     // begin
-    try vc.device.beginCommandBuffer(self.command_buffer.handle, &.{ .flags = .{} });
+    try self.encoder.begin();
 
     // bind pipeline + sets
-    self.pipeline.recordBindPipeline(self.command_buffer);
-    self.pipeline.recordPushDescriptors(self.command_buffer, Pipeline.PushSetBindings {
+    self.pipeline.recordBindPipeline(self.encoder.buffer);
+    self.pipeline.recordPushDescriptors(self.encoder.buffer, Pipeline.PushSetBindings {
         .tlas = accel,
         .output_image = .{ .view = sensor.image.view },
         .click_data = self.buffer.handle,
     });
 
-    self.pipeline.recordPushConstants(self.command_buffer, .{ .lens = camera.lenses.items[0], .click_position = normalized_coords });
+    self.pipeline.recordPushConstants(self.encoder.buffer, .{ .lens = camera.lenses.items[0], .click_position = normalized_coords });
 
     // trace rays
-    self.pipeline.recordTraceRays(self.command_buffer, vk.Extent2D { .width = 1, .height = 1 });
+    self.pipeline.recordTraceRays(self.encoder.buffer, vk.Extent2D { .width = 1, .height = 1 });
 
     // end
-    try vc.device.endCommandBuffer(self.command_buffer.handle);
+    try self.encoder.submit(vc.queue, .{ .fence = self.ready_fence });
 
-    const submit_info = vk.SubmitInfo2 {
-        .flags = .{},
-        .command_buffer_info_count = 1,
-        .p_command_buffer_infos = @ptrCast(&vk.CommandBufferSubmitInfo {
-            .command_buffer = self.command_buffer.handle,
-            .device_mask = 0,
-        }),
-        .wait_semaphore_info_count = 0,
-        .p_wait_semaphore_infos = undefined,
-        .signal_semaphore_info_count = 0,
-        .p_signal_semaphore_infos = undefined,
-    };
-
-    try vc.queue.submit2(1, @ptrCast(&submit_info), self.ready_fence);
     _ = try vc.device.waitForFences(1, @ptrCast(&self.ready_fence), vk.TRUE, std.math.maxInt(u64));
     try vc.device.resetFences(1, @ptrCast(&self.ready_fence));
-    try vc.device.resetCommandPool(self.command_pool, .{});
+    try vc.device.resetCommandPool(self.encoder.pool, .{});
 
     return self.buffer.data[0].toClickedObject();
 }
@@ -130,6 +104,6 @@ pub fn getClickedObject(self: *Self, vc: *const VulkanContext, normalized_coords
 pub fn destroy(self: *Self, vc: *const VulkanContext) void {
     self.buffer.destroy(vc);
     self.pipeline.destroy(vc);
-    vc.device.destroyCommandPool(self.command_pool, null);
+    self.encoder.destroy(vc);
     vc.device.destroyFence(self.ready_fence, null);
 }

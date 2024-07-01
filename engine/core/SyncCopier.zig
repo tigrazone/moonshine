@@ -14,8 +14,7 @@ const vk = @import("vulkan");
 
 buffer: VkAllocator.HostBuffer(u8),
 
-command_pool: vk.CommandPool,
-command_buffer: vk.CommandBuffer,
+encoder: Encoder,
 ready_fence: vk.Fence,
 
 const Self = @This();
@@ -24,26 +23,15 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, max_bytes: u
     const buffer = try vk_allocator.createHostBuffer(vc, u8, max_bytes, .{ .transfer_dst_bit = true });
     try vk_helpers.setDebugName(vc, buffer.handle, "sync copier");
 
-    const command_pool = try vc.device.createCommandPool(&.{
-        .queue_family_index = vc.physical_device.queue_family_index,
-        .flags = .{ .transient_bit = true },
-    }, null);
-    errdefer vc.device.destroyCommandPool(command_pool, null);
-
-    var command_buffer: vk.CommandBuffer = undefined;
-    try vc.device.allocateCommandBuffers(&.{
-        .level = vk.CommandBufferLevel.primary,
-        .command_pool = command_pool,
-        .command_buffer_count = 1,
-    }, @ptrCast(&command_buffer));
+    const encoder = try Encoder.create(vc, "sync copier");
+    errdefer encoder.destroy(vc);
 
     const ready_fence = try vc.device.createFence(&.{}, null);
 
     return Self {
         .buffer = buffer,
 
-        .command_pool = command_pool,
-        .command_buffer = command_buffer,
+        .encoder = encoder,
         .ready_fence = ready_fence,
     };
 }
@@ -51,24 +39,19 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, max_bytes: u
 pub fn copyBufferItem(self: *Self, vc: *const VulkanContext, comptime BufferInner: type, buffer: VkAllocator.DeviceBuffer(BufferInner), idx: vk.DeviceSize) !BufferInner {
     std.debug.assert(@sizeOf(BufferInner) <= self.buffer.data.len);
 
-    try vc.device.beginCommandBuffer(self.command_buffer, &.{});
-    vc.device.cmdCopyBuffer(self.command_buffer, buffer.handle, self.buffer.handle, 1, @ptrCast(&vk.BufferCopy {
-        .src_offset = @sizeOf(BufferInner) * idx,
-        .dst_offset = 0,
-        .size = @sizeOf(BufferInner),
-    }));
-    try vc.device.endCommandBuffer(self.command_buffer);
+    try self.encoder.begin();
+    self.encoder.copyBuffer(buffer.handle, self.buffer.handle, &[_]vk.BufferCopy {
+        .{
+            .src_offset = @sizeOf(BufferInner) * idx,
+            .dst_offset = 0,
+            .size = @sizeOf(BufferInner),
+        }
+    });
+    try self.encoder.submit(vc.queue, .{ .fence = self.ready_fence });
 
-    try vc.queue.submit2(1, @ptrCast(&vk.SubmitInfo2 {
-        .command_buffer_info_count = 1,
-        .p_command_buffer_infos = @ptrCast(&vk.CommandBufferSubmitInfo {
-            .command_buffer = self.command_buffer,
-            .device_mask = 0,
-        }),
-    }), self.ready_fence);
     _ = try vc.device.waitForFences(1, @ptrCast(&self.ready_fence), vk.TRUE, std.math.maxInt(u64));
     try vc.device.resetFences(1, @ptrCast(&self.ready_fence));
-    try vc.device.resetCommandPool(self.command_pool, .{});
+    try vc.device.resetCommandPool(self.encoder.pool, .{});
 
     return @as(*BufferInner, @ptrCast(@alignCast(self.buffer.data.ptr))).*;
 }
@@ -76,8 +59,8 @@ pub fn copyBufferItem(self: *Self, vc: *const VulkanContext, comptime BufferInne
 pub fn copyImagePixel(self: *Self, vc: *const VulkanContext, comptime PixelType: type, src_image: vk.Image, src_layout: vk.ImageLayout, offset: vk.Offset3D) !PixelType {
     std.debug.assert(@sizeOf(PixelType) <= self.buffer.data.len);
 
-    try vc.device.beginCommandBuffer(self.command_buffer, &.{});
-    vc.device.cmdCopyImageToBuffer(self.command_buffer, src_image, src_layout, self.buffer.handle, 1, @ptrCast(&vk.BufferImageCopy {
+    try self.encoder.begin();
+    self.encoder.buffer.copyImageToBuffer(src_image, src_layout, self.buffer.handle, 1, @ptrCast(&vk.BufferImageCopy {
         .buffer_offset = 0,
         .buffer_row_length = 0,
         .buffer_image_height = 0,
@@ -94,24 +77,17 @@ pub fn copyImagePixel(self: *Self, vc: *const VulkanContext, comptime PixelType:
             .depth = 1,
         }
     }));
-    try vc.device.endCommandBuffer(self.command_buffer);
+    try self.encoder.submit(vc.queue, .{ .fence = self.ready_fence });
 
-    try vc.queue.submit2(1, @ptrCast(&vk.SubmitInfo2 {
-        .command_buffer_info_count = 1,
-        .p_command_buffer_infos = @ptrCast(&vk.CommandBufferSubmitInfo{
-            .command_buffer = self.command_buffer,
-            .device_mask = 0,
-        }),
-    }), self.ready_fence);
     _ = try vc.device.waitForFences(1, @ptrCast(&self.ready_fence), vk.TRUE, std.math.maxInt(u64));
     try vc.device.resetFences(1, @ptrCast(&self.ready_fence));
-    try vc.device.resetCommandPool(self.command_pool, .{});
+    try vc.device.resetCommandPool(self.encoder.pool, .{});
 
     return @as(*PixelType, @ptrCast(@alignCast(self.buffer.data.ptr))).*;
 }
 
 pub fn destroy(self: *Self, vc: *const VulkanContext) void {
     self.buffer.destroy(vc);
-    vc.device.destroyCommandPool(self.command_pool, null);
+    self.encoder.destroy(vc);
     vc.device.destroyFence(self.ready_fence, null);
 }
