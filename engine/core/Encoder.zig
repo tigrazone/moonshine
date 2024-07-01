@@ -80,124 +80,7 @@ pub fn idleUntilDone(self: *Self, vc: *const VulkanContext) !void {
     try vc.device.resetCommandPool(self.pool, .{});
 }
 
-pub fn copyAccelStructs(self: *Self, vc: *const VulkanContext, infos: []const vk.CopyAccelerationStructureInfoKHR) !void {
-    try self.startRecording(vc);
-    for (infos) |info| {
-        vc.device.cmdCopyAccelerationStructureKHR(self.buffer, &info);
-    }
-    try self.submitAndIdleUntilDone(vc);
-}
-
-pub fn createAccelStructs(self: *Self, vc: *const VulkanContext, geometry_infos: []const vk.AccelerationStructureBuildGeometryInfoKHR, build_infos: []const [*]const vk.AccelerationStructureBuildRangeInfoKHR) !void {
-    std.debug.assert(geometry_infos.len == build_infos.len);
-    const size: u32 = @intCast(geometry_infos.len);
-    try self.startRecording(vc);
-    vc.device.cmdBuildAccelerationStructuresKHR(self.buffer, size, geometry_infos.ptr, build_infos.ptr);
-    try self.submitAndIdleUntilDone(vc);
-}
-
-pub fn createAccelStructsAndGetCompactedSizes(self: *Self, vc: *const VulkanContext, geometry_infos: []const vk.AccelerationStructureBuildGeometryInfoKHR, build_infos: []const [*]const vk.AccelerationStructureBuildRangeInfoKHR, handles: []const vk.AccelerationStructureKHR, compactedSizes: []vk.DeviceSize) !void {
-    std.debug.assert(geometry_infos.len == build_infos.len);
-    std.debug.assert(build_infos.len == handles.len);
-    const size: u32 = @intCast(geometry_infos.len);
-
-    const query_pool = try vc.device.createQueryPool(&.{
-        .query_type = .acceleration_structure_compacted_size_khr,
-        .query_count = size,
-    }, null);
-    defer vc.device.destroyQueryPool(query_pool, null);
-
-    vc.device.resetQueryPool(query_pool, 0, size);
-
-    try self.startRecording(vc);
-
-    vc.device.cmdBuildAccelerationStructuresKHR(self.buffer, size, geometry_infos.ptr, build_infos.ptr);
-
-    const barriers = [_]vk.MemoryBarrier2 {
-        .{
-            .src_stage_mask = .{ .acceleration_structure_build_bit_khr = true },
-            .src_access_mask = .{ .acceleration_structure_write_bit_khr = true },
-            .dst_stage_mask = .{ .acceleration_structure_build_bit_khr = true },
-            .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true },
-        }
-    };
-    vc.device.cmdPipelineBarrier2(self.buffer, &vk.DependencyInfo {
-        .memory_barrier_count = barriers.len,
-        .p_memory_barriers = &barriers,
-    });
-
-    vc.device.cmdWriteAccelerationStructuresPropertiesKHR(self.buffer, size, handles.ptr, .acceleration_structure_compacted_size_khr, query_pool, 0);
-
-    try self.submitAndIdleUntilDone(vc);
-
-    _ = try vc.device.getQueryPoolResults(query_pool, 0, size, size * @sizeOf(vk.DeviceSize), compactedSizes.ptr, @sizeOf(vk.DeviceSize), .{.@"64_bit" = true, .wait_bit = true });
-}
-
-pub fn copyBufferToImage(self: *Self, vc: *const VulkanContext, src: vk.Buffer, dst: vk.Image, width: u32, height: u32, layer_count: u32) !void {
-    try self.startRecording(vc);
-
-    const copy = vk.BufferImageCopy {
-        .buffer_offset = 0,
-        .buffer_row_length = width,
-        .buffer_image_height = height,
-        .image_subresource = .{
-            .aspect_mask = .{ .color_bit = true },
-            .mip_level = 0,
-            .base_array_layer = 0,
-            .layer_count = layer_count,
-        },
-        .image_offset = .{
-            .x = 0,
-            .y = 0,
-            .z = 0,
-        },
-        .image_extent = .{
-            .width = width,
-            .height = height,
-            .depth = 1,
-        },
-    };
-    vc.device.cmdCopyBufferToImage(self.buffer, src, dst, .transfer_dst_optimal, 1, @ptrCast(&copy));
-    try self.submitAndIdleUntilDone(vc);
-}
-
-pub fn transitionImageLayout(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator, images: []vk.Image, src_layout: vk.ImageLayout, dst_layout: vk.ImageLayout) !void {
-    try self.startRecording(vc);
-
-    const barriers = try allocator.alloc(vk.ImageMemoryBarrier2, images.len);
-    defer allocator.free(barriers);
-
-    for (images, barriers) |image, *barrier| {
-        barrier.* = .{
-            .old_layout = src_layout,
-            .new_layout = dst_layout,
-            .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-            .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-            .image = image,
-            .subresource_range = .{
-                .aspect_mask = .{ .color_bit = true },
-                .base_mip_level = 0,
-                .level_count = 1,
-                .base_array_layer = 0,
-                .layer_count = vk.REMAINING_ARRAY_LAYERS,
-            },
-        };
-    }
-
-    vc.device.cmdPipelineBarrier2(self.buffer, &vk.DependencyInfo {
-        .image_memory_barrier_count = @intCast(barriers.len),
-        .p_image_memory_barriers = barriers.ptr,
-    });
-
-    try self.submitAndIdleUntilDone(vc);
-}
-
-pub fn uploadDataToImage(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, dst_image: vk.Image, src_data: []const u8, extent: vk.Extent2D, dst_layout: vk.ImageLayout) !void {
-    const staging_buffer = try vk_allocator.createHostBuffer(vc, u8, @intCast(src_data.len), .{ .transfer_src_bit = true });
-    defer staging_buffer.destroy(vc);
-    @memcpy(staging_buffer.data, src_data);
-
-    try self.startRecording(vc);
+pub fn recordUploadDataToImage(self: *Self, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(u8), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
     self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
@@ -217,7 +100,7 @@ pub fn uploadDataToImage(self: *Self, vc: *const VulkanContext, vk_allocator: *V
             },
         }),
     });
-    self.buffer.copyBufferToImage(staging_buffer.handle, dst_image, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
+    self.buffer.copyBufferToImage(src_data.handle, dst_image, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
         .buffer_offset = 0,
         .buffer_row_length = 0,
         .buffer_image_height = 0,
@@ -257,7 +140,6 @@ pub fn uploadDataToImage(self: *Self, vc: *const VulkanContext, vk_allocator: *V
             },
         }),
     });
-    try self.submitAndIdleUntilDone(vc);
 }
 
 // buffers must have appropriate flags
@@ -280,15 +162,4 @@ pub fn recordUploadBuffer(self: *Self, comptime T: type, dst: VkAllocator.Device
 pub fn recordUpdateBuffer(self: *Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: []const T, offset: vk.DeviceSize) void {
     const bytes = std.mem.sliceAsBytes(src);
     self.buffer.updateBuffer(dst.handle, offset * @sizeOf(T), bytes.len, src.ptr);
-}
-
-pub fn uploadData(self: *Self, comptime T: type, vc: *const VulkanContext, vk_allocator: *VkAllocator, dst: VkAllocator.DeviceBuffer(T), src: []const T) !void {
-    const staging_buffer = try vk_allocator.createHostBuffer(vc, T, src.len, .{ .transfer_src_bit = true });
-    defer staging_buffer.destroy(vc);
-
-    @memcpy(staging_buffer.data, src);
-
-    try self.startRecording(vc);
-    self.recordUploadBuffer(T, vc, dst, staging_buffer);
-    try self.submitAndIdleUntilDone(vc);
 }

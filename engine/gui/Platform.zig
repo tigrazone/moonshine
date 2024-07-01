@@ -217,7 +217,13 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
         const image = try Image.create(vc, vk_allocator, tex_data[1], .{ .transfer_dst_bit = true, .sampled_bit = true }, .r8_unorm, false, "imgui font");
         errdefer image.destroy(vc);
 
-        try encoder.uploadDataToImage(vc, vk_allocator, image.handle, tex_data[0][0 .. tex_data[1].width * tex_data[1].height * @sizeOf(u8)], tex_data[1], .shader_read_only_optimal);
+        const img_data = tex_data[0][0 .. tex_data[1].width * tex_data[1].height * @sizeOf(u8)];
+        const staging_buffer = try vk_allocator.createHostBuffer(vc, u8, @intCast(img_data.len), .{ .transfer_src_bit = true });
+        defer staging_buffer.destroy(vc);
+        @memcpy(staging_buffer.data, img_data);
+        try encoder.startRecording(vc);
+        encoder.recordUploadDataToImage(image.handle, staging_buffer, tex_data[1], .shader_read_only_optimal);
+        try encoder.submitAndIdleUntilDone(vc);
         break :blk image;
         //     io.Fonts->SetTexID((ImTextureID)bd->FontDescriptorSet); TODO required?
     };

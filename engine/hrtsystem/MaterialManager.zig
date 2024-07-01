@@ -312,7 +312,12 @@ pub const TextureManager = struct {
         const image = try Image.create(vc, vk_allocator, extent, .{ .transfer_dst_bit = true, .sampled_bit = true }, format, false, name);
         try self.data.append(allocator, image);
 
-        try encoder.uploadDataToImage(vc, vk_allocator, image.handle, bytes, extent, .shader_read_only_optimal);
+        const staging_buffer = try vk_allocator.createHostBuffer(vc, u8, @intCast(bytes.len), .{ .transfer_src_bit = true });
+        defer staging_buffer.destroy(vc);
+        @memcpy(staging_buffer.data, bytes);
+        try encoder.startRecording(vc);
+        encoder.recordUploadDataToImage(image.handle, staging_buffer, extent, .shader_read_only_optimal);
+        try encoder.submitAndIdleUntilDone(vc);
 
         vc.device.updateDescriptorSets(1, @ptrCast(&.{
             vk.WriteDescriptorSet {
