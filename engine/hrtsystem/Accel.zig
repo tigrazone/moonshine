@@ -285,7 +285,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
     const world_to_instance_host = try vk_allocator.createHostBuffer(vc, Mat3x4, max_instances, .{ .transfer_src_bit = true });
     errdefer world_to_instance_host.destroy(vc);
 
-    try encoder.startRecording(vc);
+    try encoder.begin();
     encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
@@ -365,7 +365,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     std.debug.assert(self.geometry_count + instance.geometries.len <= max_geometries);
     std.debug.assert(self.instance_count < max_instances);
 
-    try encoder.startRecording(vc);
+    try encoder.begin();
     const scratch_buffers = try makeBlases(vc, vk_allocator, allocator, encoder, mesh_manager, &.{ instance.geometries }, &self.blases);
     defer allocator.free(scratch_buffers);
     defer for (scratch_buffers) |scratch_buffer| scratch_buffer.destroy(vc);

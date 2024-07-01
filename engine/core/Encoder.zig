@@ -42,8 +42,8 @@ pub fn destroy(self: *Self, vc: *const VulkanContext) void {
 }
 
 // start recording work
-pub fn startRecording(self: *Self, vc: *const VulkanContext) !void {
-    try vc.device.beginCommandBuffer(self.buffer.handle, &.{
+pub fn begin(self: *Self) !void {
+    try self.buffer.beginCommandBuffer(&.{
         .flags = .{
             .one_time_submit_bit = true,
         },
@@ -52,7 +52,7 @@ pub fn startRecording(self: *Self, vc: *const VulkanContext) !void {
 
 // submit recorded work
 pub fn submit(self: *Self, vc: *const VulkanContext) !void {
-    try vc.device.endCommandBuffer(self.buffer.handle);
+    try self.buffer.endCommandBuffer();
 
     const submit_info = vk.SubmitInfo2 {
         .command_buffer_info_count = 1,

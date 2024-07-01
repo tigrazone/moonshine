@@ -54,7 +54,7 @@ const TestingContext = struct {
     }
 
     fn renderToOutput(self: *TestingContext, pipeline: *const Pipeline, scene: *const Scene) !void {
-        try self.encoder.startRecording(&self.vc);
+        try self.encoder.begin();
 
         // prepare our stuff
         scene.camera.sensors.items[0].recordPrepareForCapture(self.encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});

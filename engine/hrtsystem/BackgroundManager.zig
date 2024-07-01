@@ -151,7 +151,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
         }, null));
     }
 
-    try encoder.startRecording(vc);
+    try encoder.begin();
 
     // copy equirectangular image to device
     encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {

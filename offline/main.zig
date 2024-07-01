@@ -118,7 +118,7 @@ pub fn main() !void {
 
     // record command buffer
     {
-        try encoder.startRecording(&context);
+        try encoder.begin();
 
         // prepare our stuff
         scene.camera.sensors.items[0].recordPrepareForCapture(encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});

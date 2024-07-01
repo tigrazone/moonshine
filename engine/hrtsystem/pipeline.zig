@@ -402,7 +402,7 @@ const ShaderBindingTable = struct {
         const handle = try vk_allocator.createDeviceBuffer(vc, allocator, u8, sbt_size, .{ .shader_binding_table_bit_khr = true, .transfer_dst_bit = true, .shader_device_address_bit = true });
         errdefer handle.destroy(vc);
 
-        try encoder.startRecording(vc);
+        try encoder.begin();
         encoder.recordUploadBuffer(u8, handle, sbt);
         try encoder.submit(vc);
 
@@ -471,7 +471,7 @@ const ShaderBindingTable = struct {
         std.mem.copyBackwards(u8, sbt.data[hit_index..hit_index + hit_size], sbt.data[raygen_size + miss_size..raygen_size + miss_size + hit_size]);
         std.mem.copyBackwards(u8, sbt.data[miss_index..miss_index + miss_size], sbt.data[raygen_size..raygen_size + miss_size]);
 
-        try encoder.startRecording(vc);
+        try encoder.begin();
         encoder.recordUploadBuffer(u8, self.handle, sbt);
         try encoder.submitAndIdleUntilDone(vc);
     }

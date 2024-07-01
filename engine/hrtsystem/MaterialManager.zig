@@ -140,7 +140,7 @@ pub fn createEmpty(vc: *const VulkanContext) !Self {
 pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, info: MaterialInfo) !Handle {
     std.debug.assert(self.material_count < max_materials);
 
-    try encoder.startRecording(vc);
+    try encoder.begin();
     inline for (@typeInfo(MaterialVariant).Union.fields, 0..) |field, field_idx| {
         if (@as(MaterialType, @enumFromInt(field_idx)) == std.meta.activeTag(info.variant)) {
             if (@sizeOf(field.type) != 0) {
@@ -315,7 +315,7 @@ pub const TextureManager = struct {
         const staging_buffer = try vk_allocator.createHostBuffer(vc, u8, @intCast(bytes.len), .{ .transfer_src_bit = true });
         defer staging_buffer.destroy(vc);
         @memcpy(staging_buffer.data, bytes);
-        try encoder.startRecording(vc);
+        try encoder.begin();
         encoder.recordUploadDataToImage(image.handle, staging_buffer, extent, .shader_read_only_optimal);
         try encoder.submitAndIdleUntilDone(vc);
 

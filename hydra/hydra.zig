@@ -156,7 +156,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineRender(self: *HdMoonshine, sensor: Camera.SensorHandle, lens: Camera.LensHandle) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        self.encoder.startRecording(&self.vc) catch return false;
+        self.encoder.begin() catch return false;
 
         // update instance transforms
         {

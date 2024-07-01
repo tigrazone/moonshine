@@ -75,7 +75,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
     var index_staging_buffer = VkAllocator.HostBuffer(U32x3) {};
     defer index_staging_buffer.destroy(vc);
 
-    try encoder.startRecording(vc);
+    try encoder.begin();
     const position_buffer = blk: {
         position_staging_buffer = try vk_allocator.createHostBuffer(vc, F32x3, host_mesh.positions.len, .{ .transfer_src_bit = true });
         @memcpy(position_staging_buffer.data, host_mesh.positions);
