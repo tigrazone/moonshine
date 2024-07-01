@@ -6,7 +6,7 @@
 const core = @import("core.zig");
 const VulkanContext = core.VulkanContext;
 const VkAllocator = core.Allocator;
-const Commands = core.Commands;
+const Encoder = core.Encoder;
 const vk_helpers = core.vk_helpers;
 
 const std = @import("std");

@@ -6,7 +6,7 @@ const build_options = @import("build_options");
 const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
-const Commands = core.Commands;
+const Encoder = core.Encoder;
 const VkAllocator = core.Allocator;
 const descriptor = core.descriptor;
 
@@ -76,7 +76,7 @@ pub fn Pipeline(comptime options: struct {
         pub const SpecConstants = options.SpecConstants;
         pub const PushSetBindings = options.PushSetBindings;
 
-        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler) !Self {
+        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler) !Self {
             var bindings = try Bindings.create(vc, samplers, additional_descriptor_layouts);
             errdefer bindings.destroy(vc);
 
@@ -141,7 +141,7 @@ pub fn Pipeline(comptime options: struct {
             try core.vk_helpers.setDebugName(vc, handle, options.shader_path);
 
             const shader_info = comptime ShaderInfo.find(options.stages);
-            const sbt = try ShaderBindingTable.create(vc, vk_allocator, allocator, handle, cmd, shader_info.raygen_count, shader_info.miss_count, shader_info.hit_count, shader_info.callable_count);
+            const sbt = try ShaderBindingTable.create(vc, vk_allocator, allocator, handle, encoder, shader_info.raygen_count, shader_info.miss_count, shader_info.hit_count, shader_info.callable_count);
             errdefer sbt.destroy(vc);
 
             return Self {
@@ -153,7 +153,7 @@ pub fn Pipeline(comptime options: struct {
         }
 
         // returns old handle which must be cleaned up
-        pub fn recreate(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, cmd: *Commands, constants: SpecConstants) !vk.Pipeline {
+        pub fn recreate(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, constants: SpecConstants) !vk.Pipeline {
             const module = try core.pipeline.createShaderModule(vc, options.shader_path, allocator, .ray_tracing);
             defer vc.device.destroyShaderModule(module, null);
 
@@ -214,7 +214,7 @@ pub fn Pipeline(comptime options: struct {
             errdefer vc.device.destroyPipeline(self.handle, null);
             try core.vk_helpers.setDebugName(vc, self.handle, options.shader_path);
 
-            try self.sbt.recreate(vc, vk_allocator, self.handle, cmd);
+            try self.sbt.recreate(vc, vk_allocator, self.handle, encoder);
 
             return old_handle;
         }
@@ -343,7 +343,7 @@ const ShaderInfo = struct {
     }
 };
 
-// TODO: maybe use vkCmdUploadBuffer here
+// TODO: maybe use vkencoderUploadBuffer here
 const ShaderBindingTable = struct {
     handle: VkAllocator.DeviceBuffer(u8),
 
@@ -359,7 +359,7 @@ const ShaderBindingTable = struct {
 
     handle_size_aligned: u32,
 
-    fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, pipeline: vk.Pipeline, cmd: *Commands, raygen_entry_count: u32, miss_entry_count: u32, hit_entry_count: u32, callable_entry_count: u32) !ShaderBindingTable {
+    fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, pipeline: vk.Pipeline, encoder: *Encoder, raygen_entry_count: u32, miss_entry_count: u32, hit_entry_count: u32, callable_entry_count: u32) !ShaderBindingTable {
         const rt_properties = blk: {
             var rt_properties: vk.PhysicalDeviceRayTracingPipelinePropertiesKHR = undefined;
             rt_properties.s_type = .physical_device_ray_tracing_pipeline_properties_khr;
@@ -402,16 +402,16 @@ const ShaderBindingTable = struct {
         const handle = try vk_allocator.createDeviceBuffer(vc, allocator, u8, sbt_size, .{ .shader_binding_table_bit_khr = true, .transfer_dst_bit = true, .shader_device_address_bit = true });
         errdefer handle.destroy(vc);
 
-        try cmd.startRecording(vc);
-        cmd.recordUploadBuffer(u8, handle, sbt);
-        try cmd.submit(vc);
+        try encoder.startRecording(vc);
+        encoder.recordUploadBuffer(u8, handle, sbt);
+        try encoder.submit(vc);
 
         const raygen_address = handle.getAddress(vc);
         const miss_address = raygen_address + miss_index;
         const hit_address = raygen_address + hit_index;
         const callable_address = raygen_address + callable_index;
 
-        try cmd.idleUntilDone(vc);
+        try encoder.idleUntilDone(vc);
 
         return ShaderBindingTable {
             .handle = handle,
@@ -431,7 +431,7 @@ const ShaderBindingTable = struct {
     }
 
     // recreate with with same table entries but new pipeline
-    fn recreate(self: *ShaderBindingTable, vc: *const VulkanContext, vk_allocator: *VkAllocator, pipeline: vk.Pipeline, cmd: *Commands) !void {
+    fn recreate(self: *ShaderBindingTable, vc: *const VulkanContext, vk_allocator: *VkAllocator, pipeline: vk.Pipeline, encoder: *Encoder) !void {
         const rt_properties = blk: {
             var rt_properties: vk.PhysicalDeviceRayTracingPipelinePropertiesKHR = undefined;
             rt_properties.s_type = .physical_device_ray_tracing_pipeline_properties_khr;
@@ -471,9 +471,9 @@ const ShaderBindingTable = struct {
         std.mem.copyBackwards(u8, sbt.data[hit_index..hit_index + hit_size], sbt.data[raygen_size + miss_size..raygen_size + miss_size + hit_size]);
         std.mem.copyBackwards(u8, sbt.data[miss_index..miss_index + miss_size], sbt.data[raygen_size..raygen_size + miss_size]);
 
-        try cmd.startRecording(vc);
-        cmd.recordUploadBuffer(u8, self.handle, sbt);
-        try cmd.submitAndIdleUntilDone(vc);
+        try encoder.startRecording(vc);
+        encoder.recordUploadBuffer(u8, self.handle, sbt);
+        try encoder.submitAndIdleUntilDone(vc);
     }
 
     pub fn getRaygenSBT(self: *const ShaderBindingTable) vk.StridedDeviceAddressRegionKHR {

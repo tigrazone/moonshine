@@ -4,7 +4,7 @@ const engine = @import("engine");
 
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
-const Commands = core.Commands;
+const Encoder = core.Encoder;
 const VkAllocator = core.Allocator;
 const DestructionQueue = core.DestructionQueue;
 const vk_helpers = core.vk_helpers;
@@ -90,10 +90,10 @@ pub fn main() !void {
     var display = try Display.create(&context, window_extent, try window.createSurface(context.instance.handle));
     defer display.destroy(&context);
 
-    var commands = try Commands.create(&context);
-    defer commands.destroy(&context);
+    var encoder = try Encoder.create(&context);
+    defer encoder.destroy(&context);
 
-    var gui = try Platform.create(&context, display.swapchain, window, window_extent, &vk_allocator, &commands);
+    var gui = try Platform.create(&context, display.swapchain, window, window_extent, &vk_allocator, &encoder);
     defer gui.destroy(&context);
 
     var destruction_queue = DestructionQueue.create(); // TODO: need to clean this every once in a while since we're only allowed a limited amount of most types of handles
@@ -104,17 +104,17 @@ pub fn main() !void {
 
     std.log.info("Set up initial state!", .{});
 
-    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &commands, config.in_filepath, config.skybox_filepath, config.extent);
+    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
 
     defer scene.destroy(&context, allocator);
 
     std.log.info("Loaded scene!", .{});
 
-    var object_picker = try ObjectPicker.create(&context, &vk_allocator, allocator, &commands);
+    var object_picker = try ObjectPicker.create(&context, &vk_allocator, allocator, &encoder);
     defer object_picker.destroy(&context);
 
     var pipeline_opts = Pipeline.SpecConstants{};
-    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, &commands, .{ scene.world.materials.textures.descriptor_layout.handle }, pipeline_opts, .{ scene.background.sampler });
+    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, &encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, pipeline_opts, .{ scene.background.sampler });
     defer pipeline.destroy(&context);
 
     std.log.info("Created pipelines!", .{});
@@ -185,7 +185,7 @@ pub fn main() !void {
             if (last_rebuild_failed) imgui.pushStyleColor(.text, F32x4.new(1.0, 0.0, 0.0, 1));
             if (imgui.button(rebuild_label, imgui.Vec2{ .x = imgui.getContentRegionAvail().x, .y = 0.0 })) {
                 const start = try std.time.Instant.now();
-                if (pipeline.recreate(&context, &vk_allocator, allocator, &commands, pipeline_opts)) |old_pipeline| {
+                if (pipeline.recreate(&context, &vk_allocator, allocator, &encoder, pipeline_opts)) |old_pipeline| {
                     try destruction_queue.add(allocator, old_pipeline);
                     const elapsed = (try std.time.Instant.now()).since(start) / std.time.ns_per_ms;
                     rebuild_label = try std.fmt.bufPrintZ(&rebuild_label_buffer, "Rebuild ({d}ms)", .{elapsed});

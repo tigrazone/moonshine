@@ -6,7 +6,7 @@ const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
 const VkAllocator = core.Allocator;
-const Commands = core.Commands;
+const Encoder = core.Encoder;
 
 const hrtsystem = engine.hrtsystem;
 const Pipeline = hrtsystem.pipeline.ObjectPickPipeline;
@@ -51,11 +51,11 @@ command_pool: vk.CommandPool,
 command_buffer: VulkanContext.CommandBuffer,
 ready_fence: vk.Fence,
 
-pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands) !Self {
+pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) !Self {
     const buffer = try vk_allocator.createHostBuffer(vc, ClickDataShader, 1, .{ .storage_buffer_bit = true });
     errdefer buffer.destroy(vc);
 
-    var pipeline = try Pipeline.create(vc, vk_allocator, allocator, commands, .{}, .{}, .{});
+    var pipeline = try Pipeline.create(vc, vk_allocator, allocator, encoder, .{}, .{}, .{});
     errdefer pipeline.destroy(vc);
 
     const command_pool = try vc.device.createCommandPool(&.{

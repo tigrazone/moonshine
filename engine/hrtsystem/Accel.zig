@@ -3,7 +3,7 @@ const vk = @import("vulkan");
 
 const engine = @import("../engine.zig");
 const VulkanContext = engine.core.VulkanContext;
-const Commands = engine.core.Commands;
+const Encoder = engine.core.Encoder;
 const VkAllocator = engine.core.Allocator;
 const Image = engine.core.Image;
 const vk_helpers = engine.core.vk_helpers;
@@ -133,9 +133,9 @@ const max_geometries = std.math.powi(u32, 2, 12) catch unreachable;
 const max_emissive_triangles = std.math.powi(u32, 2, 15) catch unreachable;
 
 // lots of temp memory allocations here
-// commands must be in recording state
+// encoder must be in recording state
 // returns scratch buffers that must be kept alive until command is completed
-fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands, mesh_manager: MeshManager, geometries: []const []const Geometry, blases: *BottomLevelAccels) ![]const VkAllocator.OwnedDeviceBuffer {
+fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, mesh_manager: MeshManager, geometries: []const []const Geometry, blases: *BottomLevelAccels) ![]const VkAllocator.OwnedDeviceBuffer {
     const build_geometry_infos = try allocator.alloc(vk.AccelerationStructureBuildGeometryInfoKHR, geometries.len);
     defer allocator.free(build_geometry_infos);
     defer for (build_geometry_infos) |build_geometry_info| allocator.free(build_geometry_info.p_geometries.?[0..build_geometry_info.geometry_count]);
@@ -222,12 +222,12 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
         });
     }
 
-    commands.buffer.buildAccelerationStructuresKHR(@intCast(build_geometry_infos.len), build_geometry_infos.ptr, build_infos.ptr);
+    encoder.buffer.buildAccelerationStructuresKHR(@intCast(build_geometry_infos.len), build_geometry_infos.ptr, build_infos.ptr);
 
     return scratch_buffers;
 }
 
-pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, texture_descriptor_layout: MaterialManager.TextureManager.DescriptorLayout, commands: *Commands) !Self {
+pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, texture_descriptor_layout: MaterialManager.TextureManager.DescriptorLayout, encoder: *Encoder) !Self {
     var triangle_power_pipeline = try TrianglePowerPipeline.create(vc, allocator, .{}, .{}, .{ texture_descriptor_layout.handle });
     errdefer triangle_power_pipeline.destroy(vc);
 
@@ -285,8 +285,8 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
     const world_to_instance_host = try vk_allocator.createHostBuffer(vc, Mat3x4, max_instances, .{ .transfer_src_bit = true });
     errdefer world_to_instance_host.destroy(vc);
 
-    try commands.startRecording(vc);
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+    try encoder.startRecording(vc);
+    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{
@@ -307,7 +307,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
             }
         },
     });
-    commands.buffer.clearColorImage(triangle_powers.handle, .transfer_dst_optimal, &vk.ClearColorValue { .float_32 = .{ 0, 0, 0, 0 }}, 1, &[1]vk.ImageSubresourceRange{
+    encoder.buffer.clearColorImage(triangle_powers.handle, .transfer_dst_optimal, &vk.ClearColorValue { .float_32 = .{ 0, 0, 0, 0 }}, 1, &[1]vk.ImageSubresourceRange{
         .{
             .aspect_mask = .{ .color_bit = true },
             .base_mip_level = 0,
@@ -316,9 +316,9 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
             .layer_count = vk.REMAINING_ARRAY_LAYERS,
         }
     });
-    commands.buffer.fillBuffer(emissive_triangle_count.handle, 0, @sizeOf(u32), 0);
-    commands.buffer.fillBuffer(geometry_to_triangle_power_offset.handle, 0, @sizeOf(u32) * max_geometries, std.math.maxInt(u32));
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+    encoder.buffer.fillBuffer(emissive_triangle_count.handle, 0, @sizeOf(u32), 0);
+    encoder.buffer.fillBuffer(geometry_to_triangle_power_offset.handle, 0, @sizeOf(u32) * max_geometries, std.math.maxInt(u32));
+    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{
@@ -340,7 +340,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
         },
     });
 
-    try commands.submitAndIdleUntilDone(vc);
+    try encoder.submitAndIdleUntilDone(vc);
 
     return Self {
         .triangle_power_pipeline = triangle_power_pipeline,
@@ -361,17 +361,17 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
 
 // accel must not be in use
 pub const Handle = u32;
-pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands, mesh_manager: MeshManager, material_manager: MaterialManager, instance: Instance) !Handle {
+pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, mesh_manager: MeshManager, material_manager: MaterialManager, instance: Instance) !Handle {
     std.debug.assert(self.geometry_count + instance.geometries.len <= max_geometries);
     std.debug.assert(self.instance_count < max_instances);
 
-    try commands.startRecording(vc);
-    const scratch_buffers = try makeBlases(vc, vk_allocator, allocator, commands, mesh_manager, &.{ instance.geometries }, &self.blases);
+    try encoder.startRecording(vc);
+    const scratch_buffers = try makeBlases(vc, vk_allocator, allocator, encoder, mesh_manager, &.{ instance.geometries }, &self.blases);
     defer allocator.free(scratch_buffers);
     defer for (scratch_buffers) |scratch_buffer| scratch_buffer.destroy(vc);
 
     // update geometries flat jagged array
-    commands.recordUpdateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
+    encoder.recordUpdateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
 
     // upload instance
     {
@@ -394,14 +394,14 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
 
         self.instances_host.data[self.instance_count] = vk_instance;
 
-        commands.recordUpdateBuffer(vk.AccelerationStructureInstanceKHR, self.instances_device, &.{ vk_instance }, self.instance_count); // TODO: can copy
+        encoder.recordUpdateBuffer(vk.AccelerationStructureInstanceKHR, self.instances_device, &.{ vk_instance }, self.instance_count); // TODO: can copy
     }
 
     // upload world_to_instance matrix
     {
         self.world_to_instance_host.data[self.instance_count] = instance.transform.inverse_affine();
 
-        commands.recordUpdateBuffer(Mat3x4, self.world_to_instance_device, &.{ instance.transform.inverse_affine() }, self.instance_count);
+        encoder.recordUpdateBuffer(Mat3x4, self.world_to_instance_device, &.{ instance.transform.inverse_affine() }, self.instance_count);
     }
 
     self.instance_count += 1;
@@ -450,7 +450,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     self.tlas_update_scratch_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.update_scratch_size, .{ .shader_device_address_bit = true, .storage_buffer_bit = true });
     self.tlas_update_scratch_address = self.tlas_update_scratch_buffer.getAddress(vc);
 
-    commands.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), &[_][*]const vk.AccelerationStructureBuildRangeInfoKHR{ @ptrCast(&vk.AccelerationStructureBuildRangeInfoKHR {
+    encoder.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), &[_][*]const vk.AccelerationStructureBuildRangeInfoKHR{ @ptrCast(&vk.AccelerationStructureBuildRangeInfoKHR {
         .primitive_count = @intCast(self.instance_count),
         .first_vertex = 0,
         .primitive_offset = 0,
@@ -458,17 +458,17 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     })});
 
     for (instance.geometries, 0..) |geometry, i| {
-        self.recordUpdatePower(commands, mesh_manager, material_manager, @intCast(self.instance_count - 1), @intCast(i), geometry.mesh);
+        self.recordUpdatePower(encoder, mesh_manager, material_manager, @intCast(self.instance_count - 1), @intCast(i), geometry.mesh);
     }
 
-    try commands.submitAndIdleUntilDone(vc);
+    try encoder.submitAndIdleUntilDone(vc);
 
     self.geometry_count += @intCast(instance.geometries.len);
 
     return @intCast(self.instance_count - 1);
 }
 
-pub fn recordUpdatePower(self: *Self, commands: *Commands, mesh_manager: MeshManager, material_manager: MaterialManager, instance_index: u32, geometry_index: u32, mesh_index: u32) void {
+pub fn recordUpdatePower(self: *Self, encoder: *Encoder, mesh_manager: MeshManager, material_manager: MaterialManager, instance_index: u32, geometry_index: u32, mesh_index: u32) void {
     const index_count = mesh_manager.meshes.get(mesh_index).index_count;
 
     // this mesh is too big to importance sample...
@@ -479,7 +479,7 @@ pub fn recordUpdatePower(self: *Self, commands: *Commands, mesh_manager: MeshMan
     // probably we will just get a GPU crash instead :(
     if (index_count > max_emissive_triangles) return;
 
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{
@@ -501,9 +501,9 @@ pub fn recordUpdatePower(self: *Self, commands: *Commands, mesh_manager: MeshMan
         },
     });
 
-    self.triangle_power_pipeline.recordBindPipeline(commands.buffer);
-    self.triangle_power_pipeline.recordBindAdditionalDescriptorSets(commands.buffer, .{ material_manager.textures.descriptor_set });
-    self.triangle_power_pipeline.recordPushDescriptors(commands.buffer, .{
+    self.triangle_power_pipeline.recordBindPipeline(encoder.buffer);
+    self.triangle_power_pipeline.recordBindAdditionalDescriptorSets(encoder.buffer, .{ material_manager.textures.descriptor_set });
+    self.triangle_power_pipeline.recordPushDescriptors(encoder.buffer, .{
         .instances = self.instances_device.handle,
         .world_to_instances = self.world_to_instance_device.handle,
         .meshes = mesh_manager.addresses_buffer.handle,
@@ -513,18 +513,18 @@ pub fn recordUpdatePower(self: *Self, commands: *Commands, mesh_manager: MeshMan
         .dst_power = .{ .view = self.triangle_powers_mips[0] },
         .dst_triangle_metadata = self.triangle_powers_meta.handle,
     });
-    self.triangle_power_pipeline.recordPushConstants(commands.buffer, .{
+    self.triangle_power_pipeline.recordPushConstants(encoder.buffer, .{
         .instance_index = instance_index,
         .geometry_index = geometry_index,
         .triangle_count = index_count,
     });
     const shader_local_size = 32; // must be kept in sync with shader -- looks like HLSL doesn't support setting this via spec constants
     const dispatch_size = std.math.divCeil(u32, index_count, shader_local_size) catch unreachable;
-    self.triangle_power_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = 1, .depth = 1 });
-    self.triangle_power_fold_pipeline.recordBindPipeline(commands.buffer);
+    self.triangle_power_pipeline.recordDispatch(encoder.buffer, .{ .width = dispatch_size, .height = 1, .depth = 1 });
+    self.triangle_power_fold_pipeline.recordBindPipeline(encoder.buffer);
 
     for (1..self.triangle_powers_mips.len) |dst_mip_level| {
-        commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
             .image_memory_barrier_count = 2,
             .p_image_memory_barriers = &[2]vk.ImageMemoryBarrier2 {
                 .{
@@ -563,24 +563,24 @@ pub fn recordUpdatePower(self: *Self, commands: *Commands, mesh_manager: MeshMan
                 }
             },
         });
-        self.triangle_power_fold_pipeline.recordPushDescriptors(commands.buffer, .{
+        self.triangle_power_fold_pipeline.recordPushDescriptors(encoder.buffer, .{
             .src_mip = .{ .view = self.triangle_powers_mips[dst_mip_level - 1] },
             .dst_mip = .{ .view = self.triangle_powers_mips[dst_mip_level] },
             .instances = self.instances_device.handle,
             .geometry_to_triangle_power_offset = self.geometry_to_triangle_power_offset.handle,
             .emissive_triangle_count = self.emissive_triangle_count.handle,
         });
-        self.triangle_power_fold_pipeline.recordPushConstants(commands.buffer, .{
+        self.triangle_power_fold_pipeline.recordPushConstants(encoder.buffer, .{
             .instance_index = instance_index,
             .geometry_index = geometry_index,
             .triangle_count = index_count,
         });
         const dst_mip_size = std.math.pow(u32, 2, @intCast(self.triangle_powers_mips.len - dst_mip_level));
         const mip_dispatch_size = std.math.divCeil(u32, dst_mip_size, shader_local_size) catch unreachable;
-        self.triangle_power_fold_pipeline.recordDispatch(commands.buffer, .{ .width = mip_dispatch_size, .height = 1, .depth = 1 });
+        self.triangle_power_fold_pipeline.recordDispatch(encoder.buffer, .{ .width = mip_dispatch_size, .height = 1, .depth = 1 });
     }
 
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{

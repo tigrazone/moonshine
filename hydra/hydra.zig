@@ -5,7 +5,7 @@ const engine = @import("engine");
 
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
-const Commands = core.Commands;
+const Encoder = core.Encoder;
 const VkAllocator = core.Allocator;
 
 const hrtsystem = engine.hrtsystem;
@@ -63,7 +63,7 @@ pub const HdMoonshine = struct {
     allocator: Allocator,
     vk_allocator: VkAllocator,
     vc: VulkanContext,
-    commands: Commands,
+    encoder: Encoder,
 
     world: World,
     camera: Camera,
@@ -124,13 +124,13 @@ pub const HdMoonshine = struct {
         self.vc = VulkanContext.create(self.allocator.allocator(), "hdMoonshine", &.{}, &hrtsystem.required_device_extensions, &hrtsystem.required_device_features, null) catch return null;
         errdefer self.vc.destroy();
 
-        self.commands = Commands.create(&self.vc) catch return null;
-        errdefer self.commands.destroy(&self.vc);
+        self.encoder = Encoder.create(&self.vc) catch return null;
+        errdefer self.encoder.destroy(&self.vc);
 
         self.vk_allocator = VkAllocator.create(&self.vc, self.allocator.allocator()) catch return null;
         errdefer self.vk_allocator.destroy(&self.vc, self.allocator.allocator());
 
-        self.world = World.createEmpty(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands) catch return null;
+        self.world = World.createEmpty(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder) catch return null;
         errdefer self.world.destroy(&self.vc, self.allocator.allocator());
 
         self.camera = Camera {};
@@ -138,9 +138,9 @@ pub const HdMoonshine = struct {
 
         self.background = Background.create(&self.vc, self.allocator.allocator()) catch return null;
         errdefer self.background.destroy(&self.vc, self.allocator.allocator());
-        self.background.addDefaultBackground(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands) catch return null;
+        self.background.addDefaultBackground(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder) catch return null;
 
-        self.pipeline = Pipeline.create(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, .{ self.world.materials.textures.descriptor_layout.handle }, pipeline_settings, .{ self.background.sampler }) catch return null;
+        self.pipeline = Pipeline.create(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, .{ self.world.materials.textures.descriptor_layout.handle }, pipeline_settings, .{ self.background.sampler }) catch return null;
         errdefer self.pipeline.destroy(&self.vc);
 
         self.output_buffers = .{};
@@ -156,7 +156,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineRender(self: *HdMoonshine, sensor: Camera.SensorHandle, lens: Camera.LensHandle) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        self.commands.startRecording(&self.vc) catch return false;
+        self.encoder.startRecording(&self.vc) catch return false;
 
         // update instance transforms
         {
@@ -171,32 +171,32 @@ pub const HdMoonshine = struct {
                     if (update.value_ptr.normal) |normal| {
                         const offset = index * @sizeOf(MaterialManager.Material) + @offsetOf(MaterialManager.Material, "normal");
                         const bytes = std.mem.asBytes(&normal);
-                        self.commands.buffer.updateBuffer(self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
+                        self.encoder.buffer.updateBuffer(self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.emissive) |emissive| {
                         const offset = index * @sizeOf(MaterialManager.Material) + @offsetOf(MaterialManager.Material, "emissive");
                         const bytes = std.mem.asBytes(&emissive);
-                        self.commands.buffer.updateBuffer(self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
+                        self.encoder.buffer.updateBuffer(self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.color) |color| {
                         const offset = index * @sizeOf(MaterialManager.StandardPBR) + @offsetOf(MaterialManager.StandardPBR, "color");
                         const bytes = std.mem.asBytes(&color);
-                        self.commands.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
+                        self.encoder.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.metalness) |metalness| {
                         const offset = index * @sizeOf(MaterialManager.StandardPBR) + @offsetOf(MaterialManager.StandardPBR, "metalness");
                         const bytes = std.mem.asBytes(&metalness);
-                        self.commands.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
+                        self.encoder.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.roughness) |roughness| {
                         const offset = index * @sizeOf(MaterialManager.StandardPBR) + @offsetOf(MaterialManager.StandardPBR, "roughness");
                         const bytes = std.mem.asBytes(&roughness);
-                        self.commands.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
+                        self.encoder.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.ior) |ior| {
                         const offset = index * @sizeOf(MaterialManager.StandardPBR) + @offsetOf(MaterialManager.StandardPBR, "ior");
                         const bytes = std.mem.asBytes(&ior);
-                        self.commands.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
+                        self.encoder.buffer.updateBuffer(self.world.materials.variant_buffers.standard_pbr.buffer.handle, offset, bytes.len, bytes.ptr);
                     }
                 }
 
@@ -225,7 +225,7 @@ pub const HdMoonshine = struct {
                         .size = vk.WHOLE_SIZE,
                     },
                 };
-                self.commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+                self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
                     .buffer_memory_barrier_count = update_barriers.len,
                     .p_buffer_memory_barriers = &update_barriers,
                 });
@@ -238,8 +238,8 @@ pub const HdMoonshine = struct {
                 actual_size_instances.data.len = self.world.accel.instance_count;
                 var actual_size_world_to_instance = self.world.accel.world_to_instance_host;
                 actual_size_world_to_instance.data.len = self.world.accel.instance_count;
-                self.commands.recordUploadBuffer(vk.AccelerationStructureInstanceKHR, self.world.accel.instances_device, actual_size_instances);
-                self.commands.recordUploadBuffer(Mat3x4, self.world.accel.world_to_instance_device, actual_size_world_to_instance);
+                self.encoder.recordUploadBuffer(vk.AccelerationStructureInstanceKHR, self.world.accel.instances_device, actual_size_instances);
+                self.encoder.recordUploadBuffer(Mat3x4, self.world.accel.world_to_instance_device, actual_size_world_to_instance);
 
                 const update_barriers = [_]vk.BufferMemoryBarrier2 {
                     .{
@@ -265,7 +265,7 @@ pub const HdMoonshine = struct {
                         .size = vk.WHOLE_SIZE,
                     },
                 };
-                self.commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+                self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
                     .buffer_memory_barrier_count = update_barriers.len,
                     .p_buffer_memory_barriers = &update_barriers,
                 });
@@ -305,7 +305,7 @@ pub const HdMoonshine = struct {
 
                 const build_info_ref = &build_info;
 
-                self.commands.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), @ptrCast(&build_info_ref));
+                self.encoder.buffer.buildAccelerationStructuresKHR(1, @ptrCast(&geometry_info), @ptrCast(&build_info_ref));
 
                 const ray_trace_barriers = [_]vk.MemoryBarrier2 {
                     .{
@@ -315,7 +315,7 @@ pub const HdMoonshine = struct {
                         .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true },
                     }
                 };
-                self.commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+                self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
                     .memory_barrier_count = ray_trace_barriers.len,
                     .p_memory_barriers = &ray_trace_barriers,
                 });
@@ -326,11 +326,11 @@ pub const HdMoonshine = struct {
 
         while (self.power_updates.items.len != 0) {
             const update = self.power_updates.pop();
-            self.world.accel.recordUpdatePower(&self.commands, self.world.meshes, self.world.materials, update.instance, 0, update.mesh);
+            self.world.accel.recordUpdatePower(&self.encoder, self.world.meshes, self.world.materials, update.instance, 0, update.mesh);
         }
 
         // TODO: this memory barrier is a little more extreme than neccessary
-        self.commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
             .memory_barrier_count = 1,
             .p_memory_barriers = &[1]vk.MemoryBarrier2 {
                 .{
@@ -343,21 +343,21 @@ pub const HdMoonshine = struct {
         });
 
         // prepare our stuff
-        self.camera.sensors.items[sensor].recordPrepareForCapture(self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
+        self.camera.sensors.items[sensor].recordPrepareForCapture(self.encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
 
         // bind our stuff
-        self.pipeline.recordBindPipeline(self.commands.buffer);
-        self.pipeline.recordBindAdditionalDescriptorSets(self.commands.buffer, .{ self.world.materials.textures.descriptor_set });
-        self.pipeline.recordPushDescriptors(self.commands.buffer, (Scene { .background = self.background, .camera = self.camera, .world = self.world }).pushDescriptors(sensor, 0));
+        self.pipeline.recordBindPipeline(self.encoder.buffer);
+        self.pipeline.recordBindAdditionalDescriptorSets(self.encoder.buffer, .{ self.world.materials.textures.descriptor_set });
+        self.pipeline.recordPushDescriptors(self.encoder.buffer, (Scene { .background = self.background, .camera = self.camera, .world = self.world }).pushDescriptors(sensor, 0));
 
         // push our stuff
-        self.pipeline.recordPushConstants(self.commands.buffer, .{ .lens = self.camera.lenses.items[lens], .sample_count = self.camera.sensors.items[sensor].sample_count });
+        self.pipeline.recordPushConstants(self.encoder.buffer, .{ .lens = self.camera.lenses.items[lens], .sample_count = self.camera.sensors.items[sensor].sample_count });
 
         // trace our stuff
-        self.pipeline.recordTraceRays(self.commands.buffer, self.camera.sensors.items[sensor].extent);
+        self.pipeline.recordTraceRays(self.encoder.buffer, self.camera.sensors.items[sensor].extent);
 
         // copy our stuff
-        self.camera.sensors.items[sensor].recordPrepareForCopy(self.commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
+        self.camera.sensors.items[sensor].recordPrepareForCopy(self.encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
 
         // copy rendered image to host-visible staging buffer
         const copy = vk.BufferImageCopy {
@@ -381,9 +381,9 @@ pub const HdMoonshine = struct {
                 .depth = 1,
             },
         };
-        self.commands.buffer.copyImageToBuffer(self.camera.sensors.items[sensor].image.handle, .transfer_src_optimal, self.output_buffers.items[sensor].handle, 1, @ptrCast(&copy));
+        self.encoder.buffer.copyImageToBuffer(self.camera.sensors.items[sensor].image.handle, .transfer_src_optimal, self.output_buffers.items[sensor].handle, 1, @ptrCast(&copy));
 
-        self.commands.submitAndIdleUntilDone(&self.vc) catch return false;
+        self.encoder.submitAndIdleUntilDone(&self.vc) catch return false;
 
         self.camera.sensors.items[sensor].sample_count += samples_per_run;
 
@@ -393,7 +393,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineRebuildPipeline(self: *HdMoonshine) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        const old_pipeline = self.pipeline.recreate(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, pipeline_settings) catch return false;
+        const old_pipeline = self.pipeline.recreate(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, pipeline_settings) catch return false;
         self.vc.device.destroyPipeline(old_pipeline, null);
         self.camera.clearAllSensors();
         return true;
@@ -408,13 +408,13 @@ pub const HdMoonshine = struct {
             .texcoords = if (maybe_texcoords) |texcoords| texcoords[0..index_count * 3] else null,
             .indices = indices[0..index_count],
         };
-        return self.world.meshes.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, mesh) catch unreachable; // TODO: error handling
+        return self.world.meshes.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, mesh) catch unreachable; // TODO: error handling
     }
 
     pub export fn HdMoonshineCreateSolidTexture1(self: *HdMoonshine, source: f32, name: [*:0]const u8) TextureManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, TextureManager.Source {
+        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
             .f32x1 = source,
         }, std.mem.span(name)) catch unreachable; // TODO: error handling
     }
@@ -422,7 +422,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineCreateSolidTexture2(self: *HdMoonshine, source: F32x2, name: [*:0]const u8) TextureManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, TextureManager.Source {
+        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
             .f32x2 = source,
         }, std.mem.span(name)) catch unreachable; // TODO: error handling
     }
@@ -430,7 +430,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineCreateSolidTexture3(self: *HdMoonshine, source: F32x3, name: [*:0]const u8) TextureManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, TextureManager.Source {
+        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
             .f32x3 = source,
         }, std.mem.span(name)) catch unreachable; // TODO: error handling
     }
@@ -439,7 +439,7 @@ pub const HdMoonshine = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         const bytes = std.mem.sliceAsBytes(data[0..extent.width * extent.height * format.pixelSizeInBytes()]);
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, TextureManager.Source {
+        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
             .raw = TextureManager.Source.Raw {
                 .bytes = bytes,
                 .extent = extent,
@@ -451,7 +451,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineCreateMaterial(self: *HdMoonshine, material: Material) MaterialManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, MaterialManager.MaterialInfo {
+        return self.world.materials.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, MaterialManager.MaterialInfo {
             .normal = material.normal,
             .emissive = material.emissive,
             .variant = MaterialManager.MaterialVariant {
@@ -527,7 +527,7 @@ pub const HdMoonshine = struct {
             .mesh = mesh,
         }) catch unreachable;
         self.instance_to_mesh.append(self.allocator.allocator(), mesh) catch unreachable;
-        return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.commands, self.world.meshes, self.world.materials, instance) catch unreachable; // TODO: error handling
+        return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, self.world.meshes, self.world.materials, instance) catch unreachable; // TODO: error handling
     }
 
     pub export fn HdMoonshineDestroyInstance(self: *HdMoonshine, handle: Accel.Handle) void {
@@ -599,7 +599,7 @@ pub const HdMoonshine = struct {
         self.world.destroy(&self.vc, self.allocator.allocator());
         self.background.destroy(&self.vc, self.allocator.allocator());
         self.camera.destroy(&self.vc, self.allocator.allocator());
-        self.commands.destroy(&self.vc);
+        self.encoder.destroy(&self.vc);
         self.vk_allocator.destroy(&self.vc, self.allocator.allocator());
         self.vc.destroy(self.allocator.allocator());
         var alloc = self.allocator;

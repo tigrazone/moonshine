@@ -3,7 +3,7 @@ const vk = @import("vulkan");
 
 const engine = @import("../engine.zig");
 const VulkanContext = engine.core.VulkanContext;
-const Commands = engine.core.Commands;
+const Encoder = engine.core.Encoder;
 const VkAllocator = engine.core.Allocator;
 const Image = engine.core.Image;
 
@@ -78,7 +78,7 @@ pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator) !Self {
     };
 }
 
-pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands) !void {
+pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) !void {
     var color = [4]f32 { 1.0, 1.0, 1.0, 1.0 };
     const rgba = Rgba2D {
         .ptr = @ptrCast(&color),
@@ -87,7 +87,7 @@ pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, vk_allocator:
             .height = 1,
         }
     };
-    try self.addBackground(vc, vk_allocator, allocator, commands, rgba, "default white");
+    try self.addBackground(vc, vk_allocator, allocator, encoder, rgba, "default white");
 }
 
 // this should probably be a parameter, or should infer proper value for this
@@ -104,7 +104,7 @@ const shader_local_size = 8; // must be kept in sync with shader -- looks like H
 // only using equal area for importance sampling.
 // I tried that here but it seems to produce noisier results for e.g., sunny skies
 // compared to just keeping everything in the same parameterization.
-pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, commands: *Commands, color_image: Rgba2D, name: []const u8) !void {
+pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, color_image: Rgba2D, name: []const u8) !void {
     const texture_name = try std.fmt.allocPrintZ(allocator, "background {s}", .{ name });
     defer allocator.free(texture_name);
 
@@ -151,10 +151,10 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
         }, null));
     }
 
-    try commands.startRecording(vc);
+    try encoder.startRecording(vc);
 
     // copy equirectangular image to device
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 3,
         .p_image_memory_barriers = &[3]vk.ImageMemoryBarrier2 {
             .{
@@ -207,7 +207,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
             },
         },
     });
-    commands.buffer.copyBufferToImage(equirectangular_image_host.handle, equirectangular_image.handle, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
+    encoder.buffer.copyBufferToImage(equirectangular_image_host.handle, equirectangular_image.handle, .transfer_dst_optimal, 1, @ptrCast(&vk.BufferImageCopy {
         .buffer_offset = 0,
         .buffer_row_length = 0,
         .buffer_image_height = 0,
@@ -229,7 +229,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
         },
     }));
 
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{
@@ -254,15 +254,15 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
     });
 
     // do conversion
-    self.equirectangular_to_equal_area_pipeline.recordBindPipeline(commands.buffer);
-    self.equirectangular_to_equal_area_pipeline.recordPushDescriptors(commands.buffer, .{
+    self.equirectangular_to_equal_area_pipeline.recordBindPipeline(encoder.buffer);
+    self.equirectangular_to_equal_area_pipeline.recordPushDescriptors(encoder.buffer, .{
         .src_texture = .{ .view = equirectangular_image.view },
         .dst_image = .{ .view = equal_area_image.view },
     });
     const dispatch_size = if (equal_area_map_size > shader_local_size) @divExact(equal_area_map_size, shader_local_size) else 1;
-    self.equirectangular_to_equal_area_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
+    self.equirectangular_to_equal_area_pipeline.recordDispatch(encoder.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
 
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{
@@ -286,16 +286,16 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
         },
     });
 
-    self.luminance_pipeline.recordBindPipeline(commands.buffer);
-    self.luminance_pipeline.recordPushDescriptors(commands.buffer, .{
+    self.luminance_pipeline.recordBindPipeline(encoder.buffer);
+    self.luminance_pipeline.recordPushDescriptors(encoder.buffer, .{
         .src_color_image = .{ .view = equal_area_image.view },
         .dst_luminance_image = .{ .view = luminance_image.view },
     });
-    self.luminance_pipeline.recordDispatch(commands.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
+    self.luminance_pipeline.recordDispatch(encoder.buffer, .{ .width = dispatch_size, .height = dispatch_size, .depth = 1 });
 
-    self.fold_pipeline.recordBindPipeline(commands.buffer);
+    self.fold_pipeline.recordBindPipeline(encoder.buffer);
     for (1..luminance_mips_views.len) |dst_mip_level| {
-        commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
             .image_memory_barrier_count = 1,
             .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
                 .{
@@ -318,15 +318,15 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
                 }
             },
         });
-        self.fold_pipeline.recordPushDescriptors(commands.buffer, .{
+        self.fold_pipeline.recordPushDescriptors(encoder.buffer, .{
             .src_mip = .{ .view = luminance_mips_views.get(dst_mip_level - 1) },
             .dst_mip = .{ .view = luminance_mips_views.get(dst_mip_level) },
         });
         const dst_mip_size = std.math.pow(u32, 2, @intCast(luminance_mips_views.len - dst_mip_level));
         const mip_dispatch_size = if (dst_mip_size > shader_local_size) @divExact(dst_mip_size, shader_local_size) else 1;
-        self.fold_pipeline.recordDispatch(commands.buffer, .{ .width = mip_dispatch_size, .height = mip_dispatch_size, .depth = 1 });
+        self.fold_pipeline.recordDispatch(encoder.buffer, .{ .width = mip_dispatch_size, .height = mip_dispatch_size, .depth = 1 });
     }
-    commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
             .{
@@ -350,7 +350,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
         },
     });
 
-    try commands.submitAndIdleUntilDone(vc);
+    try encoder.submitAndIdleUntilDone(vc);
 
     try self.data.append(allocator, .{
         .rgb_image = equal_area_image,

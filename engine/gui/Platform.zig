@@ -5,7 +5,7 @@ const std = @import("std");
 
 const engine = @import("../engine.zig");
 const VulkanContext = engine.core.VulkanContext;
-const Commands = engine.core.Commands;
+const Encoder = engine.core.Encoder;
 const VkAllocator = engine.core.Allocator;
 
 const Image = engine.core.Image;
@@ -53,7 +53,7 @@ index_buffers: [frames_in_flight]VkAllocator.HostBuffer(imgui.DrawIdx),
 
 views: std.BoundedArray(vk.ImageView, Swapchain.max_image_count),
 
-pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, extent: vk.Extent2D, vk_allocator: *VkAllocator, commands: *Commands) !Self {
+pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, extent: vk.Extent2D, vk_allocator: *VkAllocator, encoder: *Encoder) !Self {
     if (imgui.getCurrentContext()) |_| @panic("cannot create more than one Gui");
 
     imgui.createContext();
@@ -217,7 +217,7 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
         const image = try Image.create(vc, vk_allocator, tex_data[1], .{ .transfer_dst_bit = true, .sampled_bit = true }, .r8_unorm, false, "imgui font");
         errdefer image.destroy(vc);
 
-        try commands.uploadDataToImage(vc, vk_allocator, image.handle, tex_data[0][0 .. tex_data[1].width * tex_data[1].height * @sizeOf(u8)], tex_data[1], .shader_read_only_optimal);
+        try encoder.uploadDataToImage(vc, vk_allocator, image.handle, tex_data[0][0 .. tex_data[1].width * tex_data[1].height * @sizeOf(u8)], tex_data[1], .shader_read_only_optimal);
         break :blk image;
         //     io.Fonts->SetTexID((ImTextureID)bd->FontDescriptorSet); TODO required?
     };

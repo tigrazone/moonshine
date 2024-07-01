@@ -6,7 +6,7 @@ const build_options = @import("build_options");
 const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
-const Commands = core.Commands;
+const Encoder = core.Encoder;
 const VkAllocator = core.Allocator;
 const descriptor = core.descriptor;
 

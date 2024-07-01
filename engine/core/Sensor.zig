@@ -4,7 +4,7 @@ const vk = @import("vulkan");
 const engine = @import("../engine.zig");
 const VulkanContext =  engine.core.VulkanContext;
 const VkAllocator =  engine.core.Allocator;
-const Commands =  engine.core.Commands;
+const Encoder =  engine.core.Encoder;
 const Image = engine.core.Image;
 
 image: Image,

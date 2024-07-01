@@ -4,7 +4,7 @@ const vk = @import("vulkan");
 const engine = @import("engine");
 
 const VulkanContext = engine.core.VulkanContext;
-const Commands = engine.core.Commands;
+const Encoder = engine.core.Encoder;
 const VkAllocator = engine.core.Allocator;
 const TextureManager = engine.core.Images.TextureManager;
 const Pipeline = engine.hrtsystem.pipeline.StandardPipeline;
@@ -93,17 +93,17 @@ pub fn main() !void {
     var vk_allocator = try VkAllocator.create(&context, allocator);
     defer vk_allocator.destroy(&context, allocator);
 
-    var commands = try Commands.create(&context);
-    defer commands.destroy(&context);
+    var encoder = try Encoder.create(&context);
+    defer encoder.destroy(&context);
 
     try logger.log("set up initial state");
 
-    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &commands, config.in_filepath, config.skybox_filepath, config.extent);
+    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
     defer scene.destroy(&context, allocator);
 
     try logger.log("load world");
 
-    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, &commands, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, &encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
         .samples_per_run = 1,
         .max_bounces = 1024,
         .env_samples_per_bounce = 1,
@@ -118,26 +118,26 @@ pub fn main() !void {
 
     // record command buffer
     {
-        try commands.startRecording(&context);
+        try encoder.startRecording(&context);
 
         // prepare our stuff
-        scene.camera.sensors.items[0].recordPrepareForCapture(commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
+        scene.camera.sensors.items[0].recordPrepareForCapture(encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{});
 
         // bind our stuff
-        pipeline.recordBindPipeline(commands.buffer);
-        pipeline.recordBindAdditionalDescriptorSets(commands.buffer, .{ scene.world.materials.textures.descriptor_set });
-        pipeline.recordPushDescriptors(commands.buffer, scene.pushDescriptors(0, 0));
+        pipeline.recordBindPipeline(encoder.buffer);
+        pipeline.recordBindAdditionalDescriptorSets(encoder.buffer, .{ scene.world.materials.textures.descriptor_set });
+        pipeline.recordPushDescriptors(encoder.buffer, scene.pushDescriptors(0, 0));
 
         for (0..config.spp) |sample_count| {
             // push our stuff
-            pipeline.recordPushConstants(commands.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
+            pipeline.recordPushConstants(encoder.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
 
             // trace our stuff
-            pipeline.recordTraceRays(commands.buffer, scene.camera.sensors.items[0].extent);
+            pipeline.recordTraceRays(encoder.buffer, scene.camera.sensors.items[0].extent);
 
             // if not last invocation, need barrier cuz we write to images
             if (sample_count != config.spp) {
-                commands.buffer.pipelineBarrier2(&vk.DependencyInfo {
+                encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
                     .image_memory_barrier_count = 1,
                     .p_image_memory_barriers = &[_]vk.ImageMemoryBarrier2 {
                         .{
@@ -165,7 +165,7 @@ pub fn main() !void {
         }
 
         // copy our stuff
-        scene.camera.sensors.items[0].recordPrepareForCopy(commands.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
+        scene.camera.sensors.items[0].recordPrepareForCopy(encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
 
         // copy rendered image to host-visible staging buffer
         const copy = vk.BufferImageCopy {
@@ -189,9 +189,9 @@ pub fn main() !void {
                 .depth = 1,
             },
         };
-        commands.buffer.copyImageToBuffer(scene.camera.sensors.items[0].image.handle, .transfer_src_optimal, output_buffer.handle, 1, @ptrCast(&copy));
+        encoder.buffer.copyImageToBuffer(scene.camera.sensors.items[0].image.handle, .transfer_src_optimal, output_buffer.handle, 1, @ptrCast(&copy));
 
-        try commands.submitAndIdleUntilDone(&context);
+        try encoder.submitAndIdleUntilDone(&context);
     }
 
     try logger.log("render");
