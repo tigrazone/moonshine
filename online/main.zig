@@ -130,7 +130,7 @@ pub fn main() !void {
     var current_clicked_color = F32x3.new(0.0, 0.0, 0.0);
 
     while (!window.shouldClose()) {
-        const command_buffer = if (display.startFrame(&context)) |buffer| buffer else |err| switch (err) {
+        const frame_encoder = if (display.startFrame(&context)) |buffer| buffer else |err| switch (err) {
             error.OutOfDateKHR => blk: {
                 const new_extent = window.getExtent();
                 try display.recreate(&context, new_extent, &destruction_queue, allocator);
@@ -218,7 +218,7 @@ pub fn main() !void {
                 const material = try sync_copier.copyBufferItem(&context, MaterialManager.Material, scene.world.materials.materials, geometry.material);
                 try imgui.textFmt("Mesh index: {d}", .{geometry.mesh});
                 if (imgui.inputScalar(u32, "Material index", &geometry.material, null, null) and geometry.material < scene.world.materials.material_count) {
-                    scene.world.accel.recordUpdateSingleMaterial(command_buffer, accel_geometry_index, geometry.material);
+                    scene.world.accel.recordUpdateSingleMaterial(frame_encoder.buffer, accel_geometry_index, geometry.material);
                     scene.camera.sensors.items[active_sensor].clear();
                 }
                 imgui.separatorText("mesh");
@@ -239,7 +239,7 @@ pub fn main() !void {
                         inline for (@typeInfo(VariantType).Struct.fields) |struct_field| {
                             switch (struct_field.type) {
                                 f32 => if (imgui.dragScalar(f32, (struct_field.name[0..struct_field.name.len].* ++ .{ 0 })[0..struct_field.name.len :0], &@field(material_variant, struct_field.name), 0.01, 0, std.math.inf(f32))) {
-                                    scene.world.materials.recordUpdateSingleVariant(VariantType, command_buffer, material_idx, material_variant);
+                                    scene.world.materials.recordUpdateSingleVariant(VariantType, frame_encoder.buffer, material_idx, material_variant);
                                     scene.camera.sensors.items[active_sensor].clear();
                                 },
                                 u32 => try imgui.textFmt("{s}: {}", .{ struct_field.name, @field(material_variant, struct_field.name) }),
@@ -253,8 +253,8 @@ pub fn main() !void {
                 var translation = old_transform.extract_translation();
                 imgui.pushItemWidth(imgui.getFontSize() * -6);
                 if (imgui.dragVector(F32x3, "Translation", &translation, 0.1, -std.math.inf(f32), std.math.inf(f32))) {
-                    scene.world.accel.recordUpdateSingleTransform(command_buffer, object.instance_index, old_transform.with_translation(translation));
-                    try scene.world.accel.recordRebuild(command_buffer);
+                    scene.world.accel.recordUpdateSingleTransform(frame_encoder.buffer, object.instance_index, old_transform.with_translation(translation));
+                    try scene.world.accel.recordRebuild(frame_encoder.buffer);
                     scene.camera.sensors.items[active_sensor].clear();
                 }
             }
@@ -313,25 +313,25 @@ pub fn main() !void {
         if (max_sample_count != 0 and scene.camera.sensors.items[active_sensor].sample_count > max_sample_count) scene.camera.sensors.items[active_sensor].clear();
         if (max_sample_count == 0 or scene.camera.sensors.items[active_sensor].sample_count < max_sample_count) {
             // prepare some stuff
-            scene.camera.sensors.items[active_sensor].recordPrepareForCapture(command_buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .blit_bit = true });
+            scene.camera.sensors.items[active_sensor].recordPrepareForCapture(frame_encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .blit_bit = true });
 
             // bind some stuff
-            pipeline.recordBindPipeline(command_buffer);
-            pipeline.recordBindAdditionalDescriptorSets(command_buffer, .{ scene.world.materials.textures.descriptor_set });
+            pipeline.recordBindPipeline(frame_encoder.buffer);
+            pipeline.recordBindAdditionalDescriptorSets(frame_encoder.buffer, .{ scene.world.materials.textures.descriptor_set });
 
             // push some stuff
-            pipeline.recordPushDescriptors(command_buffer, scene.pushDescriptors(active_sensor, 0));
-            pipeline.recordPushConstants(command_buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[active_sensor].sample_count });
+            pipeline.recordPushDescriptors(frame_encoder.buffer, scene.pushDescriptors(active_sensor, 0));
+            pipeline.recordPushConstants(frame_encoder.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[active_sensor].sample_count });
 
             // trace some stuff
-            pipeline.recordTraceRays(command_buffer, scene.camera.sensors.items[active_sensor].extent);
+            pipeline.recordTraceRays(frame_encoder.buffer, scene.camera.sensors.items[active_sensor].extent);
 
             // copy some stuff
-            scene.camera.sensors.items[active_sensor].recordPrepareForCopy(command_buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .blit_bit = true });
+            scene.camera.sensors.items[active_sensor].recordPrepareForCopy(frame_encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .blit_bit = true });
         }
 
         // transition swap image to one we can blit to
-        command_buffer.pipelineBarrier2(&vk.DependencyInfo{
+        frame_encoder.buffer.pipelineBarrier2(&vk.DependencyInfo{
             .image_memory_barrier_count = 1,
             .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2{
                 .src_stage_mask = .{ .color_attachment_output_bit = true },
@@ -387,8 +387,8 @@ pub fn main() !void {
             },
         };
 
-        command_buffer.blitImage(scene.camera.sensors.items[active_sensor].image.handle, .transfer_src_optimal, display.swapchain.currentImage(), .transfer_dst_optimal, 1, @ptrCast(&region), .nearest);
-        command_buffer.pipelineBarrier2(&vk.DependencyInfo{
+        frame_encoder.buffer.blitImage(scene.camera.sensors.items[active_sensor].image.handle, .transfer_src_optimal, display.swapchain.currentImage(), .transfer_dst_optimal, 1, @ptrCast(&region), .nearest);
+        frame_encoder.buffer.pipelineBarrier2(&vk.DependencyInfo{
             .image_memory_barrier_count = 1,
             .p_image_memory_barriers = &[_]vk.ImageMemoryBarrier2{.{
                 .src_stage_mask = .{ .blit_bit = true },
@@ -410,7 +410,7 @@ pub fn main() !void {
             }},
         });
 
-        gui.endFrame(command_buffer, display.swapchain.image_index, display.frame_index);
+        gui.endFrame(frame_encoder.buffer, display.swapchain.image_index, display.frame_index);
 
         // transition swapchain back to present mode
         const return_swap_image_memory_barriers = [_]vk.ImageMemoryBarrier2{.{
@@ -431,7 +431,7 @@ pub fn main() !void {
                 .layer_count = vk.REMAINING_ARRAY_LAYERS,
             },
         }};
-        command_buffer.pipelineBarrier2(&vk.DependencyInfo{
+        frame_encoder.buffer.pipelineBarrier2(&vk.DependencyInfo{
             .image_memory_barrier_count = return_swap_image_memory_barriers.len,
             .p_image_memory_barriers = &return_swap_image_memory_barriers,
         });

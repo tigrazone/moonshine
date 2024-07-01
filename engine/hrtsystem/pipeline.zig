@@ -404,14 +404,12 @@ const ShaderBindingTable = struct {
 
         try encoder.begin();
         encoder.uploadBuffer(u8, handle, sbt);
-        try encoder.submit(vc);
+        try encoder.submitAndIdleUntilDone(vc);
 
         const raygen_address = handle.getAddress(vc);
         const miss_address = raygen_address + miss_index;
         const hit_address = raygen_address + hit_index;
         const callable_address = raygen_address + callable_index;
-
-        try encoder.idleUntilDone(vc);
 
         return ShaderBindingTable {
             .handle = handle,

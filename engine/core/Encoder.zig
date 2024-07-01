@@ -1,4 +1,6 @@
 // abstraction for GPU commands
+// TODO: this could be made a little more type-safe by splitting encoder states into their own types,
+// e.g., PendingEncoder, ActiveEncoder, etc
 
 const std = @import("std");
 const vk = @import("vulkan");
@@ -51,7 +53,11 @@ pub fn begin(self: Self) !void {
 }
 
 // submit recorded work
-pub fn submit(self: Self, vc: *const VulkanContext) !void {
+pub fn submit(self: Self, queue: VulkanContext.Queue, sync: struct {
+    wait_semaphore_infos: []const vk.SemaphoreSubmitInfoKHR = &.{},
+    signal_semaphore_infos: []const vk.SemaphoreSubmitInfoKHR = &.{},
+    fence: vk.Fence = .null_handle,
+}) !void {
     try self.buffer.endCommandBuffer();
 
     const submit_info = vk.SubmitInfo2 {
@@ -60,17 +66,17 @@ pub fn submit(self: Self, vc: *const VulkanContext) !void {
             .command_buffer = self.buffer.handle,
             .device_mask = 0,
         }),
-        .wait_semaphore_info_count = 0,
-        .p_wait_semaphore_infos = undefined,
-        .signal_semaphore_info_count = 0,
-        .p_signal_semaphore_infos = undefined,
+        .wait_semaphore_info_count = @intCast(sync.wait_semaphore_infos.len),
+        .p_wait_semaphore_infos = sync.wait_semaphore_infos.ptr,
+        .signal_semaphore_info_count = @intCast(sync.signal_semaphore_infos.len),
+        .p_signal_semaphore_infos = sync.signal_semaphore_infos.ptr,
     };
 
-    try vc.queue.submit2(1, @ptrCast(&submit_info), .null_handle);
+    try queue.submit2(1, @ptrCast(&submit_info), sync.fence);
 }
 
 pub fn submitAndIdleUntilDone(self: Self, vc: *const VulkanContext) !void {
-    try self.submit(vc);
+    try self.submit(vc.queue, .{});
     try self.idleUntilDone(vc);
 }
 

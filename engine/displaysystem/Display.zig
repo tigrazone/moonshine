@@ -1,13 +1,15 @@
 const std = @import("std");
 const vk = @import("vulkan");
 
-const core = @import("../engine.zig").core;
+const engine = @import("../engine.zig");
+const core = engine.core;
 const VulkanContext = core.VulkanContext;
 const DestructionQueue = core.DestructionQueue;
 const VkAllocator = core.Allocator;
+const Encoder = core.Encoder;
 const vk_helpers = core.vk_helpers;
 
-const Swapchain = @import("./Swapchain.zig");
+const Swapchain = engine.displaysystem.Swapchain;
 
 const metrics = @import("build_options").vk_metrics;
 
@@ -45,8 +47,7 @@ pub fn create(vc: *const VulkanContext, initial_extent: vk.Extent2D, surface: vk
 
     var frames: [frames_in_flight]Frame = undefined;
     inline for (&frames, 0..) |*frame, i| {
-        frame.* = try Frame.create(vc);
-        try vk_helpers.setDebugName(vc, frame.command_buffer, std.fmt.comptimePrint("frame {}", .{i}));
+        frame.* = try Frame.create(vc, std.fmt.comptimePrint("frame {}", .{i}));
     }
     try vc.device.resetFences(1, @ptrCast(&frames[0].fence));
 
@@ -77,7 +78,7 @@ pub fn destroy(self: *Self, vc: *const VulkanContext) void {
     }
 }
 
-pub fn startFrame(self: *Self, vc: *const VulkanContext) !VulkanContext.CommandBuffer {
+pub fn startFrame(self: *Self, vc: *const VulkanContext) !Encoder {
     const frame = self.frames[self.frame_index];
 
     _ = try self.swapchain.acquireNextImage(vc, frame.image_acquired);
@@ -88,15 +89,12 @@ pub fn startFrame(self: *Self, vc: *const VulkanContext) !VulkanContext.CommandB
         vc.device.resetQueryPool(frame.query_pool, 0, 2);
     }
 
-    try vc.device.resetCommandPool(frame.command_pool, .{});
-    try vc.device.beginCommandBuffer(frame.command_buffer, &.{
-        .flags = .{ .one_time_submit_bit = true },
-        .p_inheritance_info = null,
-    });
+    try vc.device.resetCommandPool(frame.encoder.pool, .{});
+    try frame.encoder.begin();
 
-    if (metrics) vc.device.cmdWriteTimestamp2(frame.command_buffer, .{ .top_of_pipe_bit = true }, frame.query_pool, 0);
+    if (metrics) frame.encoder.buffer.writeTimestamp2(.{ .top_of_pipe_bit = true }, frame.query_pool, 0);
 
-    return VulkanContext.CommandBuffer.init(frame.command_buffer, vc.device_dispatch);
+    return frame.encoder;
 }
 
 pub fn recreate(self: *Self, vc: *const VulkanContext, new_extent: vk.Extent2D, destruction_queue: *DestructionQueue, allocator: std.mem.Allocator) !void {
@@ -107,33 +105,27 @@ pub fn recreate(self: *Self, vc: *const VulkanContext, new_extent: vk.Extent2D, 
 pub fn endFrame(self: *Self, vc: *const VulkanContext) !vk.Result {
     const frame = self.frames[self.frame_index];
 
-    if (metrics) vc.device.cmdWriteTimestamp2(frame.command_buffer, .{ .bottom_of_pipe_bit = true }, frame.query_pool, 1);
+    if (metrics) frame.encoder.buffer.writeTimestamp2(.{ .bottom_of_pipe_bit = true }, frame.query_pool, 1);
 
-    try vc.device.endCommandBuffer(frame.command_buffer);
-
-    // TODO: figure out why color_attachment_output_bit is the right thing here
-    try vc.queue.submit2(1, &[_]vk.SubmitInfo2 { .{
-        .flags = .{},
-        .wait_semaphore_info_count = 1,
-        .p_wait_semaphore_infos = @ptrCast(&vk.SemaphoreSubmitInfoKHR{
-            .semaphore = frame.image_acquired,
-            .value = 0,
-            .stage_mask = .{ .color_attachment_output_bit = true },
-            .device_index = 0,
-        }),
-        .command_buffer_info_count = 1,
-        .p_command_buffer_infos = @ptrCast(&vk.CommandBufferSubmitInfo {
-            .command_buffer = frame.command_buffer,
-            .device_mask = 0,
-        }),
-        .signal_semaphore_info_count = 1,
-        .p_signal_semaphore_infos = @ptrCast(&vk.SemaphoreSubmitInfoKHR {
-            .semaphore = frame.command_completed,
-            .value = 0,
-            .stage_mask =  .{ .color_attachment_output_bit = true },
-            .device_index = 0,
-        }),
-    }}, frame.fence);
+    try frame.encoder.submit(vc.queue, .{
+        .wait_semaphore_infos = &[_]vk.SemaphoreSubmitInfoKHR {
+            .{
+                .semaphore = frame.image_acquired,
+                .value = 0,
+                .stage_mask = .{ .color_attachment_output_bit = true },
+                .device_index = 0,
+            }
+        },
+        .signal_semaphore_infos = &[_]vk.SemaphoreSubmitInfoKHR {
+            .{
+                .semaphore = frame.command_completed,
+                .value = 0,
+                .stage_mask =  .{ .color_attachment_output_bit = true },
+                .device_index = 0,
+            }
+        },
+        .fence = frame.fence,
+    });
 
     if (self.swapchain.present(vc, frame.command_completed)) |ok| {
         // if ok, frame presented successfully and we should wait for previous frame
@@ -158,12 +150,11 @@ const Frame = struct {
     command_completed: vk.Semaphore,
     fence: vk.Fence,
 
-    command_pool: vk.CommandPool,
-    command_buffer: vk.CommandBuffer,
+    encoder: Encoder,
 
     query_pool: if (metrics) vk.QueryPool else void,
 
-    fn create(vc: *const VulkanContext) !Frame {
+    fn create(vc: *const VulkanContext, name: [*:0]const u8) !Frame {
         const image_acquired = try vc.device.createSemaphore(&.{}, null);
         errdefer vc.device.destroySemaphore(image_acquired, null);
 
@@ -174,18 +165,8 @@ const Frame = struct {
             .flags = .{ .signaled_bit = true },
         }, null);
 
-        const command_pool = try vc.device.createCommandPool(&.{
-            .queue_family_index = vc.physical_device.queue_family_index,
-            .flags = .{ .transient_bit = true },
-        }, null);
-        errdefer vc.device.destroyCommandPool(command_pool, null);
-
-        var command_buffer: vk.CommandBuffer = undefined;
-        try vc.device.allocateCommandBuffers(&.{
-            .level = vk.CommandBufferLevel.primary,
-            .command_pool = command_pool,
-            .command_buffer_count = 1,
-        }, @ptrCast(&command_buffer));
+        const encoder = try Encoder.create(vc, name);
+        errdefer encoder.destroy(vc);
 
         const query_pool = if (metrics) try vc.device.createQueryPool(&.{
             .query_type = .timestamp,
@@ -199,8 +180,7 @@ const Frame = struct {
             .command_completed = command_completed,
             .fence = fence,
 
-            .command_pool = command_pool,
-            .command_buffer = command_buffer,
+            .encoder = encoder,
 
             .query_pool = query_pool,
         };
@@ -210,7 +190,7 @@ const Frame = struct {
         vc.device.destroySemaphore(self.image_acquired, null);
         vc.device.destroySemaphore(self.command_completed, null);
         vc.device.destroyFence(self.fence, null);
-        vc.device.destroyCommandPool(self.command_pool, null);
+        self.encoder.destroy(vc);
         if (metrics) vc.device.destroyQueryPool(self.query_pool, null);
     }
 };
