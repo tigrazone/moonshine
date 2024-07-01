@@ -93,7 +93,7 @@ pub fn main() !void {
     var vk_allocator = try VkAllocator.create(&context, allocator);
     defer vk_allocator.destroy(&context, allocator);
 
-    var encoder = try Encoder.create(&context);
+    var encoder = try Encoder.create(&context, "main");
     defer encoder.destroy(&context);
 
     try logger.log("set up initial state");

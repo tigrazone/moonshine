@@ -13,7 +13,7 @@ buffer: VulkanContext.CommandBuffer,
 
 const Self = @This();
 
-pub fn create(vc: *const VulkanContext) !Self {
+pub fn create(vc: *const VulkanContext, name: [*:0]const u8) !Self {
     const pool = try vc.device.createCommandPool(&.{
         .queue_family_index = vc.physical_device.queue_family_index,
         .flags = .{
@@ -29,7 +29,7 @@ pub fn create(vc: *const VulkanContext) !Self {
         .command_buffer_count = 1,
     }, @ptrCast(&buffer));
 
-    try vk_helpers.setDebugName(vc, buffer, "commands");
+    try vk_helpers.setDebugName(vc, buffer, name);
 
     return Self {
         .pool = pool,

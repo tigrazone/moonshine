@@ -124,7 +124,7 @@ pub const HdMoonshine = struct {
         self.vc = VulkanContext.create(self.allocator.allocator(), "hdMoonshine", &.{}, &hrtsystem.required_device_extensions, &hrtsystem.required_device_features, null) catch return null;
         errdefer self.vc.destroy();
 
-        self.encoder = Encoder.create(&self.vc) catch return null;
+        self.encoder = Encoder.create(&self.vc, "main") catch return null;
         errdefer self.encoder.destroy(&self.vc);
 
         self.vk_allocator = VkAllocator.create(&self.vc, self.allocator.allocator()) catch return null;

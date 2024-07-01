@@ -90,7 +90,7 @@ pub fn main() !void {
     var display = try Display.create(&context, window_extent, try window.createSurface(context.instance.handle));
     defer display.destroy(&context);
 
-    var encoder = try Encoder.create(&context);
+    var encoder = try Encoder.create(&context, "main");
     defer encoder.destroy(&context);
 
     var gui = try Platform.create(&context, display.swapchain, window, window_extent, &vk_allocator, &encoder);

@@ -39,7 +39,7 @@ const TestingContext = struct {
         var vk_allocator = try VkAllocator.create(&vc, allocator);
         errdefer vk_allocator.destroy(&vc, allocator);
 
-        var encoder = try Encoder.create(&vc);
+        var encoder = try Encoder.create(&vc, "main");
         errdefer encoder.destroy(&vc);
 
         const output_buffer = try vk_allocator.createHostBuffer(&vc, [4]f32, extent.width * extent.height, .{ .transfer_dst_bit = true });
