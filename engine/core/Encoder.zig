@@ -123,8 +123,8 @@ pub fn uploadDataToImage(self: Self, dst_image: vk.Image, src_data: VkAllocator.
 }
 
 // buffers must have appropriate flags
-pub fn copyBuffer(self: Self, vc: *const VulkanContext, dst: vk.Buffer, src: vk.Buffer, regions: []const vk.BufferCopy) void {
-    vc.device.cmdCopyBuffer(self.buffer, src, dst, @intCast(regions.len), regions.ptr);
+pub fn copyBuffer(self: Self, dst: vk.Buffer, src: vk.Buffer, regions: []const vk.BufferCopy) void {
+    self.buffer.copyBuffer(src.handle, dst.handle, @intCast(regions.len), regions.ptr);
 }
 
 // buffers must have appropriate flags
