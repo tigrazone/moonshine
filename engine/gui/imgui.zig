@@ -128,6 +128,19 @@ pub fn inputScalar(comptime T: type, label: [*:0]const u8, p_data: *T, step: ?T,
     return c.igInputScalar(label, data_type, p_data, if (step) |s| &s else null, if (step_fast) |s| &s else null, "%d", 0);
 }
 
+pub fn combo(comptime T: type, label: [*:0]const u8, data: *T) bool {
+    const before = data.*;
+    if (c.igBeginCombo(label, @tagName(data.*), 0)) {
+        inline for (@typeInfo(T).Enum.fields) |field| {
+            const selected = data.* == @as(T, @enumFromInt(field.value));
+            if (c.igSelectable_Bool(field.name, selected, 0, c.ImVec2{ .x = 0, .y = 0 })) data.* = @enumFromInt(field.value);
+            if (selected) c.igSetItemDefaultFocus();
+        }
+        c.igEndCombo();
+    }
+    return before == data.*;
+}
+
 const Col = enum(c_int) {
     text,
     _,
