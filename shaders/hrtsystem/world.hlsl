@@ -53,8 +53,8 @@ struct World {
 
     StructuredBuffer<MaterialVariantData> materials;
 
-    bool indexed_attributes;
-    bool two_component_normal_texture;
+    bool indexedAttributes;
+    bool twoComponentNormalTexture;
 
     Geometry getGeometry(uint instanceID, uint geometryIndex) {
         return geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
@@ -125,7 +125,7 @@ struct MeshAttributes {
         float3 p2 = loadPosition(mesh.positionAddress, ind.z);
         attrs.position = interpolate(barycentrics, p0, p1, p2);
 
-        uint3 attr_ind = world.indexed_attributes ? ind : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
+        uint3 attr_ind = world.indexedAttributes ? ind : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
 
         // texcoords optional
         float2 t0, t1, t2;

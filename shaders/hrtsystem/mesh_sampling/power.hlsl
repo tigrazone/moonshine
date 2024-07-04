@@ -1,9 +1,10 @@
 #include "../../utils/helpers.hlsl"
-#include "../scene.hlsl"
+#include "../world.hlsl"
+#include "../light.hlsl"
 
 // world info
-[[vk::constant_id(0)]] const bool indexed_attributes = true;
-[[vk::constant_id(1)]] const bool two_component_normal_texture = true;
+[[vk::constant_id(0)]] const bool dIndexedAttributes = true;
+[[vk::constant_id(1)]] const bool dTwoComponentNormalTexture = true;
 
 [[vk::binding(0, 0)]] StructuredBuffer<Instance> dInstances;
 [[vk::binding(1, 0)]] StructuredBuffer<row_major float3x4> dWorldToInstance;
@@ -36,9 +37,9 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
     world.meshes = dMeshes;
     world.geometries = dGeometries;
     world.materials = dMaterials;
-    world.indexed_attributes = indexed_attributes;
-    world.two_component_normal_texture = two_component_normal_texture;
-	
+    world.indexedAttributes = dIndexedAttributes;
+    world.twoComponentNormalTexture = dTwoComponentNormalTexture;
+
 	float total_emissive = 0;
 
 	const uint samples_per_dim = 8;

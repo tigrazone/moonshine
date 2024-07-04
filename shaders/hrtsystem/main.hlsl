@@ -28,6 +28,14 @@
 // OUTPUT
 [[vk::binding(12, 0)]] RWTexture2D<float4> dOutputImage;
 
+// SPECIALIZATION CONSTANTS
+[[vk::constant_id(0)]] const bool dIndexedAttributes = true;    // whether non-position vertex attributes are indexed
+[[vk::constant_id(1)]] const bool dTwoComponentNormalTexture = true;  // whether normal textures are two or three component vectors
+[[vk::constant_id(2)]] const uint dSamplesPerRun = 1;
+[[vk::constant_id(3)]] const uint dMaxBounces = 4;
+[[vk::constant_id(4)]] const uint dEnvSamplesPerBounce = 1;  // how many times the environment map should be sampled per bounce for light
+[[vk::constant_id(5)]] const uint dMeshSamplesPerBounce = 1; // how many times emissive meshes should be sampled per bounce for light
+
 // PUSH CONSTANTS
 struct PushConsts {
 	Camera camera;
@@ -35,20 +43,12 @@ struct PushConsts {
 };
 [[vk::push_constant]] PushConsts pushConsts;
 
-// SPECIALIZATION CONSTANTS
-[[vk::constant_id(0)]] const uint samples_per_run = 1;
-[[vk::constant_id(1)]] const uint max_bounces = 4;
-[[vk::constant_id(2)]] const uint env_samples_per_bounce = 1;   // how many times the environment map should be sampled per bounce for light
-[[vk::constant_id(3)]] const uint mesh_samples_per_bounce = 1;  // how many times emissive meshes should be sampled per bounce for light
-[[vk::constant_id(4)]] const bool indexed_attributes = true;    // whether non-position vertex attributes are indexed
-[[vk::constant_id(5)]] const bool two_component_normal_texture = true;  // whether normal textures are two or three component vectors
-
 [shader("raygeneration")]
 void raygen() {
     const uint2 imageCoords = DispatchRaysIndex().xy;
     const uint2 imageSize = DispatchRaysDimensions().xy;
 
-    PathTracingIntegrator integrator = PathTracingIntegrator::create(max_bounces, env_samples_per_bounce, mesh_samples_per_bounce);
+    const PathTracingIntegrator integrator = PathTracingIntegrator::create(dMaxBounces, dEnvSamplesPerBounce, dMeshSamplesPerBounce);
 
     World world;
     world.instances = dInstances;
@@ -56,8 +56,8 @@ void raygen() {
     world.meshes = dMeshes;
     world.geometries = dGeometries;
     world.materials = dMaterials;
-    world.indexed_attributes = indexed_attributes;
-    world.two_component_normal_texture = two_component_normal_texture;
+    world.indexedAttributes = dIndexedAttributes;
+    world.twoComponentNormalTexture = dTwoComponentNormalTexture;
 
     Scene scene;
     scene.tlas = dTLAS;
@@ -65,7 +65,7 @@ void raygen() {
     scene.envMap = EnvMap::create(dBackgroundRgbTexture, dBackgroundSampler, dBackgroundLuminanceTexture);
     scene.meshLights = MeshLights::create(dTrianglePower, dTriangleMetadata, dGeometryToTrianglePowerOffset, dEmissiveTriangleCount[0], world);
 
-    for (uint sampleCount = pushConsts.sampleCount; sampleCount < pushConsts.sampleCount + samples_per_run; sampleCount++) {
+    for (uint sampleCount = pushConsts.sampleCount; sampleCount < pushConsts.sampleCount + dSamplesPerRun; sampleCount++) {
         // create rng for this sample
         Rng rng = Rng::fromSeed(uint3(sampleCount, imageCoords.x, imageCoords.y));
 

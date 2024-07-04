@@ -506,7 +506,7 @@ Frame createTextureFrame(float3 normalWorldSpace, Frame tangentFrame) {
 Frame getTextureFrame(World world, uint materialIndex, float2 texcoords, Frame tangentFrame) {
     MaterialVariantData data = world.materials[NonUniformResourceIndex(materialIndex)];
     float3 normalTangentSpace;
-    if (world.two_component_normal_texture) {
+    if (world.twoComponentNormalTexture) {
         float2 rg = dTextures[NonUniformResourceIndex(data.normal)].SampleLevel(dTextureSampler, texcoords, 0).rg;
         normalTangentSpace = decodeNormal(rg);
     } else {
