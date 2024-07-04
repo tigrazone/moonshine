@@ -15,9 +15,9 @@ struct Camera {
         uint2 sensor_size = textureDimensions(outputImage);
         float aspect = float(sensor_size.x) / float(sensor_size.y);
 
-        float3 w = forward * -1.0f;
+        float3 w = forward;
         float3 u = normalize(cross(up, w));
-        float3 v = cross(w, u);
+        float3 v = cross(u, w);
 
         float h = tan(vfov / 2.0f);
         float viewport_height = 2.0 * h * focus_distance;
@@ -26,7 +26,7 @@ struct Camera {
         float3 horizontal = u * viewport_width;
         float3 vertical = v * viewport_height;
 
-        float3 lower_left_corner = origin - (horizontal / 2.0f) - (vertical / 2.0f) - (w * focus_distance);
+        float3 lower_left_corner = origin - (horizontal / 2.0f) - (vertical / 2.0f) + (w * focus_distance);
 
         float2 sampled_rand = squareToUniformDiskConcentric(rand);
         float2 rd = aperture * sampled_rand / 2.0f;

@@ -108,7 +108,6 @@ pub const HdMoonshine = struct {
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 1,
-        .flip_image = false,
         .indexed_attributes = false,
         .two_component_normal_texture = false,
     };

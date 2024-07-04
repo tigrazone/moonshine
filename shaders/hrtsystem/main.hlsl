@@ -18,7 +18,7 @@
 [[vk::binding(6, 0)]] Texture1D<float> dTrianglePower;
 [[vk::binding(7, 0)]] StructuredBuffer<TriangleMetadata> dTriangleMetadata;
 [[vk::binding(8, 0)]] StructuredBuffer<uint> dGeometryToTrianglePowerOffset;
-[[vk::binding(9, 0)]] StructuredBuffer<uint> emissiveTriangleCount;
+[[vk::binding(9, 0)]] StructuredBuffer<uint> dEmissiveTriangleCount;
 
 // BACKGROUND
 [[vk::combinedImageSampler]] [[vk::binding(10, 0)]] Texture2D<float3> dBackgroundRgbTexture;
@@ -40,20 +40,13 @@ struct PushConsts {
 [[vk::constant_id(1)]] const uint max_bounces = 4;
 [[vk::constant_id(2)]] const uint env_samples_per_bounce = 1;   // how many times the environment map should be sampled per bounce for light
 [[vk::constant_id(3)]] const uint mesh_samples_per_bounce = 1;  // how many times emissive meshes should be sampled per bounce for light
-[[vk::constant_id(4)]] const bool flip_image = true;
-[[vk::constant_id(5)]] const bool indexed_attributes = true;    // whether non-position vertex attributes are indexed
-[[vk::constant_id(6)]] const bool two_component_normal_texture = true;  // whether normal textures are two or three component vectors
-
-// returns uv of dispatch in [0..1]x[0..1], with slight variation based on rand
-float2 dispatchUV(float2 rand) {
-    float2 uv = (float2(DispatchRaysIndex().xy) + rand) / float2(DispatchRaysDimensions().xy);
-    if (flip_image) uv.y = 1.0f - uv.y;
-    return uv;
-}
+[[vk::constant_id(4)]] const bool indexed_attributes = true;    // whether non-position vertex attributes are indexed
+[[vk::constant_id(5)]] const bool two_component_normal_texture = true;  // whether normal textures are two or three component vectors
 
 [shader("raygeneration")]
 void raygen() {
     const uint2 imageCoords = DispatchRaysIndex().xy;
+    const uint2 imageSize = DispatchRaysDimensions().xy;
 
     PathTracingIntegrator integrator = PathTracingIntegrator::create(max_bounces, env_samples_per_bounce, mesh_samples_per_bounce);
 
@@ -70,20 +63,23 @@ void raygen() {
     scene.tlas = dTLAS;
     scene.world = world;
     scene.envMap = EnvMap::create(dBackgroundRgbTexture, dBackgroundSampler, dBackgroundLuminanceTexture);
-    scene.meshLights = MeshLights::create(dTrianglePower, dTriangleMetadata, dGeometryToTrianglePowerOffset, emissiveTriangleCount[0], world);
+    scene.meshLights = MeshLights::create(dTrianglePower, dTriangleMetadata, dGeometryToTrianglePowerOffset, dEmissiveTriangleCount[0], world);
 
-    for (uint sampleCount = 0; sampleCount < samples_per_run; sampleCount++) {
+    for (uint sampleCount = pushConsts.sampleCount; sampleCount < pushConsts.sampleCount + samples_per_run; sampleCount++) {
         // create rng for this sample
-        Rng rng = Rng::fromSeed(uint3(pushConsts.sampleCount + sampleCount, DispatchRaysIndex().x, DispatchRaysIndex().y));
+        Rng rng = Rng::fromSeed(uint3(sampleCount, imageCoords.x, imageCoords.y));
 
-        // set up initial directions for first bounce
-        RayDesc initialRay = pushConsts.camera.generateRay(dOutputImage, dispatchUV(float2(rng.getFloat(), rng.getFloat())), float2(rng.getFloat(), rng.getFloat()));
+        // set up initial ray
+        const float2 jitter = float2(rng.getFloat(), rng.getFloat());
+        const float2 imageUV = (imageCoords + jitter) / imageSize;
+        const RayDesc initialRay = pushConsts.camera.generateRay(dOutputImage, imageUV, float2(rng.getFloat(), rng.getFloat()));
 
         // trace the ray
-        const uint currentSampleCount = pushConsts.sampleCount + sampleCount;
         const float3 newSample = integrator.incomingRadiance(scene, initialRay, rng);
-        const float3 priorSampleAverage = currentSampleCount == 0 ? 0 : dOutputImage[imageCoords].xyz;
-        dOutputImage[imageCoords] = float4(accumulate(priorSampleAverage, newSample, currentSampleCount), 1);
+
+        // accumulate
+        const float3 priorSampleAverage = sampleCount == 0 ? 0 : dOutputImage[imageCoords].xyz;
+        dOutputImage[imageCoords] = float4(accumulate(priorSampleAverage, newSample, sampleCount), 1);
     }
 }
 

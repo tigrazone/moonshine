@@ -280,7 +280,6 @@ pub const StandardPipeline = Pipeline(.{
         max_bounces: u32 = 4,
         env_samples_per_bounce: u32 = 1,
         mesh_samples_per_bounce: u32 = 1,
-        flip_image: bool align(@alignOf(vk.Bool32)) = true,
         indexed_attributes: bool align(@alignOf(vk.Bool32)) = true,
         two_component_normal_texture: bool align(@alignOf(vk.Bool32)) = true,
     },

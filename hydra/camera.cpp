@@ -18,7 +18,7 @@ void HdMoonshineCamera::Sync(HdSceneDelegate* sceneDelegate, HdRenderParam* rend
     GfMatrix4f transform = GfMatrix4f(GetTransform());
     GfVec3f origin = transform.Transform(GfVec3f(0.0, 0.0, 0.0));
     GfVec3f forward = transform.TransformDir(GfVec3f(0.0, 0.0, -1.0));
-    GfVec3f up = transform.TransformDir(GfVec3f(0.0, 1.0, 0.0));
+    GfVec3f up = transform.TransformDir(GfVec3f(0.0, -1.0, 0.0)); // insert negation here as we want to flip resultant image
 
     forward.Normalize();
     up.Normalize();

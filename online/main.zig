@@ -274,7 +274,7 @@ pub fn main() !void {
                 imgui.resetMouseDragDelta(.right);
                 if (!std.meta.eql(delta, F32x2.new(0.5, 0.5))) {
                     const aspect = window_size.x / window_size.y;
-                    scene.camera.lenses.items[0].forward = scene.camera.lenses.items[0].directionFromUv(F32x2.new(delta.x, 1.0 - delta.y), aspect);
+                    scene.camera.lenses.items[0].forward = scene.camera.lenses.items[0].directionFromUv(F32x2.new(delta.x, delta.y), aspect);
                     scene.camera.sensors.items[active_sensor].clear();
                 }
             } else {
@@ -297,8 +297,8 @@ pub fn main() !void {
 
             if (imgui.isKeyDown(.w)) new_lens.origin = new_lens.origin.add(new_lens.forward.mul_scalar(speed * 30));
             if (imgui.isKeyDown(.s)) new_lens.origin = new_lens.origin.sub(new_lens.forward.mul_scalar(speed * 30));
-            if (imgui.isKeyDown(.d)) new_lens.origin = new_lens.origin.add(side.mul_scalar(speed * 30));
-            if (imgui.isKeyDown(.a)) new_lens.origin = new_lens.origin.sub(side.mul_scalar(speed * 30));
+            if (imgui.isKeyDown(.a)) new_lens.origin = new_lens.origin.add(side.mul_scalar(speed * 30));
+            if (imgui.isKeyDown(.d)) new_lens.origin = new_lens.origin.sub(side.mul_scalar(speed * 30));
             if (imgui.isKeyDown(.f) and new_lens.aperture > 0.0) new_lens.aperture -= speed / 10;
             if (imgui.isKeyDown(.r)) new_lens.aperture += speed / 10;
             if (imgui.isKeyDown(.q)) new_lens.focus_distance -= speed * 10;
