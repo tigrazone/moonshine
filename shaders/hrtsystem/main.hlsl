@@ -44,17 +44,6 @@ struct PushConsts {
 [[vk::constant_id(5)]] const bool indexed_attributes = true;    // whether non-position vertex attributes are indexed
 [[vk::constant_id(6)]] const bool two_component_normal_texture = true;  // whether normal textures are two or three component vectors
 
-// https://www.nu42.com/2015/03/how-you-average-numbers.html
-void accumulateColor(float3 sampledColor, uint sampleCount) {
-    uint2 imageCoords = DispatchRaysIndex().xy;
-    if (sampleCount == 0) {
-        dOutputImage[imageCoords] = float4(sampledColor, 1.0);
-    } else {
-        float3 priorSampleAverage = dOutputImage[imageCoords].rgb;
-        dOutputImage[imageCoords] += float4((sampledColor - priorSampleAverage) / (sampleCount + 1), 1.0);
-    }
-}
-
 // returns uv of dispatch in [0..1]x[0..1], with slight variation based on rand
 float2 dispatchUV(float2 rand) {
     float2 randomCenter = float2(0.5, 0.5) + 0.5 * squareToGaussian(rand);
@@ -65,6 +54,8 @@ float2 dispatchUV(float2 rand) {
 
 [shader("raygeneration")]
 void raygen() {
+    const uint2 imageCoords = DispatchRaysIndex().xy;
+
     PathTracingIntegrator integrator = PathTracingIntegrator::create(max_bounces, env_samples_per_bounce, mesh_samples_per_bounce);
 
     World world;
@@ -90,8 +81,10 @@ void raygen() {
         RayDesc initialRay = pushConsts.camera.generateRay(dOutputImage, dispatchUV(float2(rng.getFloat(), rng.getFloat())), float2(rng.getFloat(), rng.getFloat()));
 
         // trace the ray
-        float3 color = integrator.incomingRadiance(scene, initialRay, rng);
-        accumulateColor(color, pushConsts.sampleCount + sampleCount);
+        const uint currentSampleCount = pushConsts.sampleCount + sampleCount;
+        const float3 newSample = integrator.incomingRadiance(scene, initialRay, rng);
+        const float3 priorSampleAverage = currentSampleCount == 0 ? 0 : dOutputImage[imageCoords].xyz;
+        dOutputImage[imageCoords] = float4(accumulate(priorSampleAverage, newSample, currentSampleCount), 1);
     }
 }
 

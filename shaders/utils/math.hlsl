@@ -28,6 +28,11 @@ float2 faceForward(float2 n, float2 d) {
     return dot(n, d) > 0 ? n : -n;
 }
 
+// https://www.nu42.com/2015/03/how-you-average-numbers.html
+float3 accumulate(const float3 priorAverage, const float3 newSample, const uint sampleCount) {
+    return priorAverage + (newSample - priorAverage) / (sampleCount + 1);
+}
+
 // https://research.nvidia.com/publication/2019-03_fast-and-robust-method-avoiding-self-intersection
 float3 offsetAlongNormal(float3 p, float3 n) {
     float origin = 1.0f / 32.0f;
