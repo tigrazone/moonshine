@@ -46,8 +46,7 @@ struct PushConsts {
 
 // returns uv of dispatch in [0..1]x[0..1], with slight variation based on rand
 float2 dispatchUV(float2 rand) {
-    float2 randomCenter = float2(0.5, 0.5) + 0.5 * squareToGaussian(rand);
-    float2 uv = (float2(DispatchRaysIndex().xy) + randomCenter) / float2(DispatchRaysDimensions().xy);
+    float2 uv = (float2(DispatchRaysIndex().xy) + rand) / float2(DispatchRaysDimensions().xy);
     if (flip_image) uv.y = 1.0f - uv.y;
     return uv;
 }
