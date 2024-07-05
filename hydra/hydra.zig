@@ -43,12 +43,14 @@ pub const Material = extern struct {
 pub const TextureFormat = enum(c_int) {
     f16x4,
     u8x1,
+    u8x4,
     u8x4_srgb,
 
     fn toVk(self: TextureFormat) vk.Format {
         switch (self) {
             .f16x4 => return .r16g16b16a16_sfloat,
             .u8x1 => return .r8_unorm,
+            .u8x4 => return .r8g8b8a8_unorm,
             .u8x4_srgb => return .r8g8b8a8_srgb,
         }
     }
@@ -57,6 +59,7 @@ pub const TextureFormat = enum(c_int) {
         switch (self) {
             .f16x4 => return @sizeOf(f16) * 4,
             .u8x1 => return @sizeOf(u8) * 1,
+            .u8x4 => return @sizeOf(u8) * 4,
             .u8x4_srgb => return @sizeOf(u8) * 4,
         }
     }

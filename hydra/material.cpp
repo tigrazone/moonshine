@@ -22,6 +22,9 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
     (metallic)
     (ior)
     (useSpecularWorkflow)
+    (sourceColorSpace)
+    (raw)
+    (sRGB)
 );
 
 HdMoonshineMaterial::HdMoonshineMaterial(const SdfPath& id, const HdMoonshineRenderParam& renderParam) : HdMaterial(id) {
@@ -51,6 +54,10 @@ std::optional<TextureFormat> usdFormatToMsneFormat(HioFormat format) {
         return TextureFormat::u8x4_srgb;
     } else if (format == HioFormatUNorm8Vec3srgb) {
         return TextureFormat::u8x4_srgb;
+    } else if (format == HioFormatUNorm8Vec4) {
+        return TextureFormat::u8x4;
+    } else if (format == HioFormatUNorm8Vec3) {
+        return TextureFormat::u8x4;
     } else {
         return std::nullopt;
     }
@@ -64,19 +71,15 @@ void rgbToRgba(std::unique_ptr<uint8_t[]>& data, size_t pixel_count, size_t src_
     }
 }
 
-std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::string const& swizzle, std::string const& debug_name) {
+std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::string const& swizzle, TfToken colorSpace, std::string const& debug_name) {
     if (value.IsHolding<SdfAssetPath>()) {
         auto image = HioImage::OpenForReading(value.Get<SdfAssetPath>().GetResolvedPath());
-        std::optional<TextureFormat> format = usdFormatToMsneFormat(image->GetFormat());
-        if (!format) {
-            TF_CODING_ERROR("unknown format %u", image->GetFormat());
-            return std::nullopt;
-        }
+        auto format = image->GetFormat();
 
         HioImage::StorageSpec spec;
         spec.width  = image->GetWidth();
         spec.height = image->GetHeight();
-        spec.format = image->GetFormat();
+        spec.format = format;
         spec.flipped = true; // moonshine expects flipped UVs which is equivalent to flipping here
         size_t imageSize = spec.width * spec.height * image->GetBytesPerPixel();
         // moonshine does not support RGB formats so possibly allocate enough space to
@@ -89,24 +92,30 @@ std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::st
         image->Read(spec);
 
         if (swizzle == "r" || swizzle == "g" || swizzle == "b") {
-            const size_t src_start = (swizzle == "r" ? 0 : (swizzle == "g" ? 1 : 2)) * HioGetDataSizeOfType(image->GetFormat());
-            const size_t src_end = src_start + HioGetDataSizeOfType(image->GetFormat());
+            const size_t src_start = (swizzle == "r" ? 0 : (swizzle == "g" ? 1 : 2)) * HioGetDataSizeOfType(format);
+            const size_t src_end = src_start + HioGetDataSizeOfType(format);
             for (size_t i = 0; i < spec.width * spec.height; i++) {
                 for (size_t j = src_start; j < src_end; j++) {
-                    data[i * HioGetDataSizeOfType(image->GetFormat()) + j - src_start] = data[i * image->GetBytesPerPixel() + j];
+                    data[i * HioGetDataSizeOfType(format) + j - src_start] = data[i * image->GetBytesPerPixel() + j];
                 }
             }
-            format = usdFormatToMsneFormat(HioGetFormat(1, HioGetHioType(image->GetFormat()), false));
+            format = HioGetFormat(1, HioGetHioType(format), false);
         } else if (image->GetBytesPerPixel() % 3 == 0) {
             // pad to RGBA
             rgbToRgba(data, spec.width * spec.height, image->GetBytesPerPixel(), (image->GetBytesPerPixel() / 3) * 4);
         }
 
+        format = HioGetFormat(HioGetComponentCount(format), HioGetHioType(format), colorSpace == _tokens->sRGB);
+        std::optional<TextureFormat> msne_format = usdFormatToMsneFormat(format);
+        if (!msne_format) {
+            TF_CODING_ERROR("unknown format %u", format);
+            return std::nullopt;
+        }
         Extent2D extent = Extent2D {
             .width = static_cast<uint32_t>(spec.width),
             .height = static_cast<uint32_t>(spec.height),
         };
-        return HdMoonshineCreateRawTexture(msne, data.get(), extent, format.value(), (debug_name + " texture").c_str());
+        return HdMoonshineCreateRawTexture(msne, data.get(), extent, msne_format.value(), (debug_name + " texture").c_str());
     } else if (value.IsHolding<GfVec3f>()) {
         GfVec3f vec = value.Get<GfVec3f>();
         return HdMoonshineCreateSolidTexture3(msne, F32x3 { .x = vec[0], .y = vec[1], .z = vec[2] }, (debug_name + " f32x3").c_str());
@@ -119,7 +128,7 @@ std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::st
     }
 }
 
-bool SetTextureBasedOnValueAndName(HdMoonshine* msne, MaterialHandle handle, TfToken name, VtValue value, std::string const& swizzle, std::string const& debug_name) {
+bool SetTextureBasedOnValueAndName(HdMoonshine* msne, MaterialHandle handle, TfToken name, VtValue value, std::string const& swizzle, TfToken colorSpace, std::string const& debug_name) {
     if (name == _tokens->ior) {
         float ior = value.Get<float>();
         HdMoonshineSetMaterialIOR(msne, handle, ior);
@@ -130,7 +139,7 @@ bool SetTextureBasedOnValueAndName(HdMoonshine* msne, MaterialHandle handle, TfT
             return true;
         }
 
-        std::optional<ImageHandle> maybe_texture = makeTexture(msne, value, swizzle, debug_name + " " + name.GetString());
+        std::optional<ImageHandle> maybe_texture = makeTexture(msne, value, swizzle, colorSpace, debug_name + " " + name.GetString());
         if (!maybe_texture) {
             TF_CODING_ERROR("could not parse texture %s", (debug_name + " " + name.GetString()).c_str());
             return false;
@@ -203,19 +212,20 @@ void HdMoonshineMaterial::Sync(HdSceneDelegate* sceneDelegate, HdRenderParam* hd
                 TfToken sdrRole(upstreamSdr->GetRole());
                 if (sdrRole == SdrNodeRole->Texture) {
                     const std::string swizzle = upstreamSdr->GetShaderOutput(con.upstreamOutputName)->GetImplementationName();
+                    TfToken colorSpace = upstreamNode.parameters.find(_tokens->sourceColorSpace)->second.Get<TfToken>();
                     TfToken fileProperty = upstreamSdr->GetAssetIdentifierInputNames()[0];
                     VtValue value = upstreamNode.parameters.find(fileProperty)->second;
-                    SetTextureBasedOnValueAndName(msne, _handle, inputName, value, swizzle, id.GetString());
+                    SetTextureBasedOnValueAndName(msne, _handle, inputName, value, swizzle, colorSpace, id.GetString());
                 } else {
                     TF_CODING_ERROR("%s unknown connection %s: %s", id.GetText(), inputName.GetText(), upstreamSdr->GetRole().c_str());
                 }
             } else if (paramIt != node.parameters.end()) {
                 VtValue value = paramIt->second;
-                SetTextureBasedOnValueAndName(msne, _handle, inputName, value, "", id.GetString() + " parameter");
+                SetTextureBasedOnValueAndName(msne, _handle, inputName, value, "", _tokens->raw, id.GetString() + " parameter");
             } else {
                 SdrShaderPropertyConstPtr const& input = sdrNode->GetShaderInput(inputName);
                 VtValue value = input->GetDefaultValue();
-                SetTextureBasedOnValueAndName(msne, _handle, inputName, value, "", id.GetString() + " default");
+                SetTextureBasedOnValueAndName(msne, _handle, inputName, value, "", _tokens->raw, id.GetString() + " default");
             }
         }
 
