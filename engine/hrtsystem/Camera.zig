@@ -25,27 +25,30 @@ pub const Lens = extern struct {
     focus_distance: f32,
 
     pub fn fromGlb(gltf: Gltf) !Lens {
-        // just use first camera found in nodes
-        const gltf_camera_node = for (gltf.data.nodes.items) |node| {
-            if (node.camera) |camera| break .{ gltf.data.cameras.items[camera], node };
-        } else return error.NoCameraInGlb;
-
-        const gltf_camera = gltf_camera_node[0];
-        const transform = blk: {
-            const mat = Gltf.getGlobalTransform(&gltf.data, gltf_camera_node[1]);
-            // convert to Z-up
-            break :blk Mat3x4.new(
-                F32x4.new(mat[0][0], mat[1][0], mat[2][0], mat[3][0]),
-                F32x4.new(mat[0][2], mat[1][2], mat[2][2], mat[3][2]),
-                F32x4.new(mat[0][1], mat[1][1], mat[2][1], mat[3][1]),
-            );
-        };
+        // just use first camera found in nodes, if none found, use an arbitrary default
+        const yfov, const transform = for (gltf.data.nodes.items) |node| {
+            if (node.camera) |camera| {
+                const yfov = gltf.data.cameras.items[camera].type.perspective.yfov;
+                const mat = Gltf.getGlobalTransform(&gltf.data, node);
+                // convert to Z-up
+                const transform = Mat3x4.new(
+                    F32x4.new(mat[0][0], mat[1][0], mat[2][0], mat[3][0]),
+                    F32x4.new(mat[0][2], mat[1][2], mat[2][2], mat[3][2]),
+                    F32x4.new(mat[0][1], mat[1][1], mat[2][1], mat[3][1]),
+                );
+                break .{ yfov, transform };
+            }
+        } else .{ std.math.pi / 6.0, Mat3x4.new(
+            F32x4.new(1, 0, 0, 0),
+            F32x4.new(0, 0, 1, 5), // looking at origin
+            F32x4.new(0, 1, 0, 0),
+        ) };
 
         return Lens {
             .origin = transform.mul_point(F32x3.new(0.0, 0.0, 0.0)),
             .forward = transform.mul_vec(F32x3.new(0.0, 0.0, -1.0)).unit(),
-            .up = transform.mul_vec(F32x3.new(0.0, 1.0, 0.0)),
-            .vfov = gltf_camera.type.perspective.yfov,
+            .up = transform.mul_vec(F32x3.new(0.0, 1.0, 0.0)).unit(),
+            .vfov = yfov,
             .aperture = 0.0,
             .focus_distance = 1.0,
         };
