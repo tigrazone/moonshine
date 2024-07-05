@@ -42,11 +42,13 @@ pub const Material = extern struct {
 
 pub const TextureFormat = enum(c_int) {
     f16x4,
+    u8x1,
     u8x4_srgb,
 
     fn toVk(self: TextureFormat) vk.Format {
         switch (self) {
             .f16x4 => return .r16g16b16a16_sfloat,
+            .u8x1 => return .r8_unorm,
             .u8x4_srgb => return .r8g8b8a8_srgb,
         }
     }
@@ -54,6 +56,7 @@ pub const TextureFormat = enum(c_int) {
     fn pixelSizeInBytes(self: TextureFormat) usize {
         switch (self) {
             .f16x4 => return @sizeOf(f16) * 4,
+            .u8x1 => return @sizeOf(u8) * 1,
             .u8x4_srgb => return @sizeOf(u8) * 4,
         }
     }
@@ -121,7 +124,7 @@ pub const HdMoonshine = struct {
 
         self.allocator = allocator;
         self.vc = VulkanContext.create(self.allocator.allocator(), "hdMoonshine", &.{}, &hrtsystem.required_device_extensions, &hrtsystem.required_device_features, null) catch return null;
-        errdefer self.vc.destroy();
+        errdefer self.vc.destroy(self.allocator.allocator());
 
         self.encoder = Encoder.create(&self.vc, "main") catch return null;
         errdefer self.encoder.destroy(&self.vc);

@@ -45,6 +45,8 @@ HdDirtyBits HdMoonshineMaterial::GetInitialDirtyBitsMask() const {
 std::optional<TextureFormat> usdFormatToMsneFormat(HioFormat format) {
     if (format == HioFormatFloat16Vec3) {
         return TextureFormat::f16x4;
+    } else if (format == HioFormatUNorm8) {
+        return TextureFormat::u8x1;
     } else if (format == HioFormatUNorm8Vec4srgb) {
         return TextureFormat::u8x4_srgb;
     } else if (format == HioFormatUNorm8Vec3srgb) {
@@ -62,7 +64,7 @@ void rgbToRgba(std::unique_ptr<uint8_t[]>& data, size_t pixel_count, size_t src_
     }
 }
 
-std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::string const& debug_name) {
+std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::string const& swizzle, std::string const& debug_name) {
     if (value.IsHolding<SdfAssetPath>()) {
         auto image = HioImage::OpenForReading(value.Get<SdfAssetPath>().GetResolvedPath());
         std::optional<TextureFormat> format = usdFormatToMsneFormat(image->GetFormat());
@@ -86,8 +88,17 @@ std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::st
         spec.data = data.get();
         image->Read(spec);
 
-        // possibly pad to RGBA
-        if (image->GetBytesPerPixel() % 3 == 0) {
+        if (swizzle == "r" || swizzle == "g" || swizzle == "b") {
+            const size_t src_start = (swizzle == "r" ? 0 : (swizzle == "g" ? 1 : 2)) * HioGetDataSizeOfType(image->GetFormat());
+            const size_t src_end = src_start + HioGetDataSizeOfType(image->GetFormat());
+            for (size_t i = 0; i < spec.width * spec.height; i++) {
+                for (size_t j = src_start; j < src_end; j++) {
+                    data[i * HioGetDataSizeOfType(image->GetFormat()) + j - src_start] = data[i * image->GetBytesPerPixel() + j];
+                }
+            }
+            format = usdFormatToMsneFormat(HioGetFormat(1, HioGetHioType(image->GetFormat()), false));
+        } else if (image->GetBytesPerPixel() % 3 == 0) {
+            // pad to RGBA
             rgbToRgba(data, spec.width * spec.height, image->GetBytesPerPixel(), (image->GetBytesPerPixel() / 3) * 4);
         }
 
@@ -108,7 +119,7 @@ std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::st
     }
 }
 
-bool SetTextureBasedOnValueAndName(HdMoonshine* msne, MaterialHandle handle, TfToken name, VtValue value, std::string const& debug_name) {
+bool SetTextureBasedOnValueAndName(HdMoonshine* msne, MaterialHandle handle, TfToken name, VtValue value, std::string const& swizzle, std::string const& debug_name) {
     if (name == _tokens->ior) {
         float ior = value.Get<float>();
         HdMoonshineSetMaterialIOR(msne, handle, ior);
@@ -119,7 +130,7 @@ bool SetTextureBasedOnValueAndName(HdMoonshine* msne, MaterialHandle handle, TfT
             return true;
         }
 
-        std::optional<ImageHandle> maybe_texture = makeTexture(msne, value, debug_name + " " + name.GetString());
+        std::optional<ImageHandle> maybe_texture = makeTexture(msne, value, swizzle, debug_name + " " + name.GetString());
         if (!maybe_texture) {
             TF_CODING_ERROR("could not parse texture %s", (debug_name + " " + name.GetString()).c_str());
             return false;
@@ -191,19 +202,20 @@ void HdMoonshineMaterial::Sync(HdSceneDelegate* sceneDelegate, HdRenderParam* hd
 
                 TfToken sdrRole(upstreamSdr->GetRole());
                 if (sdrRole == SdrNodeRole->Texture) {
+                    const std::string swizzle = upstreamSdr->GetShaderOutput(con.upstreamOutputName)->GetImplementationName();
                     TfToken fileProperty = upstreamSdr->GetAssetIdentifierInputNames()[0];
                     VtValue value = upstreamNode.parameters.find(fileProperty)->second;
-                    SetTextureBasedOnValueAndName(msne, _handle, inputName, value, id.GetString());
+                    SetTextureBasedOnValueAndName(msne, _handle, inputName, value, swizzle, id.GetString());
                 } else {
                     TF_CODING_ERROR("%s unknown connection %s: %s", id.GetText(), inputName.GetText(), upstreamSdr->GetRole().c_str());
                 }
             } else if (paramIt != node.parameters.end()) {
                 VtValue value = paramIt->second;
-                SetTextureBasedOnValueAndName(msne, _handle, inputName, value, id.GetString() + " parameter");
+                SetTextureBasedOnValueAndName(msne, _handle, inputName, value, "", id.GetString() + " parameter");
             } else {
                 SdrShaderPropertyConstPtr const& input = sdrNode->GetShaderInput(inputName);
                 VtValue value = input->GetDefaultValue();
-                SetTextureBasedOnValueAndName(msne, _handle, inputName, value, id.GetString() + " default");
+                SetTextureBasedOnValueAndName(msne, _handle, inputName, value, "", id.GetString() + " default");
             }
         }
 

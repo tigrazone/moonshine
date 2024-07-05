@@ -59,6 +59,7 @@ typedef struct Material {
 
 typedef enum TextureFormat {
     f16x4,
+    u8x1,
     u8x4_srgb,
 } TextureFormat;
 
