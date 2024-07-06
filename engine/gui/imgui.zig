@@ -138,7 +138,7 @@ pub fn combo(comptime T: type, label: [*:0]const u8, data: *T) bool {
         }
         c.igEndCombo();
     }
-    return before == data.*;
+    return before != data.*;
 }
 
 const Col = enum(c_int) {
