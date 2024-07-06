@@ -30,7 +30,7 @@ TF_DEFINE_PRIVATE_TOKENS(_tokens,
 HdMoonshineMaterial::HdMoonshineMaterial(const SdfPath& id, const HdMoonshineRenderParam& renderParam) : HdMaterial(id) {
     // create a handle now so it is valid for the lifetime of the object and can be used whenever
     _handle = HdMoonshineCreateMaterial(renderParam._moonshine, Material {
-        .normal = renderParam._up,
+        .normal = renderParam._upNormal,
         .emissive = renderParam._black3,
         .color = renderParam._grey3,
         .metalness = renderParam._black1,
@@ -50,14 +50,16 @@ std::optional<TextureFormat> usdFormatToMsneFormat(HioFormat format) {
         return TextureFormat::f16x4;
     } else if (format == HioFormatUNorm8) {
         return TextureFormat::u8x1;
-    } else if (format == HioFormatUNorm8Vec4srgb) {
-        return TextureFormat::u8x4_srgb;
-    } else if (format == HioFormatUNorm8Vec3srgb) {
-        return TextureFormat::u8x4_srgb;
+    } else if (format == HioFormatUNorm8Vec2) {
+        return TextureFormat::u8x2;
     } else if (format == HioFormatUNorm8Vec4) {
         return TextureFormat::u8x4;
     } else if (format == HioFormatUNorm8Vec3) {
         return TextureFormat::u8x4;
+    } else if (format == HioFormatUNorm8Vec4srgb) {
+        return TextureFormat::u8x4_srgb;
+    } else if (format == HioFormatUNorm8Vec3srgb) {
+        return TextureFormat::u8x4_srgb;
     } else {
         return std::nullopt;
     }
@@ -71,7 +73,7 @@ void rgbToRgba(std::unique_ptr<uint8_t[]>& data, size_t pixel_count, size_t src_
     }
 }
 
-std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::string const& swizzle, TfToken colorSpace, std::string const& debug_name) {
+std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::string const& swizzle, TfToken colorSpace, TfToken dst, std::string const& debug_name) {
     if (value.IsHolding<SdfAssetPath>()) {
         auto image = HioImage::OpenForReading(value.Get<SdfAssetPath>().GetResolvedPath());
         auto format = image->GetFormat();
@@ -100,9 +102,19 @@ std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::st
                 }
             }
             format = HioGetFormat(1, HioGetHioType(format), false);
-        } else if (image->GetBytesPerPixel() % 3 == 0) {
-            // pad to RGBA
-            rgbToRgba(data, spec.width * spec.height, image->GetBytesPerPixel(), (image->GetBytesPerPixel() / 3) * 4);
+        } else if (HioGetComponentCount(format) == 3) {
+            if (dst == _tokens->normal) {
+                // convert to two component normal
+                for (size_t i = 0; i < spec.width * spec.height; i++) {
+                    for (size_t j = 0; j < (HioGetDataSizeOfFormat(format) / 3) * 2; j++) {
+                        data[i * HioGetDataSizeOfType(format) * 2 + j] = data[i * image->GetBytesPerPixel() + j];
+                    }
+                }
+                format = HioGetFormat(2, HioGetHioType(format), false);
+            } else {
+                // pad to RGBA
+                rgbToRgba(data, spec.width * spec.height, image->GetBytesPerPixel(), (image->GetBytesPerPixel() / 3) * 4);
+            }
         }
 
         format = HioGetFormat(HioGetComponentCount(format), HioGetHioType(format), colorSpace == _tokens->sRGB);
@@ -139,7 +151,7 @@ bool SetTextureBasedOnValueAndName(HdMoonshine* msne, MaterialHandle handle, TfT
             return true;
         }
 
-        std::optional<ImageHandle> maybe_texture = makeTexture(msne, value, swizzle, colorSpace, debug_name + " " + name.GetString());
+        std::optional<ImageHandle> maybe_texture = makeTexture(msne, value, swizzle, colorSpace, name, debug_name + " " + name.GetString());
         if (!maybe_texture) {
             TF_CODING_ERROR("could not parse texture %s", (debug_name + " " + name.GetString()).c_str());
             return false;

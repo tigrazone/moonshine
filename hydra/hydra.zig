@@ -43,6 +43,7 @@ pub const Material = extern struct {
 pub const TextureFormat = enum(c_int) {
     f16x4,
     u8x1,
+    u8x2,
     u8x4,
     u8x4_srgb,
 
@@ -50,6 +51,7 @@ pub const TextureFormat = enum(c_int) {
         switch (self) {
             .f16x4 => return .r16g16b16a16_sfloat,
             .u8x1 => return .r8_unorm,
+            .u8x2 => return .r8g8_unorm,
             .u8x4 => return .r8g8b8a8_unorm,
             .u8x4_srgb => return .r8g8b8a8_srgb,
         }
@@ -59,6 +61,7 @@ pub const TextureFormat = enum(c_int) {
         switch (self) {
             .f16x4 => return @sizeOf(f16) * 4,
             .u8x1 => return @sizeOf(u8) * 1,
+            .u8x2 => return @sizeOf(u8) * 2,
             .u8x4 => return @sizeOf(u8) * 4,
             .u8x4_srgb => return @sizeOf(u8) * 4,
         }
@@ -115,7 +118,7 @@ pub const HdMoonshine = struct {
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 1,
         .indexed_attributes = false,
-        .two_component_normal_texture = false,
+        .two_component_normal_texture = true,
     };
 
     pub export fn HdMoonshineCreate() ?*HdMoonshine {
