@@ -104,7 +104,7 @@ std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::st
             format = HioGetFormat(1, HioGetHioType(format), false);
         } else if (HioGetComponentCount(format) == 3) {
             if (dst == _tokens->normal) {
-                // convert to two component normal
+                // convert to two component normal. assume that it's aleady [0-1]
                 for (size_t i = 0; i < spec.width * spec.height; i++) {
                     for (size_t j = 0; j < (HioGetDataSizeOfFormat(format) / 3) * 2; j++) {
                         data[i * HioGetDataSizeOfType(format) * 2 + j] = data[i * image->GetBytesPerPixel() + j];
@@ -130,7 +130,12 @@ std::optional<ImageHandle> makeTexture(HdMoonshine* msne, VtValue value, std::st
         return HdMoonshineCreateRawTexture(msne, data.get(), extent, msne_format.value(), (debug_name + " texture").c_str());
     } else if (value.IsHolding<GfVec3f>()) {
         GfVec3f vec = value.Get<GfVec3f>();
-        return HdMoonshineCreateSolidTexture3(msne, F32x3 { .x = vec[0], .y = vec[1], .z = vec[2] }, (debug_name + " f32x3").c_str());
+        if (dst == _tokens->normal) {
+            vec = (vec + GfVec3f(1)) / 2; // convert to [0-1]
+            return HdMoonshineCreateSolidTexture2(msne, F32x2 { .x = vec[0], .y = vec[1] }, (debug_name + " f32x2").c_str());
+        } else {
+            return HdMoonshineCreateSolidTexture3(msne, F32x3 { .x = vec[0], .y = vec[1], .z = vec[2] }, (debug_name + " f32x3").c_str());
+        }
     } else if (value.IsHolding<float>()) {
         float val = value.Get<float>();
         return HdMoonshineCreateSolidTexture1(msne, val, (debug_name + " float").c_str());
