@@ -4,7 +4,6 @@
 
 // world info
 [[vk::constant_id(0)]] const bool dIndexedAttributes = true;
-[[vk::constant_id(1)]] const bool dTwoComponentNormalTexture = true;
 
 [[vk::binding(0, 0)]] StructuredBuffer<Instance> dInstances;
 [[vk::binding(1, 0)]] StructuredBuffer<row_major float3x4> dWorldToInstance;
@@ -38,7 +37,6 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
     world.geometries = dGeometries;
     world.materials = dMaterials;
     world.indexedAttributes = dIndexedAttributes;
-    world.twoComponentNormalTexture = dTwoComponentNormalTexture;
 
 	float total_emissive = 0;
 

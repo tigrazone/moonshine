@@ -54,7 +54,6 @@ struct World {
     StructuredBuffer<MaterialVariantData> materials;
 
     bool indexedAttributes;
-    bool twoComponentNormalTexture;
 
     Geometry getGeometry(uint instanceID, uint geometryIndex) {
         return geometries[NonUniformResourceIndex(instanceID + geometryIndex)];

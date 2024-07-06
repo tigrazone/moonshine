@@ -118,7 +118,6 @@ pub const HdMoonshine = struct {
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 1,
         .indexed_attributes = false,
-        .two_component_normal_texture = true,
     };
 
     pub export fn HdMoonshineCreate() ?*HdMoonshine {

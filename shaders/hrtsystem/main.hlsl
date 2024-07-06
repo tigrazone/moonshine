@@ -30,11 +30,10 @@
 
 // SPECIALIZATION CONSTANTS
 [[vk::constant_id(0)]] const bool dIndexedAttributes = true;    // whether non-position vertex attributes are indexed
-[[vk::constant_id(1)]] const bool dTwoComponentNormalTexture = true;  // whether normal textures are two or three component vectors
-[[vk::constant_id(2)]] const uint dSamplesPerRun = 1;
-[[vk::constant_id(3)]] const uint dMaxBounces = 4;
-[[vk::constant_id(4)]] const uint dEnvSamplesPerBounce = 1;  // how many times the environment map should be sampled per bounce for light
-[[vk::constant_id(5)]] const uint dMeshSamplesPerBounce = 1; // how many times emissive meshes should be sampled per bounce for light
+[[vk::constant_id(1)]] const uint dSamplesPerRun = 1;
+[[vk::constant_id(2)]] const uint dMaxBounces = 4;
+[[vk::constant_id(3)]] const uint dEnvSamplesPerBounce = 1;  // how many times the environment map should be sampled per bounce for light
+[[vk::constant_id(4)]] const uint dMeshSamplesPerBounce = 1; // how many times emissive meshes should be sampled per bounce for light
 
 // PUSH CONSTANTS
 struct PushConsts {
@@ -57,7 +56,6 @@ void raygen() {
     world.geometries = dGeometries;
     world.materials = dMaterials;
     world.indexedAttributes = dIndexedAttributes;
-    world.twoComponentNormalTexture = dTwoComponentNormalTexture;
 
     Scene scene;
     scene.tlas = dTLAS;

@@ -50,7 +50,6 @@ const BottomLevelAccels = std.MultiArrayList(struct {
 const TrianglePowerPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "hrtsystem/mesh_sampling/power.hlsl",
     .SpecConstants = extern struct {
         indexed_attributes: bool align(@alignOf(vk.Bool32)) = true,
-        two_component_normal_texture: bool align(@alignOf(vk.Bool32)) = true,
     },
     .PushConstants = extern struct {
         instance_index: u32,
