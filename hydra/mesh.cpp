@@ -116,7 +116,7 @@ void HdMoonshineMesh::Sync(HdSceneDelegate* sceneDelegate, HdRenderParam* hdRend
         VtVec3iArray indices;
         meshUtil.ComputeTriangleIndices(&indices, &primitiveParams);
 
-        VtVec3fArray points;
+        VtVec3fArray indexedPoints;
 
         // try to find fancy points (e.g., animated ones)
         for (size_t i = 0; i < HdInterpolationCount; i++) {
@@ -126,19 +126,27 @@ void HdMoonshineMesh::Sync(HdSceneDelegate* sceneDelegate, HdRenderParam* hdRend
             for (auto const& pv: compPrimvars) {
                 if (pv.name == HdTokens->points) {
                     HdExtComputationUtils::ValueStore valueStore = HdExtComputationUtils::GetComputedPrimvarValues(compPrimvars, sceneDelegate);
-                    points = valueStore.find(pv.name)->second.Get<VtVec3fArray>();
+                    indexedPoints = valueStore.find(pv.name)->second.Get<VtVec3fArray>();
                 }
             }
         }
 
         // no fancy points -- just use basic ones
-        if (points.size() == 0) {
-            points = sceneDelegate->Get(id, HdTokens->points).Get<VtVec3fArray>();
+        if (indexedPoints.size() == 0) {
+            indexedPoints = sceneDelegate->Get(id, HdTokens->points).Get<VtVec3fArray>();
         }
 
-        if (points.size() == 0) {
+        if (indexedPoints.size() == 0) {
             TF_CODING_ERROR("don't know what to do with empty mesh %s", id.GetText());
             return;
+        }
+
+        // hydra moonshine uses unindexed everything to support stuff like faceVarying
+        VtVec3fArray points;
+        for (const auto index : indices) {
+            points.push_back(indexedPoints[index[0]]);
+            points.push_back(indexedPoints[index[1]]);
+            points.push_back(indexedPoints[index[2]]);
         }
 
         VtVec2fArray texcoords;
@@ -166,7 +174,7 @@ void HdMoonshineMesh::Sync(HdSceneDelegate* sceneDelegate, HdRenderParam* hdRend
         VtVec3fArray normals = ComputePrimvar<GfVec3f>(sceneDelegate, indices, _tokens->normals);
         
         // TODO: destroy mesh
-        _mesh = HdMoonshineCreateMesh(msne, reinterpret_cast<const F32x3*>(points.cdata()),  reinterpret_cast<const F32x3*>(normals.cdata()), reinterpret_cast<const F32x2*>(texcoords.cdata()), points.size(), reinterpret_cast<const U32x3*>(indices.cdata()), indices.size());
+        _mesh = HdMoonshineCreateMesh(msne, reinterpret_cast<const F32x3*>(points.cdata()),  reinterpret_cast<const F32x3*>(normals.cdata()), reinterpret_cast<const F32x2*>(texcoords.cdata()), points.size());
 
         *dirtyBits = *dirtyBits & ~HdChangeTracker::DirtyPoints;
     }

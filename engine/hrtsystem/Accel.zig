@@ -48,9 +48,6 @@ const BottomLevelAccels = std.MultiArrayList(struct {
 });
 
 const TrianglePowerPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "hrtsystem/mesh_sampling/power.hlsl",
-    .SpecConstants = extern struct {
-        indexed_attributes: bool align(@alignOf(vk.Bool32)) = true,
-    },
     .PushConstants = extern struct {
         instance_index: u32,
         geometry_index: u32,
@@ -178,7 +175,7 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
                         },
                         .vertex_stride = @sizeOf(F32x3),
                         .max_vertex = @intCast(mesh.vertex_count - 1),
-                        .index_type = .uint32,
+                        .index_type = if (mesh.index_count != 0) .uint32 else .none_khr,
                         .index_data = .{
                             .device_address = mesh.index_buffer.getAddress(vc),
                         },
@@ -190,7 +187,7 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
             };
 
             build_info.*[j] =  vk.AccelerationStructureBuildRangeInfoKHR {
-                .primitive_count = @intCast(mesh.index_count),
+                .primitive_count = @intCast(if (mesh.index_count != 0) mesh.index_count else @divExact(mesh.vertex_count, 3)),
                 .primitive_offset = 0,
                 .transform_offset = 0,
                 .first_vertex = 0,
@@ -460,7 +457,8 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
 }
 
 pub fn recordUpdatePower(self: *Self, encoder: Encoder, mesh_manager: MeshManager, material_manager: MaterialManager, instance_index: u32, geometry_index: u32, mesh_index: u32) void {
-    const index_count = mesh_manager.meshes.get(mesh_index).index_count;
+    const mesh = mesh_manager.meshes.get(mesh_index);
+    const primitive_count = if (mesh.index_count != 0) mesh.index_count else @divExact(mesh.vertex_count, 3);
 
     // this mesh is too big to importance sample...
     // it may still emit without importance sampling, though
@@ -468,7 +466,7 @@ pub fn recordUpdatePower(self: *Self, encoder: Encoder, mesh_manager: MeshManage
     // TODO: technically this should check that the that total (in the whole scene) emissive triangle count is less than
     // the maximum number of emissive triangles, but we don't have access to that info on the host.
     // probably we will just get a GPU crash instead :(
-    if (index_count > max_emissive_triangles) return;
+    if (primitive_count > max_emissive_triangles) return;
 
     encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
@@ -507,10 +505,10 @@ pub fn recordUpdatePower(self: *Self, encoder: Encoder, mesh_manager: MeshManage
     self.triangle_power_pipeline.recordPushConstants(encoder.buffer, .{
         .instance_index = instance_index,
         .geometry_index = geometry_index,
-        .triangle_count = index_count,
+        .triangle_count = primitive_count,
     });
     const shader_local_size = 32; // must be kept in sync with shader -- looks like HLSL doesn't support setting this via spec constants
-    const dispatch_size = std.math.divCeil(u32, index_count, shader_local_size) catch unreachable;
+    const dispatch_size = std.math.divCeil(u32, primitive_count, shader_local_size) catch unreachable;
     self.triangle_power_pipeline.recordDispatch(encoder.buffer, .{ .width = dispatch_size, .height = 1, .depth = 1 });
     self.triangle_power_fold_pipeline.recordBindPipeline(encoder.buffer);
 
@@ -564,7 +562,7 @@ pub fn recordUpdatePower(self: *Self, encoder: Encoder, mesh_manager: MeshManage
         self.triangle_power_fold_pipeline.recordPushConstants(encoder.buffer, .{
             .instance_index = instance_index,
             .geometry_index = geometry_index,
-            .triangle_count = index_count,
+            .triangle_count = primitive_count,
         });
         const dst_mip_size = std.math.pow(u32, 2, @intCast(self.triangle_powers_mips.len - dst_mip_level));
         const mip_dispatch_size = std.math.divCeil(u32, dst_mip_size, shader_local_size) catch unreachable;

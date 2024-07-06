@@ -21,13 +21,13 @@ pub const Mesh = struct {
     texcoords: ?[]const F32x2 = null,
 
     // indices
-    indices: []const U32x3,
+    indices: ?[]const U32x3,
 
     pub fn destroy(self: *Mesh, allocator: std.mem.Allocator) void {
         allocator.free(self.positions);
         if (self.normals) |normals| allocator.free(normals);
         if (self.texcoords) |texcoords| allocator.free(texcoords);
-        allocator.free(self.indices);
+        if (self.indices) |indices| allocator.free(indices);
     }
 };
 
@@ -113,12 +113,15 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
     errdefer normal_buffer.destroy(vc);
 
     const index_buffer = blk: {
-        index_staging_buffer = try vk_allocator.createHostBuffer(vc, U32x3, host_mesh.indices.len, .{ .transfer_src_bit = true });
-        @memcpy(index_staging_buffer.data, host_mesh.indices);
-        const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, U32x3, host_mesh.indices.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .acceleration_structure_build_input_read_only_bit_khr = true });
-        encoder.uploadBuffer(U32x3, gpu_buffer, index_staging_buffer);
-
-        break :blk gpu_buffer;
+        if (host_mesh.indices) |indices| {
+            index_staging_buffer = try vk_allocator.createHostBuffer(vc, U32x3, indices.len, .{ .transfer_src_bit = true });
+            @memcpy(index_staging_buffer.data, indices);
+            const gpu_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, U32x3, indices.len, .{ .shader_device_address_bit = true, .transfer_dst_bit = true, .acceleration_structure_build_input_read_only_bit_khr = true });
+            encoder.uploadBuffer(U32x3, gpu_buffer, index_staging_buffer);
+            break :blk gpu_buffer;
+        } else {
+            break :blk VkAllocator.DeviceBuffer(U32x3) {};
+        }
     };
     errdefer index_buffer.destroy(vc);
 
@@ -142,7 +145,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
         .vertex_count = @intCast(host_mesh.positions.len),
 
         .index_buffer = index_buffer,
-        .index_count = @intCast(host_mesh.indices.len),
+        .index_count = if (host_mesh.indices) |indices| @intCast(indices.len) else 0,
     });
 
     return @intCast(self.meshes.len - 1);

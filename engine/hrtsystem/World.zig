@@ -246,6 +246,11 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
             _ = try materials.upload(vc, vk_allocator, allocator, encoder, mat);
         }
 
+        const default_material = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, Gltf.Material {
+            .name = "default",
+        }, &materials.textures);
+        _ = try materials.upload(vc, vk_allocator, allocator, encoder, default_material);
+
         break :blk materials;
     };
     errdefer materials.destroy(vc, allocator);
@@ -266,11 +271,11 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
             for (mesh.primitives.items, geometries) |primitive, *geometry| {
                 geometry.* = Geometry {
                     .mesh = @intCast(objects.items.len),
-                    .material = @intCast(primitive.material.?),
+                    .material = @intCast(primitive.material orelse materials.material_count - 1),
                 };
                 // get indices
-                const indices = blk2: {
-                    const accessor = gltf.data.accessors.items[primitive.indices.?];
+                const indices = if (primitive.indices) |indices_index| blk2: {
+                    const accessor = gltf.data.accessors.items[indices_index];
 
                     break :blk2 switch (accessor.component_type) {
                         .unsigned_short => blk3: {
@@ -296,8 +301,8 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
                         },
                         else => unreachable,
                     };
-                };
-                errdefer allocator.free(indices);
+                } else null;
+                errdefer if (indices) |nonnull| allocator.free(nonnull);
 
                 const vertices = blk2: {
                     var positions = std.ArrayList(f32).init(allocator);

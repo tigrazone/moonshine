@@ -117,7 +117,6 @@ pub const HdMoonshine = struct {
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 1,
-        .indexed_attributes = false,
     };
 
     pub export fn HdMoonshineCreate() ?*HdMoonshine {
@@ -383,14 +382,14 @@ pub const HdMoonshine = struct {
         return true;
     }
 
-    pub export fn HdMoonshineCreateMesh(self: *HdMoonshine, positions: [*]const F32x3, maybe_normals: ?[*]const F32x3, maybe_texcoords: ?[*]const F32x2, position_count: usize, indices: [*]const U32x3, index_count: usize) MeshManager.Handle {
+    pub export fn HdMoonshineCreateMesh(self: *HdMoonshine, positions: [*]const F32x3, maybe_normals: ?[*]const F32x3, maybe_texcoords: ?[*]const F32x2, attribute_count: usize) MeshManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
         const mesh = MeshManager.Mesh {
-            .positions = positions[0..position_count],
-            .normals = if (maybe_normals) |normals| normals[0..index_count * 3] else null,
-            .texcoords = if (maybe_texcoords) |texcoords| texcoords[0..index_count * 3] else null,
-            .indices = indices[0..index_count],
+            .positions = positions[0..attribute_count],
+            .normals = if (maybe_normals) |normals| normals[0..attribute_count] else null,
+            .texcoords = if (maybe_texcoords) |texcoords| texcoords[0..attribute_count] else null,
+            .indices = null,
         };
         return self.world.meshes.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, mesh) catch unreachable; // TODO: error handling
     }

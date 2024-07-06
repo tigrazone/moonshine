@@ -276,7 +276,6 @@ pub const ObjectPickPipeline = Pipeline(.{
 pub const StandardPipeline = Pipeline(.{
     .shader_path = "hrtsystem/main.hlsl",
     .SpecConstants = extern struct {
-        indexed_attributes: bool align(@alignOf(vk.Bool32)) = true,
         samples_per_run: u32 = 1,
         max_bounces: u32 = 4,
         env_samples_per_bounce: u32 = 1,

@@ -3,8 +3,6 @@
 #include "../light.hlsl"
 
 // world info
-[[vk::constant_id(0)]] const bool dIndexedAttributes = true;
-
 [[vk::binding(0, 0)]] StructuredBuffer<Instance> dInstances;
 [[vk::binding(1, 0)]] StructuredBuffer<row_major float3x4> dWorldToInstance;
 [[vk::binding(2, 0)]] StructuredBuffer<Mesh> dMeshes;
@@ -26,9 +24,9 @@ struct PushConsts {
 
 [numthreads(32, 1, 1)]
 void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
-	const uint srcIndex = dispatchXYZ.x;
+	const uint srcPrimitive = dispatchXYZ.x;
 
-	if (any(srcIndex >= pushConsts.triangleCount)) return;
+	if (any(srcPrimitive >= pushConsts.triangleCount)) return;
 
 	World world;
     world.instances = dInstances;
@@ -36,7 +34,6 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
     world.meshes = dMeshes;
     world.geometries = dGeometries;
     world.materials = dMaterials;
-    world.indexedAttributes = dIndexedAttributes;
 
 	float total_emissive = 0;
 
@@ -44,7 +41,7 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 	for (uint i = 0; i < samples_per_dim; i++) {
 		for (uint j = 0; j < samples_per_dim; j++) {
 			const float2 barycentrics = squareToTriangle(float2(i, j) / float(samples_per_dim));
-			const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, pushConsts.instanceIndex, pushConsts.geometryIndex, srcIndex, barycentrics);
+			const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive, barycentrics);
 			const uint instanceID = world.instances[pushConsts.instanceIndex].instanceID();
 			total_emissive += luminance(getEmissive(world, world.materialIdx(instanceID, pushConsts.geometryIndex), attrs.texcoord));
 		}
@@ -52,10 +49,10 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 
 	const float average_emissive = total_emissive / float(samples_per_dim * samples_per_dim);
 
-	const float power = PI * MeshAttributes::triangleArea(world, pushConsts.instanceIndex, pushConsts.geometryIndex, srcIndex) * average_emissive;
+	const float power = PI * MeshAttributes::triangleArea(world, pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive) * average_emissive;
 
 	const uint dstOffset = emissiveTriangleCount[0];
-	dstPower[dstOffset + srcIndex] = power;
-	dstTriangleMetadata[dstOffset + srcIndex].instanceIndex = pushConsts.instanceIndex;
-	dstTriangleMetadata[dstOffset + srcIndex].geometryIndex = pushConsts.geometryIndex;
+	dstPower[dstOffset + srcPrimitive] = power;
+	dstTriangleMetadata[dstOffset + srcPrimitive].instanceIndex = pushConsts.instanceIndex;
+	dstTriangleMetadata[dstOffset + srcPrimitive].geometryIndex = pushConsts.geometryIndex;
 }
