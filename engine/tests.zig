@@ -53,7 +53,7 @@ const TestingContext = struct {
         };
     }
 
-    fn renderToOutput(self: *TestingContext, pipeline: *const Pipeline, scene: *const Scene) !void {
+    fn renderToOutput(self: *TestingContext, pipeline: *const Pipeline, scene: *const Scene, spp: usize) !void {
         try self.encoder.begin();
 
         // prepare our stuff
@@ -62,13 +62,43 @@ const TestingContext = struct {
         // bind our stuff
         pipeline.recordBindPipeline(self.encoder.buffer);
         pipeline.recordBindAdditionalDescriptorSets(self.encoder.buffer, .{ scene.world.materials.textures.descriptor_set });
-
-        // push our stuff
         pipeline.recordPushDescriptors(self.encoder.buffer, scene.pushDescriptors(0, 0));
-        pipeline.recordPushConstants(self.encoder.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
 
-        // trace our stuff
-        pipeline.recordTraceRays(self.encoder.buffer, scene.camera.sensors.items[0].extent);
+        for (0..spp) |sample_count| {
+            // push our stuff
+            pipeline.recordPushConstants(self.encoder.buffer, .{ .lens = scene.camera.lenses.items[0], .sample_count = scene.camera.sensors.items[0].sample_count });
+
+            // trace our stuff
+            pipeline.recordTraceRays(self.encoder.buffer, scene.camera.sensors.items[0].extent);
+
+            // if not last invocation, need barrier cuz we write to images
+            if (sample_count != spp) {
+                self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
+                    .image_memory_barrier_count = 1,
+                    .p_image_memory_barriers = &[_]vk.ImageMemoryBarrier2 {
+                        .{
+                            .src_stage_mask = .{ .ray_tracing_shader_bit_khr = true },
+                            .src_access_mask = if (sample_count == 0) .{ .shader_storage_write_bit = true } else .{ .shader_storage_write_bit = true, .shader_storage_read_bit = true },
+                            .dst_stage_mask = .{ .ray_tracing_shader_bit_khr = true },
+                            .dst_access_mask = .{ .shader_storage_write_bit = true, .shader_storage_read_bit = true },
+                            .old_layout = .general,
+                            .new_layout = .general,
+                            .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                            .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+                            .image = scene.camera.sensors.items[0].image.handle,
+                            .subresource_range = .{
+                                .aspect_mask = .{ .color_bit = true },
+                                .base_mip_level = 0,
+                                .level_count = 1,
+                                .base_array_layer = 0,
+                                .layer_count = vk.REMAINING_ARRAY_LAYERS,
+                            },
+                        }
+                    },
+                });
+            }
+            scene.camera.sensors.items[0].sample_count += 1;
+        }
 
         // copy our stuff
         scene.camera.sensors.items[0].recordPrepareForCopy(self.encoder.buffer, .{ .ray_tracing_shader_bit_khr = true }, .{ .copy_bit = true });
@@ -306,14 +336,13 @@ test "white sphere on white background is white" {
     defer scene.destroy(&tc.vc, allocator);
 
     var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
-        .samples_per_run = 512,
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 0,
     }, .{ scene.background.sampler });
     defer pipeline.destroy(&tc.vc);
 
-    try tc.renderToOutput(&pipeline, &scene);
+    try tc.renderToOutput(&pipeline, &scene, 512);
 
     for (tc.output_buffer.data) |pixel| {
         for (pixel[0..3]) |component| {
@@ -323,14 +352,13 @@ test "white sphere on white background is white" {
 
     // do that again but with env sampling
     const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{
-        .samples_per_run = 512,
         .max_bounces = 1024,
         .env_samples_per_bounce = 1,
         .mesh_samples_per_bounce = 0,
     });
     defer tc.vc.device.destroyPipeline(other_pipeline, null);
 
-    try tc.renderToOutput(&pipeline, &scene);
+    try tc.renderToOutput(&pipeline, &scene, 512);
 
     // MIS is expected to increase variance where one sampling strategy is much better than the other
     // so I'm fairly confident this test is expected to have fairly high error bounds
@@ -415,14 +443,13 @@ test "inside illuminating sphere is white" {
     defer scene.destroy(&tc.vc, allocator);
 
     var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
-        .samples_per_run = 1024,
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 0,
     }, .{ scene.background.sampler });
     defer pipeline.destroy(&tc.vc);
 
-    try tc.renderToOutput(&pipeline, &scene);
+    try tc.renderToOutput(&pipeline, &scene, 1024);
 
     for (tc.output_buffer.data) |pixel| {
         for (pixel[0..3]) |component| {
@@ -432,14 +459,13 @@ test "inside illuminating sphere is white" {
 
     // do that again but with mesh sampling
     const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{
-        .samples_per_run = 1024,
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 1,
     });
     defer tc.vc.device.destroyPipeline(other_pipeline, null);
 
-    try tc.renderToOutput(&pipeline, &scene);
+    try tc.renderToOutput(&pipeline, &scene, 1024);
 
     for (tc.output_buffer.data) |pixel| {
         for (pixel[0..3]) |component| {

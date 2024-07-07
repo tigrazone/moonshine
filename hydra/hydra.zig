@@ -110,10 +110,7 @@ pub const HdMoonshine = struct {
         ior: ?f32 = null,
     };
 
-    const samples_per_run = 1;
-
     const pipeline_settings = Pipeline.SpecConstants {
-        .samples_per_run = samples_per_run,
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 1,
@@ -368,7 +365,7 @@ pub const HdMoonshine = struct {
 
         self.encoder.submitAndIdleUntilDone(&self.vc) catch return false;
 
-        self.camera.sensors.items[sensor].sample_count += samples_per_run;
+        self.camera.sensors.items[sensor].sample_count += 1;
 
         return true;
     }

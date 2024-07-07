@@ -29,10 +29,9 @@
 [[vk::binding(12, 0)]] RWTexture2D<float4> dOutputImage;
 
 // SPECIALIZATION CONSTANTS
-[[vk::constant_id(0)]] const uint dSamplesPerRun = 1;
-[[vk::constant_id(1)]] const uint dMaxBounces = 4;
-[[vk::constant_id(2)]] const uint dEnvSamplesPerBounce = 1;  // how many times the environment map should be sampled per bounce for light
-[[vk::constant_id(3)]] const uint dMeshSamplesPerBounce = 1; // how many times emissive meshes should be sampled per bounce for light
+[[vk::constant_id(0)]] const uint dMaxBounces = 4;
+[[vk::constant_id(1)]] const uint dEnvSamplesPerBounce = 1;  // how many times the environment map should be sampled per bounce for light
+[[vk::constant_id(2)]] const uint dMeshSamplesPerBounce = 1; // how many times emissive meshes should be sampled per bounce for light
 
 // PUSH CONSTANTS
 struct PushConsts {
@@ -61,22 +60,19 @@ void raygen() {
     scene.envMap = EnvMap::create(dBackgroundRgbTexture, dBackgroundSampler, dBackgroundLuminanceTexture);
     scene.meshLights = MeshLights::create(dTrianglePower, dTriangleMetadata, dGeometryToTrianglePowerOffset, dEmissiveTriangleCount[0], world);
 
-    for (uint sampleCount = pushConsts.sampleCount; sampleCount < pushConsts.sampleCount + dSamplesPerRun; sampleCount++) {
-        // create rng for this sample
-        Rng rng = Rng::fromSeed(uint3(sampleCount, imageCoords.x, imageCoords.y));
+    Rng rng = Rng::fromSeed(uint3(pushConsts.sampleCount, imageCoords.x, imageCoords.y));
 
-        // set up initial ray
-        const float2 jitter = float2(rng.getFloat(), rng.getFloat());
-        const float2 imageUV = (imageCoords + jitter) / imageSize;
-        const RayDesc initialRay = pushConsts.camera.generateRay(dOutputImage, imageUV, float2(rng.getFloat(), rng.getFloat()));
+    // set up initial ray
+    const float2 jitter = float2(rng.getFloat(), rng.getFloat());
+    const float2 imageUV = (imageCoords + jitter) / imageSize;
+    const RayDesc initialRay = pushConsts.camera.generateRay(dOutputImage, imageUV, float2(rng.getFloat(), rng.getFloat()));
 
-        // trace the ray
-        const float3 newSample = integrator.incomingRadiance(scene, initialRay, rng);
+    // trace the ray
+    const float3 newSample = integrator.incomingRadiance(scene, initialRay, rng);
 
-        // accumulate
-        const float3 priorSampleAverage = sampleCount == 0 ? 0 : dOutputImage[imageCoords].xyz;
-        dOutputImage[imageCoords] = float4(accumulate(priorSampleAverage, newSample, sampleCount), 1);
-    }
+    // accumulate
+    const float3 priorSampleAverage = pushConsts.sampleCount == 0 ? 0 : dOutputImage[imageCoords].xyz;
+    dOutputImage[imageCoords] = float4(accumulate(priorSampleAverage, newSample, pushConsts.sampleCount), 1);
 }
 
 struct Attributes

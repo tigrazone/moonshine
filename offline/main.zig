@@ -104,7 +104,6 @@ pub fn main() !void {
     try logger.log("load world");
 
     var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
-        .samples_per_run = 1,
         .max_bounces = 1024,
         .env_samples_per_bounce = 1,
         .mesh_samples_per_bounce = 1,

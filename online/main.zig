@@ -176,8 +176,6 @@ pub fn main() !void {
         }
         if (imgui.collapsingHeader("Pipeline")) {
             imgui.pushItemWidth(imgui.getFontSize() * -14.2);
-            _ = imgui.dragScalar(u32, "Samples per frame", &pipeline_opts.samples_per_run, 1.0, 1, std.math.maxInt(u32));
-            imgui.popStyleColor();
             _ = imgui.dragScalar(u32, "Max light bounces", &pipeline_opts.max_bounces, 1.0, 0, std.math.maxInt(u32));
             _ = imgui.dragScalar(u32, "Env map samples per bounce", &pipeline_opts.env_samples_per_bounce, 1.0, 0, std.math.maxInt(u32));
             _ = imgui.dragScalar(u32, "Mesh samples per bounce", &pipeline_opts.mesh_samples_per_bounce, 1.0, 0, std.math.maxInt(u32));
@@ -438,7 +436,7 @@ pub fn main() !void {
 
         if (display.endFrame(&context)) |ok| {
             // only update frame count if we presented successfully
-            scene.camera.sensors.items[active_sensor].sample_count += pipeline_opts.samples_per_run;
+            scene.camera.sensors.items[active_sensor].sample_count += 1;
             if (max_sample_count != 0) scene.camera.sensors.items[active_sensor].sample_count = @min(scene.camera.sensors.items[active_sensor].sample_count, max_sample_count);
             if (ok == vk.Result.suboptimal_khr) {
                 const new_extent = window.getExtent();
