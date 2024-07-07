@@ -271,10 +271,24 @@ pub const ObjectPickPipeline = Pipeline(.{
     }
 });
 
-// a "standard" pipeline -- that is, the one we use for most
-// rendering operations
-pub const StandardPipeline = Pipeline(.{
-    .shader_path = "hrtsystem/main.hlsl",
+pub const StandardBindings = struct {
+    tlas: ?vk.AccelerationStructureKHR,
+    instances: ?vk.Buffer,
+    world_to_instances: ?vk.Buffer,
+    meshes: ?vk.Buffer,
+    geometries: ?vk.Buffer,
+    material_values: ?vk.Buffer,
+    triangle_power_image: core.pipeline.SampledImage,
+    triangle_meta: vk.Buffer,
+    geometry_to_triangle_power_offset: vk.Buffer,
+    emissive_triangle_count: vk.Buffer,
+    background_rgb_image: core.pipeline.CombinedImageSampler,
+    background_luminance_image: core.pipeline.SampledImage,
+    output_image: core.pipeline.StorageImage,
+};
+
+pub const PathTracing = Pipeline(.{
+    .shader_path = "hrtsystem/main_pt.hlsl",
     .SpecConstants = extern struct {
         max_bounces: u32 = 4,
         env_samples_per_bounce: u32 = 1,
@@ -285,21 +299,27 @@ pub const StandardPipeline = Pipeline(.{
         sample_count: u32,
     },
     .additional_descriptor_layout_count = 1,
-    .PushSetBindings = struct {
-        tlas: ?vk.AccelerationStructureKHR,
-        instances: ?vk.Buffer,
-        world_to_instances: ?vk.Buffer,
-        meshes: ?vk.Buffer,
-        geometries: ?vk.Buffer,
-        material_values: ?vk.Buffer,
-        triangle_power_image: core.pipeline.SampledImage,
-        triangle_meta: vk.Buffer,
-        geometry_to_triangle_power_offset: vk.Buffer,
-        emissive_triangle_count: vk.Buffer,
-        background_rgb_image: core.pipeline.CombinedImageSampler,
-        background_luminance_image: core.pipeline.SampledImage,
-        output_image: core.pipeline.StorageImage,
+    .PushSetBindings = StandardBindings,
+    .stages = &[_]Stage {
+        .{ .type = .raygen, .entrypoint = "raygen" },
+        .{ .type = .miss, .entrypoint = "miss" },
+        .{ .type = .miss, .entrypoint = "shadowmiss" },
+        .{ .type = .closest_hit, .entrypoint = "closesthit" },
+    }
+});
+
+pub const DirectLighting = Pipeline(.{
+    .shader_path = "hrtsystem/main_direct.hlsl",
+    .SpecConstants = extern struct {
+        env_samples_per_bounce: u32 = 1,
+        mesh_samples_per_bounce: u32 = 1,
     },
+    .PushConstants = extern struct {
+        lens: Camera.Lens,
+        sample_count: u32,
+    },
+    .additional_descriptor_layout_count = 1,
+    .PushSetBindings = StandardBindings,
     .stages = &[_]Stage {
         .{ .type = .raygen, .entrypoint = "raygen" },
         .{ .type = .miss, .entrypoint = "miss" },

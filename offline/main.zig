@@ -7,7 +7,7 @@ const VulkanContext = engine.core.VulkanContext;
 const Encoder = engine.core.Encoder;
 const VkAllocator = engine.core.Allocator;
 const TextureManager = engine.core.Images.TextureManager;
-const Pipeline = engine.hrtsystem.pipeline.StandardPipeline;
+const Pipeline = engine.hrtsystem.pipeline.PathTracing;
 const Scene = engine.hrtsystem.Scene;
 
 const vk_helpers = engine.core.vk_helpers;

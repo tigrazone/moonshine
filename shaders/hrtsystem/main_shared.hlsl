@@ -28,11 +28,6 @@
 // OUTPUT
 [[vk::binding(12, 0)]] RWTexture2D<float4> dOutputImage;
 
-// SPECIALIZATION CONSTANTS
-[[vk::constant_id(0)]] const uint dMaxBounces = 4;
-[[vk::constant_id(1)]] const uint dEnvSamplesPerBounce = 1;  // how many times the environment map should be sampled per bounce for light
-[[vk::constant_id(2)]] const uint dMeshSamplesPerBounce = 1; // how many times emissive meshes should be sampled per bounce for light
-
 // PUSH CONSTANTS
 struct PushConsts {
 	Camera camera;
@@ -40,12 +35,10 @@ struct PushConsts {
 };
 [[vk::push_constant]] PushConsts pushConsts;
 
-[shader("raygeneration")]
-void raygen() {
+template <class Integrator>
+void integrate(Integrator integrator) {
     const uint2 imageCoords = DispatchRaysIndex().xy;
     const uint2 imageSize = DispatchRaysDimensions().xy;
-
-    const PathTracingIntegrator integrator = PathTracingIntegrator::create(dMaxBounces, dEnvSamplesPerBounce, dMeshSamplesPerBounce);
 
     World world;
     world.instances = dInstances;

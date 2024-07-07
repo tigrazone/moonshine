@@ -14,7 +14,6 @@ const World = @import("./World.zig");
 const Camera = @import("./Camera.zig");
 
 const exr = engine.fileformats.exr;
-const StandardPipeline = engine.hrtsystem.pipeline.StandardPipeline;
 
 const Self = @This();
 
@@ -64,8 +63,8 @@ pub fn fromGlbExr(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocato
     };
 }
 
-pub fn pushDescriptors(self: *const Self, sensor: u32, background: u32) StandardPipeline.PushSetBindings {
-    return engine.hrtsystem.pipeline.StandardPipeline.PushSetBindings {
+pub fn pushDescriptors(self: *const Self, sensor: u32, background: u32) engine.hrtsystem.pipeline.StandardBindings {
+    return engine.hrtsystem.pipeline.StandardBindings {
         .tlas = self.world.accel.tlas_handle,
         .instances = self.world.accel.instances_device.handle,
         .world_to_instances = self.world.accel.world_to_instance_device.handle,
