@@ -101,6 +101,42 @@ float areaMeasureToSolidAngleMeasure(float3 pos1, float3 pos2, float3 dir1, floa
     return lightCos > 0.0f ? r2 / lightCos : 0.0f;
 }
 
+struct TriangleLight: Light {
+	uint instanceIndex;
+	uint geometryIndex;
+	uint primitiveIndex;
+    World world;
+
+    static TriangleLight create(uint instanceIndex, uint geometryIndex, uint primitiveIndex, World world) {
+        TriangleLight light;
+        light.instanceIndex = instanceIndex;
+        light.geometryIndex = geometryIndex;
+        light.primitiveIndex = primitiveIndex;
+        light.world = world;
+        return light;
+    }
+
+    LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
+        const uint instanceID = world.instances[instanceIndex].instanceID();
+
+        const float2 barycentrics = squareToTriangle(rand);
+        const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, instanceIndex, geometryIndex, primitiveIndex, barycentrics).inWorld(world, instanceIndex);
+
+        LightSample lightSample;
+        lightSample.radiance = getEmissive(world, world.materialIdx(instanceID, geometryIndex), attrs.texcoord);
+        lightSample.dirWs = normalize(attrs.position - positionWs);
+        lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) / MeshAttributes::triangleArea(world, instanceIndex, geometryIndex, primitiveIndex);
+
+        // compute precise ray distance
+        const float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, attrs.triangleFrame.n);
+        const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs));
+        const float tmax = distance(offsetLightPositionWs, offsetShadingPositionWs);
+        lightSample.lightDistance = tmax;
+
+        return lightSample;
+    }
+};
+
 // all mesh lights in scene
 struct MeshLights : Light {
     Texture1D<float> power;
@@ -141,30 +177,24 @@ struct MeshLights : Light {
         const uint instanceID = world.instances[meta.instanceIndex].instanceID();
         const uint primitiveIndex = idx - geometryToTrianglePowerOffset[instanceID + meta.geometryIndex];
 
-        const float2 barycentrics = squareToTriangle(rand);
-        const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, meta.instanceIndex, meta.geometryIndex, primitiveIndex, barycentrics).inWorld(world, meta.instanceIndex);
-
-        lightSample.radiance = getEmissive(world, world.materialIdx(instanceID, meta.geometryIndex), attrs.texcoord);
-        lightSample.dirWs = normalize(attrs.position - positionWs);
-        lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) * areaPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
-
-        // compute precise ray distance
-        const float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, attrs.triangleFrame.n);
-        const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs));
-        const float tmax = distance(offsetLightPositionWs, offsetShadingPositionWs);
-        lightSample.lightDistance = tmax;
-
+        const TriangleLight inner = TriangleLight::create(meta.instanceIndex, meta.geometryIndex, primitiveIndex, world);
+        lightSample = inner.sample(positionWs, triangleNormalDirWs, rand);
+        lightSample.pdf *= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
         return lightSample;
     }
 
-    float areaPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
+    float selectionPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
         if (integral() == 0.0) return 0.0; // no lights
         const uint instanceID = world.instances[instanceIndex].instanceID();
         const uint offset = geometryToTrianglePowerOffset[instanceID + geometryIndex];
         const uint invalidOffset = 0xFFFFFFFF;
         if (offset == invalidOffset) return 0.0; // no light at this triangle
         const uint idx = offset + primitiveIndex;
-        const float triangleSelectionPdf = power.Load(uint2(idx, 0)) / integral();
+        return power.Load(uint2(idx, 0)) / integral();
+    }
+
+    float areaPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
+        const float triangleSelectionPdf = selectionPdf(instanceIndex, geometryIndex, primitiveIndex);
         const float triangleAreaPdf = 1.0 / MeshAttributes::triangleArea(world, instanceIndex, geometryIndex, primitiveIndex);
         return triangleSelectionPdf * triangleAreaPdf;
     }
