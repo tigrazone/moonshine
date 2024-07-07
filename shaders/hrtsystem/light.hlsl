@@ -2,10 +2,10 @@
 
 #include "world.hlsl"
 #include "material.hlsl"
-#include "intersection.hlsl"
 
 struct LightSample {
     float3 dirWs;
+    float lightDistance;
     float3 radiance;
     float pdf;
 };
@@ -22,11 +22,8 @@ struct TriangleMetadata {
 
 interface Light {
     // samples a light direction based on given position and geometric normal, returning
-    // radiance at that point from light and pdf of this direction + radiance
-    //
-    // pdf is with respect to obstructed solid angle, that is, this traces a ray
-    // TODO: should pdf be unobstructed?
-    LightSample sample(RaytracingAccelerationStructure accel, float3 positionWs, float3 triangleNormalDirWs, float2 square);
+    // radiance at that point from light and pdf of this direction + radiance, ignoring visibility
+    LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 square);
 };
 
 struct EnvMap : Light {
@@ -42,7 +39,7 @@ struct EnvMap : Light {
         return map;
     }
 
-    LightSample sample(RaytracingAccelerationStructure accel, float3 positionWs, float3 normalWs, float2 rand) {
+    LightSample sample(float3 positionWs, float3 normalWs, float2 rand) {
         const uint size = textureDimensions(luminanceTexture).x;
         const uint mipCount = log2(size) + 1;
 
@@ -68,11 +65,8 @@ struct EnvMap : Light {
         LightSample lightSample;
         lightSample.pdf = discretePdf / (4.0 * PI);
         lightSample.dirWs = squareToEqualAreaSphere(uv);
+        lightSample.lightDistance = INFINITY;
         lightSample.radiance = rgbTexture[idx];
-
-        if (lightSample.pdf > 0.0 && ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(normalWs, lightSample.dirWs)), lightSample.dirWs, INFINITY)) {
-            lightSample.pdf = 0.0;
-        }
 
         return lightSample;
     }
@@ -125,7 +119,7 @@ struct MeshLights : Light {
         return lights;
     }
 
-    LightSample sample(RaytracingAccelerationStructure accel, float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
+    LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
         LightSample lightSample;
         lightSample.pdf = 0.0;
 
@@ -154,14 +148,12 @@ struct MeshLights : Light {
         lightSample.dirWs = normalize(attrs.position - positionWs);
         lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) * areaPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
 
-        // compute precise ray endpoints
+        // compute precise ray distance
         const float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, attrs.triangleFrame.n);
         const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs));
         const float tmax = distance(offsetLightPositionWs, offsetShadingPositionWs);
+        lightSample.lightDistance = tmax;
 
-        if (lightSample.pdf > 0.0 && ShadowIntersection::hit(accel, offsetShadingPositionWs, normalize(offsetLightPositionWs - offsetShadingPositionWs), tmax)) {
-            lightSample.pdf = 0.0;
-        }
         return lightSample;
     }
 

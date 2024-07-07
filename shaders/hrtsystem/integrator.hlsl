@@ -19,33 +19,39 @@ float powerHeuristic(uint numf, float fPdf, uint numg, float gPdf) {
 // only samples light
 template <class Light, class Material>
 float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, Material material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand, uint samplesTaken) {
-    LightSample lightSample = light.sample(accel, positionWs, triangleNormalDirWs, rand);
+    const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
 
     if (lightSample.pdf > 0.0) {
-        float3 lightDirFs = frame.worldToFrame(lightSample.dirWs);
-        float scatteringPdf = material.pdf(lightDirFs, outgoingDirFs);
+        const float3 lightDirFs = frame.worldToFrame(lightSample.dirWs);
+        const float scatteringPdf = material.pdf(lightDirFs, outgoingDirFs);
         if (scatteringPdf > 0.0) {
-            float3 brdf = material.eval(lightDirFs, outgoingDirFs);
-            float weight = powerHeuristic(samplesTaken, lightSample.pdf, 1, scatteringPdf);
-            return lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) * weight / lightSample.pdf;
+            const float3 brdf = material.eval(lightDirFs, outgoingDirFs);
+            const float weight = powerHeuristic(samplesTaken, lightSample.pdf, 1, scatteringPdf);
+            const float3 totalRadiance = lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) * weight / lightSample.pdf;
+            if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs)), lightSample.dirWs, lightSample.lightDistance)) {
+                return totalRadiance;
+            }
         }
     }
 
-    return 0.0;
+    return 0;
 }
 
 // no MIS, just light
 template <class Light, class Material>
-float3 estimateDirect(RaytracingAccelerationStructure accel, Frame frame, Light light, Material material, float3 outgoingDirFs, float3 positionWs, float3 normalDirWs, float2 rand) {
-    LightSample lightSample = light.sample(accel, positionWs, normalDirWs, rand);
-    float3 lightDirFs = frame.worldToFrame(lightSample.dirWs);
+float3 estimateDirect(RaytracingAccelerationStructure accel, Frame frame, Light light, Material material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
+    const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
+    const float3 lightDirFs = frame.worldToFrame(lightSample.dirWs);
 
     if (lightSample.pdf > 0.0) {
-        float3 brdf = material.eval(lightDirFs, outgoingDirFs);
-        return lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) / lightSample.pdf;
-    } else {
-        return float3(0, 0, 0);
+        const float3 brdf = material.eval(lightDirFs, outgoingDirFs);
+        const float3 totalRadiance = lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) / lightSample.pdf;
+        if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs)), lightSample.dirWs, lightSample.lightDistance)) {
+            return totalRadiance;
+        }
     }
+
+    return 0;
 }
 
 interface Integrator {
