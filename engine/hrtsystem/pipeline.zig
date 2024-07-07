@@ -311,8 +311,9 @@ pub const PathTracing = Pipeline(.{
 pub const DirectLighting = Pipeline(.{
     .shader_path = "hrtsystem/main_direct.hlsl",
     .SpecConstants = extern struct {
-        env_samples_per_bounce: u32 = 1,
-        mesh_samples_per_bounce: u32 = 1,
+        env_samples: u32 = 1,
+        mesh_samples: u32 = 1,
+        brdf_samples: u32 = 1,
     },
     .PushConstants = extern struct {
         lens: Camera.Lens,

@@ -18,7 +18,7 @@ float powerHeuristic(uint numf, float fPdf, uint numg, float gPdf) {
 // estimates direct lighting from light + brdf via MIS
 // only samples light
 template <class Light, class Material>
-float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, Material material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand, uint samplesTaken) {
+float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, Material material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand, uint lightSamplesTaken, uint brdfSamplesTaken) {
     const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
 
     if (lightSample.pdf > 0.0) {
@@ -26,7 +26,7 @@ float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame
         const float scatteringPdf = material.pdf(lightDirFs, outgoingDirFs);
         if (scatteringPdf > 0.0) {
             const float3 brdf = material.eval(lightDirFs, outgoingDirFs);
-            const float weight = powerHeuristic(samplesTaken, lightSample.pdf, 1, scatteringPdf);
+            const float weight = powerHeuristic(lightSamplesTaken, lightSample.pdf, brdfSamplesTaken, scatteringPdf);
             const float3 totalRadiance = lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) * weight / lightSample.pdf;
             if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs)), lightSample.dirWs, lightSample.lightDistance)) {
                 return totalRadiance;
@@ -143,13 +143,13 @@ struct PathTracingIntegrator : Integrator {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamplesPerBounce; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, material, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, envSamplesPerBounce) / envSamplesPerBounce;
+                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, material, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, envSamplesPerBounce, 1) / envSamplesPerBounce;
                 }
 
                 // accumulate direct light samples from emissive meshes
                 for (uint directCount = 0; directCount < meshSamplesPerBounce; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, material, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, meshSamplesPerBounce) / meshSamplesPerBounce;
+                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, material, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, meshSamplesPerBounce, 1) / meshSamplesPerBounce;
                 }
             }
 
@@ -189,13 +189,15 @@ struct PathTracingIntegrator : Integrator {
 // primary ray + light sample
 // same as above with max_bounces = 0, but simpler code
 struct DirectLightIntegrator : Integrator {
-    uint envSamplesPerBounce;
-    uint meshSamplesPerBounce;
+    uint envSamples;
+    uint meshSamples;
+    uint brdfSamples;
 
-    static DirectLightIntegrator create(uint envSamplesPerBounce, uint meshSamplesPerBounce) {
+    static DirectLightIntegrator create(uint envSamples, uint meshSamples, uint brdfSamples) {
         DirectLightIntegrator integrator;
-        integrator.envSamplesPerBounce = envSamplesPerBounce;
-        integrator.meshSamplesPerBounce = meshSamplesPerBounce;
+        integrator.envSamples = envSamples;
+        integrator.meshSamples = meshSamples;
+        integrator.brdfSamples = brdfSamples;
         return integrator;
     }
 
@@ -231,16 +233,65 @@ struct DirectLightIntegrator : Integrator {
             // collect light from emissive meshes
             accumulatedColor += getEmissive(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
 
-            // accumulate direct light samples from env map
-            for (uint directCount = 0; directCount < envSamplesPerBounce; directCount++) {
-                float2 rand = float2(rng.getFloat(), rng.getFloat());
-                accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, material, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, envSamplesPerBounce) / envSamplesPerBounce;
+            bool isMaterialDelta = material.isDelta();
+
+            if (!isMaterialDelta) {
+                // accumulate direct light samples from env map
+                for (uint directCount = 0; directCount < envSamples; directCount++) {
+                    float2 rand = float2(rng.getFloat(), rng.getFloat());
+                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, material, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, envSamples, brdfSamples) / envSamples;
+                }
+
+                // accumulate direct light samples from emissive meshes
+                for (uint directCount = 0; directCount < meshSamples; directCount++) {
+                    float2 rand = float2(rng.getFloat(), rng.getFloat());
+                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, material, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, meshSamples, brdfSamples) / meshSamples;
+                }
             }
 
-            // accumulate direct light samples from emissive meshes
-            for (uint directCount = 0; directCount < meshSamplesPerBounce; directCount++) {
-                float2 rand = float2(rng.getFloat(), rng.getFloat());
-                accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, material, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, meshSamplesPerBounce) / meshSamplesPerBounce;
+            for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
+                MaterialSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
+                if (sample.pdf > 0.0) {
+                    const float3 throughput = material.eval(outgoingDirSs, sample.dirFs) * abs(Frame::cosTheta(sample.dirFs)) / sample.pdf;
+                    if (all(throughput != 0)) {
+                        RayDesc ray;
+                        ray.TMin = 0;
+                        ray.TMax = INFINITY;
+                        ray.Direction = shadingFrame.frameToWorld(sample.dirFs);
+                        ray.Origin = offsetAlongNormal(attrs.position, faceForward(attrs.triangleFrame.n, ray.Direction));
+                        Intersection its = Intersection::find(scene.tlas, ray);
+                        if (its.hit()) {
+                            // decode mesh attributes and material from intersection
+                            MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
+                            float3 emissiveLight = getEmissive(scene.world, scene.world.materialIdx(scene.world.instances[its.instanceIndex].instanceID(), its.geometryIndex), attrs.texcoord);
+
+                            // collect light from emissive meshes
+                            // lights only emit from front face
+                            if (dot(-ray.Direction, attrs.triangleFrame.n) > 0.0) {
+                                const float areaPdf = scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
+                                if (meshSamples == 0 || isMaterialDelta || areaPdf == 0) {
+                                    // add emissive light at point if light not explicitly sampled or initial bounce
+                                    accumulatedColor += throughput * emissiveLight / brdfSamples;
+                                } else {
+                                    // MIS emissive light if it is sampled at later bounces
+                                    const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * areaPdf;
+                                    const float weight = powerHeuristic(brdfSamples, sample.pdf, meshSamples, lightPdf);
+                                    accumulatedColor += throughput * emissiveLight * weight / brdfSamples;
+                                }
+                            }
+                        } else {
+                            if (envSamples == 0 || isMaterialDelta) {
+                                accumulatedColor += throughput * scene.envMap.incomingRadiance(ray.Direction) / brdfSamples;
+                            } else {
+                                LightEval l = scene.envMap.eval(ray.Direction);
+                                if (l.pdf > 0) {
+                                    float weight = powerHeuristic(brdfSamples, sample.pdf, envSamples, l.pdf);
+                                    accumulatedColor += throughput * scene.envMap.incomingRadiance(ray.Direction) * weight / brdfSamples;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         } else {
             // add background color
