@@ -211,7 +211,8 @@ struct DirectLightIntegrator : Integrator {
             Geometry geometry = scene.world.getGeometry(instanceID, its.geometryIndex);
             MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
             Frame textureFrame = getTextureFrame(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord, attrs.frame);
-            StandardPBR material = StandardPBR::load(scene.world.materials[NonUniformResourceIndex(scene.world.materialIdx(instanceID, its.geometryIndex))].materialAddress, attrs.texcoord);
+            MaterialVariantData materialData = scene.world.materials[NonUniformResourceIndex(scene.world.materialIdx(instanceID, its.geometryIndex))];
+            MaterialVariant material = MaterialVariant::load(materialData.type, materialData.materialAddress, attrs.texcoord);
 
             float3 outgoingDirWs = -initialRay.Direction;
 
