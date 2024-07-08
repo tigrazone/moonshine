@@ -54,6 +54,25 @@ float3 estimateDirect(RaytracingAccelerationStructure accel, Frame frame, Light 
     return 0;
 }
 
+// selects a shading normal based on the most preferred normal that is plausible
+Frame selectFrame(World world, MeshAttributes attrs, uint materialIdx, float3 outgoingDirWs) {
+    const Frame textureFrame = getTextureFrame(world, materialIdx, attrs.texcoord, attrs.frame);
+    const bool frontfacing = dot(attrs.triangleFrame.n, outgoingDirWs) > 0;
+    Frame shadingFrame;
+    if ((frontfacing && dot(outgoingDirWs, textureFrame.n) > 0) || (!frontfacing && -dot(outgoingDirWs, textureFrame.n) > 0)) {
+        // prefer texture normal if we can
+        shadingFrame = textureFrame;
+    } else if ((frontfacing && dot(outgoingDirWs, attrs.frame.n) > 0) || (!frontfacing && -dot(outgoingDirWs, attrs.frame.n) > 0)) {
+        // if texture normal not valid, try shading normal
+        shadingFrame = attrs.frame;
+    } else {
+        // otherwise fall back to triangle normal
+        shadingFrame = attrs.triangleFrame;
+    }
+
+    return shadingFrame;
+}
+
 interface Integrator {
     float3 incomingRadiance(Scene scene, RayDesc ray, inout Rng rng);
 };
@@ -85,35 +104,18 @@ struct PathTracingIntegrator : Integrator {
         for (Intersection its = Intersection::find(scene.tlas, ray); its.hit(); its = Intersection::find(scene.tlas, ray)) {
 
             // decode mesh attributes and material from intersection
-            uint instanceID = scene.world.instances[its.instanceIndex].instanceID();
-            Geometry geometry = scene.world.getGeometry(instanceID, its.geometryIndex);
-            MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
-            Frame textureFrame = getTextureFrame(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord, attrs.frame);
-            float3 emissiveLight = getEmissive(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
-            MaterialVariantData materialData = scene.world.materials[NonUniformResourceIndex(scene.world.materialIdx(instanceID, its.geometryIndex))];
-            MaterialVariant material = MaterialVariant::load(materialData.type, materialData.materialAddress, attrs.texcoord);
+            const uint instanceID = scene.world.instances[its.instanceIndex].instanceID();
+            const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
+            const MaterialVariant material = MaterialVariant::load(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
 
-            float3 outgoingDirWs = -ray.Direction;
-
-            // select proper shading normal
-            bool frontfacing = dot(attrs.triangleFrame.n, outgoingDirWs) > 0;
-            Frame shadingFrame;
-            if ((frontfacing && dot(outgoingDirWs, textureFrame.n) > 0) || (!frontfacing && -dot(outgoingDirWs, textureFrame.n) > 0)) {
-                // prefer texture normal if we can
-                shadingFrame = textureFrame;
-            } else if ((frontfacing && dot(outgoingDirWs, attrs.frame.n) > 0) || (!frontfacing && -dot(outgoingDirWs, attrs.frame.n) > 0)) {
-                // if texture normal not valid, try shading normal
-                shadingFrame = attrs.frame;
-            } else {
-                // otherwise fall back to triangle normal
-                shadingFrame = attrs.triangleFrame;
-            }
-
-            float3 outgoingDirSs = shadingFrame.worldToFrame(outgoingDirWs);
+            const float3 outgoingDirWs = -ray.Direction;
+            const Frame shadingFrame = selectFrame(scene.world, attrs, scene.world.materialIdx(instanceID, its.geometryIndex), outgoingDirWs);
+            const float3 outgoingDirSs = shadingFrame.worldToFrame(outgoingDirWs);
 
             // collect light from emissive meshes
             // lights only emit from front face
             if (dot(outgoingDirWs, attrs.triangleFrame.n) > 0.0) {
+                const float3 emissiveLight = getEmissive(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
                 const float areaPdf = scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
                 if (meshSamplesPerBounce == 0 || bounceCount == 0 || isLastMaterialDelta || areaPdf == 0) {
                     // add emissive light at point if light not explicitly sampled or initial bounce
@@ -137,7 +139,7 @@ struct PathTracingIntegrator : Integrator {
                 throughput /= pSurvive;
             }
 
-            bool isCurrentMaterialDelta = material.isDelta();
+            const bool isCurrentMaterialDelta = material.isDelta();
 
             if (!isCurrentMaterialDelta) {
                 // accumulate direct light samples from env map
@@ -154,9 +156,8 @@ struct PathTracingIntegrator : Integrator {
             }
 
             // sample direction for next bounce
-            MaterialSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
-            if (sample.pdf == 0.0) return accumulatedColor;
-            lastMaterialPdf = sample.pdf;
+            const MaterialSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
+            if (sample.pdf == 0.0) return accumulatedColor; // in a perfect world this would never happen
 
             // set up info for next bounce
             ray.Direction = shadingFrame.frameToWorld(sample.dirFs);
@@ -164,6 +165,7 @@ struct PathTracingIntegrator : Integrator {
             throughput *= material.eval(sample.dirFs, outgoingDirSs) * abs(Frame::cosTheta(sample.dirFs)) / sample.pdf;
             bounceCount += 1;
             isLastMaterialDelta = isCurrentMaterialDelta;
+            lastMaterialPdf = sample.pdf;
         }
 
         // we only get here on misses -- terminations for other reasons return from loop
@@ -207,34 +209,18 @@ struct DirectLightIntegrator : Integrator {
         Intersection its = Intersection::find(scene.tlas, initialRay);
         if (its.hit()) {
             // decode mesh attributes and material from intersection
-            uint instanceID = scene.world.instances[its.instanceIndex].instanceID();
-            Geometry geometry = scene.world.getGeometry(instanceID, its.geometryIndex);
-            MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
-            Frame textureFrame = getTextureFrame(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord, attrs.frame);
-            MaterialVariantData materialData = scene.world.materials[NonUniformResourceIndex(scene.world.materialIdx(instanceID, its.geometryIndex))];
-            MaterialVariant material = MaterialVariant::load(materialData.type, materialData.materialAddress, attrs.texcoord);
+            const uint instanceID = scene.world.instances[its.instanceIndex].instanceID();
+            const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
+            const MaterialVariant material = MaterialVariant::load(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
 
-            float3 outgoingDirWs = -initialRay.Direction;
-
-            // select proper shading normal
-            Frame shadingFrame;
-            if (dot(outgoingDirWs, textureFrame.n) > 0) {
-                // prefer texture normal if we can
-                shadingFrame = textureFrame;
-            } else if (dot(outgoingDirWs, attrs.frame.n) > 0) {
-                // if texture normal not valid, try shading normal
-                shadingFrame = attrs.frame;
-            } else {
-                // otherwise fall back to triangle normal
-                shadingFrame = attrs.triangleFrame;
-            }
-
-            float3 outgoingDirSs = shadingFrame.worldToFrame(outgoingDirWs);
+            const float3 outgoingDirWs = -initialRay.Direction;
+            const Frame shadingFrame = selectFrame(scene.world, attrs, scene.world.materialIdx(instanceID, its.geometryIndex), outgoingDirWs);
+            const float3 outgoingDirSs = shadingFrame.worldToFrame(outgoingDirWs);
 
             // collect light from emissive meshes
             accumulatedColor += getEmissive(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
 
-            bool isMaterialDelta = material.isDelta();
+            const bool isMaterialDelta = material.isDelta();
 
             if (!isMaterialDelta) {
                 // accumulate direct light samples from env map
@@ -251,7 +237,7 @@ struct DirectLightIntegrator : Integrator {
             }
 
             for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
-                MaterialSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
+                const MaterialSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
                 if (sample.pdf > 0.0) {
                     const float3 throughput = material.eval(outgoingDirSs, sample.dirFs) * abs(Frame::cosTheta(sample.dirFs)) / sample.pdf;
                     if (all(throughput != 0)) {

@@ -397,10 +397,11 @@ struct MaterialVariant : Material {
     uint64_t addr;
     float2 texcoords;
 
-    static MaterialVariant load(MaterialType type, uint64_t addr, float2 texcoords) {
+    static MaterialVariant load(World world, uint materialIdx, float2 texcoords) {
+        const MaterialVariantData materialData = world.materials[NonUniformResourceIndex(materialIdx)];
         MaterialVariant material;
-        material.type = type;
-        material.addr = addr;
+        material.type = materialData.type;
+        material.addr = materialData.materialAddress;
         material.texcoords = texcoords;
         return material;
     }
