@@ -17,8 +17,8 @@ float powerHeuristic(uint numf, float fPdf, uint numg, float gPdf) {
 
 // estimates direct lighting from light + brdf via MIS
 // only samples light
-template <class Light, class Material>
-float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, Material material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand, uint lightSamplesTaken, uint brdfSamplesTaken) {
+template <class Light, class BSDF>
+float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, BSDF material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand, uint lightSamplesTaken, uint brdfSamplesTaken) {
     const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
 
     if (lightSample.pdf > 0.0) {
@@ -38,8 +38,8 @@ float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame
 }
 
 // no MIS, just light
-template <class Light, class Material>
-float3 estimateDirect(RaytracingAccelerationStructure accel, Frame frame, Light light, Material material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
+template <class Light, class BSDF>
+float3 estimateDirect(RaytracingAccelerationStructure accel, Frame frame, Light light, BSDF material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
     const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
     const float3 lightDirFs = frame.worldToFrame(lightSample.dirWs);
 
@@ -106,7 +106,7 @@ struct PathTracingIntegrator : Integrator {
             // decode mesh attributes and material from intersection
             const uint instanceID = scene.world.instances[its.instanceIndex].instanceID();
             const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
-            const MaterialVariant material = MaterialVariant::load(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
+            const PolymorphicBSDF material = PolymorphicBSDF::load(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
 
             const float3 outgoingDirWs = -ray.Direction;
             const Frame shadingFrame = selectFrame(scene.world, attrs, scene.world.materialIdx(instanceID, its.geometryIndex), outgoingDirWs);
@@ -156,7 +156,7 @@ struct PathTracingIntegrator : Integrator {
             }
 
             // sample direction for next bounce
-            const MaterialSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
+            const BSDFSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
             if (sample.pdf == 0.0) return accumulatedColor; // in a perfect world this would never happen
 
             // set up info for next bounce
@@ -211,7 +211,7 @@ struct DirectLightIntegrator : Integrator {
             // decode mesh attributes and material from intersection
             const uint instanceID = scene.world.instances[its.instanceIndex].instanceID();
             const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
-            const MaterialVariant material = MaterialVariant::load(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
+            const PolymorphicBSDF material = PolymorphicBSDF::load(scene.world, scene.world.materialIdx(instanceID, its.geometryIndex), attrs.texcoord);
 
             const float3 outgoingDirWs = -initialRay.Direction;
             const Frame shadingFrame = selectFrame(scene.world, attrs, scene.world.materialIdx(instanceID, its.geometryIndex), outgoingDirWs);
@@ -237,7 +237,7 @@ struct DirectLightIntegrator : Integrator {
             }
 
             for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
-                const MaterialSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
+                const BSDFSample sample = material.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
                 if (sample.pdf > 0.0) {
                     const float3 throughput = material.eval(outgoingDirSs, sample.dirFs) * abs(Frame::cosTheta(sample.dirFs)) / sample.pdf;
                     if (all(throughput != 0)) {

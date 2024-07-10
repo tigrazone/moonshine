@@ -14,42 +14,44 @@ const F32x2 = engine.vector.Vec2(f32);
 const F32x3 = engine.vector.Vec3(f32);
 const F32x4 = engine.vector.Vec4(f32);
 
+// I define a material to be a BSDF that may vary over a surface,
+// plus a normal and emissive map
+
 // on the host side, materials are represented as a regular tagged union
 //
 // since GPUs do not support tagged unions, we solve this with a little indirection,
 // translating this into a GPU buffer for each variant, and have a base material struct
 // that simply has an enum and a device address, which points to the specific variant
-pub const MaterialInfo = struct {
+pub const Material = struct {
     pub const default_normal = F32x2.new(0.5, 0.5);
     const normal_components = @TypeOf(default_normal).element_count;
     const emissive_components = 3;
 
-    // all materials have normal and emissive
     normal: TextureManager.Handle,
     emissive: TextureManager.Handle,
 
-    // then material-specific data
-    variant: MaterialVariant,
+    bsdf: PolymorphicBSDF,
 };
 
-pub const Material = extern struct {
-    // all materials have normal and emissive
+pub const GpuMaterial = extern struct {
     normal: TextureManager.Handle,
     emissive: TextureManager.Handle,
 
-    // then each material has specific type which influences what buffer addr looks into
-    type: MaterialType = .standard_pbr,
+    type: BSDF = .standard_pbr,
     addr: vk.DeviceAddress,
 };
 
-pub const MaterialType = enum(u32) {
+pub const BSDF = enum(u32) {
     glass,
     lambert,
     perfect_mirror,
     standard_pbr,
 };
 
-pub const MaterialVariant = union(MaterialType) {
+// technically these are BSDF parameters rather than
+// BSDFs themselves, as BSDFs do not very over a surface
+// but these textures do
+pub const PolymorphicBSDF = union(BSDF) {
     glass: Glass,
     lambert: Lambert,
     perfect_mirror: void, // no payload
@@ -112,11 +114,11 @@ fn VariantBuffer(comptime T: type) type {
     };
 }
 
-const VariantBuffers = StructFromTaggedUnion(MaterialVariant, VariantBuffer);
+const VariantBuffers = StructFromTaggedUnion(PolymorphicBSDF, VariantBuffer);
 
 material_count: u32,
 textures: TextureManager,
-materials: VkAllocator.DeviceBuffer(Material),
+materials: VkAllocator.DeviceBuffer(GpuMaterial),
 
 variant_buffers: VariantBuffers,
 
@@ -137,30 +139,30 @@ pub fn createEmpty(vc: *const VulkanContext) !Self {
 
 // you can either do this or create below, but not both
 // texture handles must've been already added to the MaterialManager's textures
-pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, info: MaterialInfo) !Handle {
+pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, info: Material) !Handle {
     std.debug.assert(self.material_count < max_materials);
 
     try encoder.begin();
-    inline for (@typeInfo(MaterialVariant).Union.fields, 0..) |field, field_idx| {
-        if (@as(MaterialType, @enumFromInt(field_idx)) == std.meta.activeTag(info.variant)) {
+    inline for (@typeInfo(PolymorphicBSDF).Union.fields, 0..) |field, field_idx| {
+        if (@as(BSDF, @enumFromInt(field_idx)) == std.meta.activeTag(info.bsdf)) {
             if (@sizeOf(field.type) != 0) {
                 const variant_buffer = &@field(self.variant_buffers, field.name);
                 if (variant_buffer.buffer.is_null()) {
                     variant_buffer.buffer = try vk_allocator.createDeviceBuffer(vc, allocator, field.type, max_materials, .{ .shader_device_address_bit = true, .transfer_dst_bit = true });
                     variant_buffer.addr = variant_buffer.buffer.getAddress(vc);
                 }
-                encoder.updateBuffer(field.type, variant_buffer.buffer, &.{ @field(info.variant, field.name) }, variant_buffer.len);
+                encoder.updateBuffer(field.type, variant_buffer.buffer, &.{ @field(info.bsdf, field.name) }, variant_buffer.len);
                 variant_buffer.len += 1;
             }
 
-            const gpu_material = Material {
+            const gpu_material = GpuMaterial {
                 .normal = info.normal,
                 .emissive = info.emissive,
-                .type = std.meta.activeTag(info.variant),
+                .type = std.meta.activeTag(info.bsdf),
                 .addr = if (@sizeOf(field.type) != 0) @field(self.variant_buffers, field.name).addr + (@field(self.variant_buffers, field.name).len - 1) * @sizeOf(field.type) else 0,
             };
-            if (self.materials.is_null()) self.materials = try vk_allocator.createDeviceBuffer(vc, allocator, Material, max_materials, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
-            encoder.updateBuffer(Material, self.materials, &.{ gpu_material }, self.material_count);
+            if (self.materials.is_null()) self.materials = try vk_allocator.createDeviceBuffer(vc, allocator, GpuMaterial, max_materials, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
+            encoder.updateBuffer(GpuMaterial, self.materials, &.{ gpu_material }, self.material_count);
         }
     }
     try encoder.submitAndIdleUntilDone(vc);
@@ -170,7 +172,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
 }
 
 pub fn recordUpdateSingleVariant(self: *Self, comptime VariantType: type, command_buffer: VulkanContext.CommandBuffer, variant_idx: u32, new_data: VariantType) void {
-    const variant_name = inline for (@typeInfo(MaterialVariant).Union.fields) |union_field| {
+    const variant_name = inline for (@typeInfo(PolymorphicBSDF).Union.fields) |union_field| {
         if (union_field.type == VariantType) {
             break union_field.name;
         }

@@ -7,7 +7,7 @@
 [[vk::binding(1, 0)]] StructuredBuffer<row_major float3x4> dWorldToInstance;
 [[vk::binding(2, 0)]] StructuredBuffer<Mesh> dMeshes;
 [[vk::binding(3, 0)]] StructuredBuffer<Geometry> dGeometries;
-[[vk::binding(4, 0)]] StructuredBuffer<MaterialVariantData> dMaterials;
+[[vk::binding(4, 0)]] StructuredBuffer<Material> dMaterials;
 [[vk::binding(5, 0)]] StructuredBuffer<uint> emissiveTriangleCount;
 
 // dst

@@ -12,7 +12,7 @@
 [[vk::binding(2, 0)]] StructuredBuffer<row_major float3x4> dWorldToInstance;
 [[vk::binding(3, 0)]] StructuredBuffer<Mesh> dMeshes;
 [[vk::binding(4, 0)]] StructuredBuffer<Geometry> dGeometries;
-[[vk::binding(5, 0)]] StructuredBuffer<MaterialVariantData> dMaterials;
+[[vk::binding(5, 0)]] StructuredBuffer<Material> dMaterials;
 
 // EMISSIVE TRIANGLES
 [[vk::binding(6, 0)]] Texture1D<float> dTrianglePower;

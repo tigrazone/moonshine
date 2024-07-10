@@ -70,7 +70,7 @@ fn queueFamilyAcceptable(instance: vk.Instance, device: vk.PhysicalDevice, idx: 
 
 pub const required_vulkan_functions = displaysystem.required_vulkan_functions ++ Platform.required_vulkan_functions ++ hrtsystem.required_vulkan_functions;
 
-// I'm certain at some point I'll look back on this and think that there's absolutely no reason this required this level of 
+// I'm certain at some point I'll look back on this and think that there's absolutely no reason this required this level of
 // metaprogramming. in fact, I'm already sort of doing it now
 const Integrator = struct {
     pub fn IntegratorWithOptions(Pipeline: type) type {
@@ -318,7 +318,7 @@ pub fn main() !void {
                 const instance = try sync_copier.copyBufferItem(&context, vk.AccelerationStructureInstanceKHR, scene.world.accel.instances_device, object.instance_index);
                 const accel_geometry_index = instance.instance_custom_index_and_mask.instance_custom_index + object.geometry_index;
                 var geometry = try sync_copier.copyBufferItem(&context, Accel.Geometry, scene.world.accel.geometries, accel_geometry_index);
-                const material = try sync_copier.copyBufferItem(&context, MaterialManager.Material, scene.world.materials.materials, geometry.material);
+                const material = try sync_copier.copyBufferItem(&context, MaterialManager.GpuMaterial, scene.world.materials.materials, geometry.material);
                 try imgui.textFmt("Mesh index: {d}", .{geometry.mesh});
                 if (imgui.inputScalar(u32, "Material index", &geometry.material, null, null) and geometry.material < scene.world.materials.material_count) {
                     scene.world.accel.recordUpdateSingleMaterial(frame_encoder.buffer, accel_geometry_index, geometry.material);
@@ -334,7 +334,7 @@ pub fn main() !void {
                 try imgui.textFmt("normal: {}", .{material.normal});
                 try imgui.textFmt("emissive: {}", .{material.emissive});
                 try imgui.textFmt("type: {s}", .{@tagName(material.type)});
-                inline for (@typeInfo(MaterialManager.MaterialType).Enum.fields, @typeInfo(MaterialManager.MaterialVariant).Union.fields) |enum_field, union_field| {
+                inline for (@typeInfo(MaterialManager.BSDF).Enum.fields, @typeInfo(MaterialManager.PolymorphicBSDF).Union.fields) |enum_field, union_field| {
                     const VariantType = union_field.type;
                     if (VariantType != void and enum_field.value == @intFromEnum(material.type)) {
                         const material_idx: u32 = @intCast((material.addr - @field(scene.world.materials.variant_buffers, enum_field.name).addr) / @sizeOf(VariantType));

@@ -276,7 +276,7 @@ test "white sphere on white background is white" {
         const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, try icosphere(5, allocator, false));
 
         const normal_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
-            .f32x2 = MaterialManager.MaterialInfo.default_normal,
+            .f32x2 = MaterialManager.Material.default_normal,
         }, "");
         const albedo_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
             .f32x3 = F32x3.new(1, 1, 1),
@@ -284,10 +284,10 @@ test "white sphere on white background is white" {
         const emissive_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
             .f32x3 = F32x3.new(0, 0, 0),
         }, "");
-        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, MaterialManager.MaterialInfo {
+        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, MaterialManager.Material {
             .normal = normal_texture,
             .emissive = emissive_texture,
-            .variant = MaterialManager.MaterialVariant {
+            .bsdf = MaterialManager.PolymorphicBSDF {
                 .lambert = MaterialManager.Lambert {
                     .color = albedo_texture,
                 }
@@ -383,7 +383,7 @@ test "inside illuminating sphere is white" {
         const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, try icosphere(5, allocator, true));
 
         const normal_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
-            .f32x2 = MaterialManager.MaterialInfo.default_normal,
+            .f32x2 = MaterialManager.Material.default_normal,
         }, "");
         const albedo_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
             .f32x3 = F32x3.new(0.5, 0.5, 0.5),
@@ -391,10 +391,10 @@ test "inside illuminating sphere is white" {
         const emissive_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
             .f32x3 = F32x3.new(0.5, 0.5, 0.5),
         }, "");
-        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, MaterialManager.MaterialInfo {
+        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, MaterialManager.Material {
             .normal = normal_texture,
             .emissive = emissive_texture,
-            .variant = MaterialManager.MaterialVariant {
+            .bsdf = MaterialManager.PolymorphicBSDF {
                 .lambert = MaterialManager.Lambert {
                     .color = albedo_texture,
                 }

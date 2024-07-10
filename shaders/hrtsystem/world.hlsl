@@ -26,21 +26,19 @@ struct Mesh {
     uint64_t indexAddress;
 };
 
-enum class MaterialType : uint {
+enum class BSDFType : uint {
     Glass,
     Lambert,
     PerfectMirror,
     StandardPBR,
 };
 
-struct MaterialVariantData {
-    // all materials have these two
+struct Material {
     uint normal;
     uint emissive;
 
-    // then material specific stuff
     // find appropriate thing to decode from address using `type`
-    MaterialType type;
+    BSDFType type;
     uint64_t materialAddress;
 };
 
@@ -51,7 +49,7 @@ struct World {
     StructuredBuffer<Mesh> meshes;
     StructuredBuffer<Geometry> geometries;
 
-    StructuredBuffer<MaterialVariantData> materials;
+    StructuredBuffer<Material> materials;
 
     Geometry getGeometry(uint instanceID, uint geometryIndex) {
         return geometries[NonUniformResourceIndex(instanceID + geometryIndex)];

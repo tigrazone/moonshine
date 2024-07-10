@@ -28,8 +28,8 @@ const F32x3 = vector.Vec3(f32);
 const F32x2 = vector.Vec2(f32);
 const U32x3 = vector.Vec3(u32);
 
-pub const Material = MaterialManager.MaterialInfo;
-pub const MaterialVariant = MaterialManager.MaterialVariant;
+pub const Material = MaterialManager.Material;
+pub const PolymorphicBSDF = MaterialManager.PolymorphicBSDF;
 pub const Instance = Accel.Instance;
 pub const Geometry = Accel.Geometry;
 
@@ -120,7 +120,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
     standard_pbr.ior = gltf_material.ior;
 
     if (gltf_material.transmission_factor == 1.0) {
-        material.variant = .{ .glass = .{ .ior = standard_pbr.ior } };
+        material.bsdf = .{ .glass = .{ .ior = standard_pbr.ior } };
         return material;
     }
 
@@ -202,7 +202,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
                 .format = .r8_unorm,
             },
         }, debug_name_roughness);
-        material.variant = .{ .standard_pbr = standard_pbr };
+        material.bsdf = .{ .standard_pbr = standard_pbr };
         return material;
     } else {
         if (gltf_material.metallic_roughness.metallic_factor == 0.0 and gltf_material.metallic_roughness.roughness_factor == 1.0) {
@@ -210,11 +210,11 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
             const lambert = MaterialManager.Lambert {
                 .color = standard_pbr.color,
             };
-            material.variant = .{ .lambert = lambert };
+            material.bsdf = .{ .lambert = lambert };
             return material;
         } else if (gltf_material.metallic_roughness.metallic_factor == 1.0 and gltf_material.metallic_roughness.roughness_factor == 0.0) {
             // parse as perfect mirror
-            material.variant = .{ .perfect_mirror = {} };
+            material.bsdf = .{ .perfect_mirror = {} };
             return material;
         } else {
             const debug_name_metalness = try std.fmt.allocPrintZ(allocator, "{s} constant metalness {}", .{ gltf_material.name, gltf_material.metallic_roughness.metallic_factor });
@@ -227,7 +227,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
             standard_pbr.roughness = try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
                 .f32x1 = gltf_material.metallic_roughness.roughness_factor,
             }, debug_name_roughness);
-            material.variant = .{ .standard_pbr = standard_pbr };
+            material.bsdf = .{ .standard_pbr = standard_pbr };
             return material;
         }
     }

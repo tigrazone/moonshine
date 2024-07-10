@@ -122,19 +122,19 @@ namespace Fresnel {
     }
 };
 
-struct MaterialSample {
+struct BSDFSample {
     float3 dirFs;
     float pdf;
 };
 
-interface Material {
+interface BSDF {
     float pdf(float3 w_o, float3 w_i);
     float3 eval(float3 w_o, float3 w_i);
-    MaterialSample sample(float3 w_o, float2 square);
+    BSDFSample sample(float3 w_o, float2 square);
 };
 
 // evenly diffuse lambertian material
-struct Lambert : Material {
+struct Lambert : BSDF {
     float3 r; // color (technically, fraction of light that is reflected)
 
     static Lambert create(float3 r) {
@@ -159,11 +159,11 @@ struct Lambert : Material {
         return r / PI;
     }
 
-    MaterialSample sample(float3 w_o, float2 square) {
+    BSDFSample sample(float3 w_o, float2 square) {
         float3 w_i = squareToCosineHemisphere(square);
         if (w_o.z < 0.0) w_i.z *= -1;
 
-        MaterialSample sample;
+        BSDFSample sample;
         sample.pdf = pdf(w_i, w_o);
         sample.dirFs = w_i;
         return sample;
@@ -176,7 +176,7 @@ struct Lambert : Material {
 
 // blends between provided microfacet distribution
 // and lambertian diffuse based on metalness factor
-struct StandardPBR : Material {
+struct StandardPBR : BSDF {
     GGX distr;      // microfacet distribution used by this material
 
     float3 color; // color - linear color; each component is [0, 1]
@@ -204,31 +204,31 @@ struct StandardPBR : Material {
         return distr.pdf(w_o, h) / (4.0 * dot(w_o, h));
     }
 
-    MaterialSample microfacetSample(float3 w_o, float2 square) {
+    BSDFSample microfacetSample(float3 w_o, float2 square) {
         float3 h = distr.sample(w_o, square);
         float3 w_i = -reflect(w_o, h); // reflect in HLSL is negative of what papers usually mean for some reason
 
-        MaterialSample sample;
+        BSDFSample sample;
         sample.pdf = Frame::sameHemisphere(w_o, w_i) ? distr.pdf(w_o, h) / (4.0 * dot(w_o, h)) : 0.0;
         sample.dirFs = w_i;
         return sample;
     }
 
-    MaterialSample sample(float3 w_o, float2 square) {
+    BSDFSample sample(float3 w_o, float2 square) {
         float specularWeight = 1;
         float diffuseWeight = 1 - metalness;
         float pSpecularSample = specularWeight / (specularWeight + diffuseWeight);
 
-        MaterialSample sample;
+        BSDFSample sample;
         Lambert diffuse = Lambert::create(color);
         if (coinFlipRemap(pSpecularSample, square.x)) {
-            MaterialSample microSample = microfacetSample(w_o, square);
+            BSDFSample microSample = microfacetSample(w_o, square);
             float pdf2 = diffuse.pdf(microSample.dirFs, w_o);
 
             sample.pdf = lerp(pdf2, microSample.pdf, pSpecularSample);
             sample.dirFs = microSample.dirFs;
         } else {
-            MaterialSample diffuseSample = diffuse.sample(w_o, square);
+            BSDFSample diffuseSample = diffuse.sample(w_o, square);
             float pdf2 = microfacetPdf(diffuseSample.dirFs, w_o);
 
             sample.pdf = lerp(diffuseSample.pdf, pdf2, pSpecularSample);
@@ -269,7 +269,7 @@ struct StandardPBR : Material {
     }
 };
 
-struct DisneyDiffuse : Material {
+struct DisneyDiffuse : BSDF {
     float3 color;
     float roughness;
 
@@ -280,7 +280,7 @@ struct DisneyDiffuse : Material {
         return material;
     }
 
-    MaterialSample sample(float3 w_o, float2 square) {
+    BSDFSample sample(float3 w_o, float2 square) {
         return Lambert::create(color).sample(w_o, square);
     }
 
@@ -310,9 +310,9 @@ struct DisneyDiffuse : Material {
     }
 };
 
-struct PerfectMirror : Material {
-    MaterialSample sample(float3 w_o, float2 square) {
-        MaterialSample sample;
+struct PerfectMirror : BSDF {
+    BSDFSample sample(float3 w_o, float2 square) {
+        BSDFSample sample;
         sample.pdf = 1.0;
         sample.dirFs = float3(-w_o.x, -w_o.y, w_o.z);
         return sample;
@@ -342,7 +342,7 @@ float3 refractDir(float3 wi, float3 n, float eta) {
     return eta * -wi + (eta * cosThetaI - cosThetaT) * n;
 }
 
-struct Glass : Material {
+struct Glass : BSDF {
     float intIOR;
 
     static Glass load(uint64_t addr) {
@@ -351,9 +351,9 @@ struct Glass : Material {
         return material;
     }
 
-    MaterialSample sample(float3 w_o, float2 square) {
+    BSDFSample sample(float3 w_o, float2 square) {
         float fresnel = Fresnel::dielectric(Frame::cosTheta(w_o), AIR_IOR, intIOR);
-        MaterialSample sample;
+        BSDFSample sample;
 
         if (square.x < fresnel) {
             sample.pdf = fresnel;
@@ -392,14 +392,14 @@ struct Glass : Material {
     }
 };
 
-struct MaterialVariant : Material {
-    MaterialType type;
+struct PolymorphicBSDF : BSDF {
+    BSDFType type;
     uint64_t addr;
     float2 texcoords;
 
-    static MaterialVariant load(World world, uint materialIdx, float2 texcoords) {
-        const MaterialVariantData materialData = world.materials[NonUniformResourceIndex(materialIdx)];
-        MaterialVariant material;
+    static PolymorphicBSDF load(World world, uint materialIdx, float2 texcoords) {
+        const Material materialData = world.materials[NonUniformResourceIndex(materialIdx)];
+        PolymorphicBSDF material;
         material.type = materialData.type;
         material.addr = materialData.materialAddress;
         material.texcoords = texcoords;
@@ -408,19 +408,19 @@ struct MaterialVariant : Material {
 
     float pdf(float3 w_i, float3 w_o) {
         switch (type) {
-            case MaterialType::StandardPBR: {
+            case BSDFType::StandardPBR: {
                 StandardPBR m = StandardPBR::load(addr, texcoords);
                 return m.pdf(w_i, w_o);
             }
-            case MaterialType::Lambert: {
+            case BSDFType::Lambert: {
                 Lambert m = Lambert::load(addr, texcoords);
                 return m.pdf(w_i, w_o);
             }
-            case MaterialType::PerfectMirror: {
+            case BSDFType::PerfectMirror: {
                 PerfectMirror m;
                 return m.pdf(w_i, w_o);
             }
-            case MaterialType::Glass: {
+            case BSDFType::Glass: {
                 Glass m = Glass::load(addr);
                 return m.pdf(w_i, w_o);
             }
@@ -429,40 +429,40 @@ struct MaterialVariant : Material {
 
     float3 eval(float3 w_i, float3 w_o) {
         switch (type) {
-            case MaterialType::StandardPBR: {
+            case BSDFType::StandardPBR: {
                 StandardPBR m = StandardPBR::load(addr, texcoords);
                 return m.eval(w_i, w_o);
             }
-            case MaterialType::Lambert: {
+            case BSDFType::Lambert: {
                 Lambert m = Lambert::load(addr, texcoords);
                 return m.eval(w_i, w_o);
             }
-            case MaterialType::PerfectMirror: {
+            case BSDFType::PerfectMirror: {
                 PerfectMirror m;
                 return m.eval(w_i, w_o);
             }
-            case MaterialType::Glass: {
+            case BSDFType::Glass: {
                 Glass m = Glass::load(addr);
                 return m.eval(w_i, w_o);
             }
         }
     }
 
-    MaterialSample sample(float3 w_o, float2 square) {
+    BSDFSample sample(float3 w_o, float2 square) {
         switch (type) {
-            case MaterialType::StandardPBR: {
+            case BSDFType::StandardPBR: {
                 StandardPBR m = StandardPBR::load(addr, texcoords);
                 return m.sample(w_o, square);
             }
-            case MaterialType::Lambert: {
+            case BSDFType::Lambert: {
                 Lambert m = Lambert::load(addr, texcoords);
                 return m.sample(w_o, square);
             }
-            case MaterialType::PerfectMirror: {
+            case BSDFType::PerfectMirror: {
                 PerfectMirror m;
                 return m.sample(w_o, square);
             }
-            case MaterialType::Glass: {
+            case BSDFType::Glass: {
                 Glass m = Glass::load(addr);
                 return m.sample(w_o, square);
             }
@@ -471,16 +471,16 @@ struct MaterialVariant : Material {
 
     bool isDelta() {
         switch (type) {
-            case MaterialType::StandardPBR: {
+            case BSDFType::StandardPBR: {
                 return StandardPBR::isDelta();
             }
-            case MaterialType::Lambert: {
+            case BSDFType::Lambert: {
                 return Lambert::isDelta();
             }
-            case MaterialType::PerfectMirror: {
+            case BSDFType::PerfectMirror: {
                 return PerfectMirror::isDelta();
             }
-            case MaterialType::Glass: {
+            case BSDFType::Glass: {
                 return Glass::isDelta();
             }
         }
@@ -505,7 +505,7 @@ Frame createTextureFrame(float3 normalWorldSpace, Frame tangentFrame) {
 }
 
 Frame getTextureFrame(World world, uint materialIndex, float2 texcoords, Frame tangentFrame) {
-    const MaterialVariantData data = world.materials[NonUniformResourceIndex(materialIndex)];
+    const Material data = world.materials[NonUniformResourceIndex(materialIndex)];
     const float2 rg = dTextures[NonUniformResourceIndex(data.normal)].SampleLevel(dTextureSampler, texcoords, 0).rg;
     const float3 normalTangentSpace = decodeNormal(rg);
     const float3 normalWorldSpace = tangentNormalToWorld(normalTangentSpace, tangentFrame);
@@ -513,6 +513,6 @@ Frame getTextureFrame(World world, uint materialIndex, float2 texcoords, Frame t
 }
 
 float3 getEmissive(World world, uint materialIndex, float2 texcoords) {
-    MaterialVariantData data = world.materials[NonUniformResourceIndex(materialIndex)];
+    Material data = world.materials[NonUniformResourceIndex(materialIndex)];
     return dTextures[NonUniformResourceIndex(data.emissive)].SampleLevel(dTextureSampler, texcoords, 0).rgb;
 }

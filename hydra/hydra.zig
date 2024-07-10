@@ -172,12 +172,12 @@ pub const HdMoonshine = struct {
 
                     // TODO: can merge some of these cmdUpdateBuffers sometimes
                     if (update.value_ptr.normal) |normal| {
-                        const offset = index * @sizeOf(MaterialManager.Material) + @offsetOf(MaterialManager.Material, "normal");
+                        const offset = index * @sizeOf(MaterialManager.GpuMaterial) + @offsetOf(MaterialManager.GpuMaterial, "normal");
                         const bytes = std.mem.asBytes(&normal);
                         self.encoder.buffer.updateBuffer(self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
                     }
                     if (update.value_ptr.emissive) |emissive| {
-                        const offset = index * @sizeOf(MaterialManager.Material) + @offsetOf(MaterialManager.Material, "emissive");
+                        const offset = index * @sizeOf(MaterialManager.GpuMaterial) + @offsetOf(MaterialManager.GpuMaterial, "emissive");
                         const bytes = std.mem.asBytes(&emissive);
                         self.encoder.buffer.updateBuffer(self.world.materials.materials.handle, offset, bytes.len, bytes.ptr);
                     }
@@ -431,10 +431,10 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineCreateMaterial(self: *HdMoonshine, material: Material) MaterialManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, MaterialManager.MaterialInfo {
+        return self.world.materials.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, MaterialManager.Material {
             .normal = material.normal,
             .emissive = material.emissive,
-            .variant = MaterialManager.MaterialVariant {
+            .bsdf = MaterialManager.PolymorphicBSDF {
                 .standard_pbr = material.standard_pbr,
             },
         }) catch unreachable; // TODO: error handling
