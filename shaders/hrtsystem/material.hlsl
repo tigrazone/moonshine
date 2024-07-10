@@ -5,7 +5,50 @@
 
 #include "../utils/math.hlsl"
 #include "../utils/mappings.hlsl"
-#include "world.hlsl"
+
+float3 decodeNormal(float2 rg) {
+    rg = rg * 2 - 1;
+    return float3(rg, sqrt(1.0 - saturate(dot(rg, rg)))); // saturate due to float/compression annoyingness
+}
+
+float3 tangentNormalToWorld(float3 normalTangentSpace, Frame tangentFrame) {
+    return normalize(tangentFrame.frameToWorld(normalTangentSpace)).xyz;
+}
+
+Frame createTextureFrame(float3 normalWorldSpace, Frame tangentFrame) {
+    Frame textureFrame = tangentFrame;
+    textureFrame.n = normalWorldSpace;
+    textureFrame.reorthogonalize();
+
+    return textureFrame;
+}
+
+enum class BSDFType : uint {
+    Glass,
+    Lambert,
+    PerfectMirror,
+    StandardPBR,
+};
+
+struct Material {
+    uint normal;
+    uint emissive;
+
+    // find appropriate thing to decode from address using `type`
+    BSDFType type;
+    uint64_t addr;
+
+    Frame getTextureFrame(float2 texcoords, Frame tangentFrame) {
+        const float2 rg = dTextures[NonUniformResourceIndex(normal)].SampleLevel(dTextureSampler, texcoords, 0).rg;
+        const float3 normalTangentSpace = decodeNormal(rg);
+        const float3 normalWorldSpace = tangentNormalToWorld(normalTangentSpace, tangentFrame);
+        return createTextureFrame(normalWorldSpace, tangentFrame);
+    }
+
+    float3 getEmissive(float2 texcoords) {
+        return dTextures[NonUniformResourceIndex(emissive)].SampleLevel(dTextureSampler, texcoords, 0).rgb;
+    }
+};
 
 // all code below expects stuff to be in the reflection frame
 
@@ -397,13 +440,12 @@ struct PolymorphicBSDF : BSDF {
     uint64_t addr;
     float2 texcoords;
 
-    static PolymorphicBSDF load(World world, uint materialIdx, float2 texcoords) {
-        const Material materialData = world.materials[NonUniformResourceIndex(materialIdx)];
-        PolymorphicBSDF material;
-        material.type = materialData.type;
-        material.addr = materialData.materialAddress;
-        material.texcoords = texcoords;
-        return material;
+    static PolymorphicBSDF load(Material material, float2 texcoords) {
+        PolymorphicBSDF bsdf;
+        bsdf.type = material.type;
+        bsdf.addr = material.addr;
+        bsdf.texcoords = texcoords;
+        return bsdf;
     }
 
     float pdf(float3 w_i, float3 w_o) {
@@ -487,32 +529,3 @@ struct PolymorphicBSDF : BSDF {
     }
 };
 
-float3 decodeNormal(float2 rg) {
-    rg = rg * 2 - 1;
-    return float3(rg, sqrt(1.0 - saturate(dot(rg, rg)))); // saturate due to float/compression annoyingness
-}
-
-float3 tangentNormalToWorld(float3 normalTangentSpace, Frame tangentFrame) {
-    return normalize(tangentFrame.frameToWorld(normalTangentSpace)).xyz;
-}
-
-Frame createTextureFrame(float3 normalWorldSpace, Frame tangentFrame) {
-    Frame textureFrame = tangentFrame;
-    textureFrame.n = normalWorldSpace;
-    textureFrame.reorthogonalize();
-
-    return textureFrame;
-}
-
-Frame getTextureFrame(World world, uint materialIndex, float2 texcoords, Frame tangentFrame) {
-    const Material data = world.materials[NonUniformResourceIndex(materialIndex)];
-    const float2 rg = dTextures[NonUniformResourceIndex(data.normal)].SampleLevel(dTextureSampler, texcoords, 0).rg;
-    const float3 normalTangentSpace = decodeNormal(rg);
-    const float3 normalWorldSpace = tangentNormalToWorld(normalTangentSpace, tangentFrame);
-    return createTextureFrame(normalWorldSpace, tangentFrame);
-}
-
-float3 getEmissive(World world, uint materialIndex, float2 texcoords) {
-    Material data = world.materials[NonUniformResourceIndex(materialIndex)];
-    return dTextures[NonUniformResourceIndex(data.emissive)].SampleLevel(dTextureSampler, texcoords, 0).rgb;
-}

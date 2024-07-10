@@ -117,13 +117,11 @@ struct TriangleLight: Light {
     }
 
     LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
-        const uint instanceID = world.instances[instanceIndex].instanceID();
-
         const float2 barycentrics = squareToTriangle(rand);
         const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, instanceIndex, geometryIndex, primitiveIndex, barycentrics).inWorld(world, instanceIndex);
 
         LightSample lightSample;
-        lightSample.radiance = getEmissive(world, world.materialIdx(instanceID, geometryIndex), attrs.texcoord);
+        lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(attrs.texcoord);
         lightSample.dirWs = normalize(attrs.position - positionWs);
         lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) / MeshAttributes::triangleArea(world, instanceIndex, geometryIndex, primitiveIndex);
 

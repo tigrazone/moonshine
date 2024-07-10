@@ -1,6 +1,7 @@
 #pragma once
 
 #include "reflection_frame.hlsl"
+#include "material.hlsl"
 
 struct Instance { // same required by vulkan on host side
     row_major float3x4 transform;
@@ -14,8 +15,8 @@ struct Instance { // same required by vulkan on host side
 };
 
 struct Geometry {
-    uint meshIdx;
-    uint materialIdx;
+    uint meshIndex;
+    uint materialIndex;
 };
 
 struct Mesh {
@@ -23,23 +24,7 @@ struct Mesh {
     uint64_t texcoordAddress; // may be zero, for no texcoords
     uint64_t normalAddress; // may be zero, for no vertex normals
 
-    uint64_t indexAddress;
-};
-
-enum class BSDFType : uint {
-    Glass,
-    Lambert,
-    PerfectMirror,
-    StandardPBR,
-};
-
-struct Material {
-    uint normal;
-    uint emissive;
-
-    // find appropriate thing to decode from address using `type`
-    BSDFType type;
-    uint64_t materialAddress;
+    uint64_t indexAddress; // may be zero, for unindexed geometry
 };
 
 struct World {
@@ -51,16 +36,18 @@ struct World {
 
     StructuredBuffer<Material> materials;
 
-    Geometry getGeometry(uint instanceID, uint geometryIndex) {
-        return geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
+    // TODO: there's a lot of indirection in these two functions just to load some data
+    // probably can reorganize this for there to be some more direct path 
+    Mesh mesh(uint instanceIndex, uint geometryIndex) {
+        const uint instanceID = instances[instanceIndex].instanceID();
+        const Geometry geometry = geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
+        return meshes[NonUniformResourceIndex(geometry.meshIndex)];
     }
 
-    uint meshIdx(uint instanceID, uint geometryIndex) {
-        return getGeometry(instanceID, geometryIndex).meshIdx;
-    }
-
-    uint materialIdx(uint instanceID, uint geometryIndex) {
-        return getGeometry(instanceID, geometryIndex).materialIdx;
+    Material material(uint instanceIndex, uint geometryIndex) {
+        const uint instanceID = instances[instanceIndex].instanceID();
+        const Geometry geometry = geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
+        return materials[NonUniformResourceIndex(geometry.materialIndex)];
     }
 };
 
@@ -105,9 +92,7 @@ struct MeshAttributes {
     Frame frame; // from vertex attributes
 
     static MeshAttributes lookupAndInterpolate(World world, uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
-        uint instanceID = world.instances[instanceIndex].instanceID();
-        uint meshIndex = world.meshIdx(instanceID, geometryIndex);
-        Mesh mesh = world.meshes[NonUniformResourceIndex(meshIndex)];
+        Mesh mesh = world.mesh(instanceIndex, geometryIndex);
         float3 barycentrics = float3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
 
         MeshAttributes attrs;
@@ -155,13 +140,11 @@ struct MeshAttributes {
     }
 
     static float triangleArea(World world, uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
-        float3x4 toWorld = world.instances[NonUniformResourceIndex(instanceIndex)].transform;
-        uint instanceID = world.instances[instanceIndex].instanceID();
-        uint meshIndex = world.meshIdx(instanceID, geometryIndex);
-        Mesh mesh = world.meshes[NonUniformResourceIndex(meshIndex)];
+        Mesh mesh = world.mesh(instanceIndex, geometryIndex);
 
         const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
 
+        float3x4 toWorld = world.instances[NonUniformResourceIndex(instanceIndex)].transform;
         float3 p0 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.x), 1.0));
         float3 p1 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.y), 1.0));
         float3 p2 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.z), 1.0));

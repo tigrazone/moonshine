@@ -42,8 +42,7 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 		for (uint j = 0; j < samples_per_dim; j++) {
 			const float2 barycentrics = squareToTriangle(float2(i, j) / float(samples_per_dim));
 			const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive, barycentrics);
-			const uint instanceID = world.instances[pushConsts.instanceIndex].instanceID();
-			total_emissive += luminance(getEmissive(world, world.materialIdx(instanceID, pushConsts.geometryIndex), attrs.texcoord));
+        	total_emissive += luminance(world.material(pushConsts.instanceIndex, pushConsts.geometryIndex).getEmissive(attrs.texcoord));
 		}
 	}
 
