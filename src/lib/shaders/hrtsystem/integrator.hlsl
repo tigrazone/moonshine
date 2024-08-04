@@ -7,12 +7,15 @@
 #include "world.hlsl"
 #include "light.hlsl"
 
-float powerHeuristic(const uint fCount, const float fPdf, const uint gCount, const float gPdf) {
-    return pow(fPdf, 2) / (fCount * pow(fPdf, 2) + gCount * pow(gPdf, 2));
+// with
+//   power == 1 this becomes balance heuristic
+//   power == 0 this becomes uniform weighting
+float powerHeuristic(const uint fCount, const float fPdf, const uint gCount, const float gPdf, const uint power) {
+    return pow(fPdf, power) / (fCount * pow(fPdf, power) + gCount * pow(gPdf, power));
 }
 
 float misWeight(const uint fCount, const float fPdf, const uint gCount, const float gPdf) {
-    return powerHeuristic(fCount, fPdf, gCount, gPdf);
+    return powerHeuristic(fCount, fPdf, gCount, gPdf, 2);
 }
 
 // estimates direct lighting from light + brdf via MIS
