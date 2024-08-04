@@ -58,14 +58,13 @@ float3 estimateDirect(RaytracingAccelerationStructure accel, Frame frame, Light 
 }
 
 // selects a shading normal based on the most preferred normal that is plausible
-Frame selectFrame(MeshAttributes attrs, Material material, float3 outgoingDirWs) {
+Frame selectFrame(const MeshAttributes attrs, const Material material, const float3 outgoingDirWs) {
     const Frame textureFrame = material.getTextureFrame(attrs.texcoord, attrs.frame);
-    const bool frontfacing = dot(attrs.triangleFrame.n, outgoingDirWs) > 0;
     Frame shadingFrame;
-    if ((frontfacing && dot(outgoingDirWs, textureFrame.n) > 0) || (!frontfacing && -dot(outgoingDirWs, textureFrame.n) > 0)) {
+    if (sign(dot(attrs.triangleFrame.n, outgoingDirWs)) == sign(dot(outgoingDirWs, textureFrame.n))) {
         // prefer texture normal if we can
         shadingFrame = textureFrame;
-    } else if ((frontfacing && dot(outgoingDirWs, attrs.frame.n) > 0) || (!frontfacing && -dot(outgoingDirWs, attrs.frame.n) > 0)) {
+    } else if (sign(dot(attrs.triangleFrame.n, outgoingDirWs)) == sign(dot(outgoingDirWs, attrs.frame.n))) {
         // if texture normal not valid, try shading normal
         shadingFrame = attrs.frame;
     } else {
