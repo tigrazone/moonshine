@@ -75,10 +75,16 @@ struct EnvMap : Light {
     LightEval eval(float3 dirWs) {
         const uint size = textureDimensions(luminanceTexture).x;
         const uint mipCount = log2(size) + 1;
+        const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
+
+        if (integral == 0) {
+            LightEval l;
+            l.pdf = 0;
+            l.radiance = 0;
+            return l;
+        }
 
         const float2 uv = squareToEqualAreaSphereInverse(dirWs);
-
-        const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
         const uint2 idx = clamp(uint2(uv * size), uint2(0, 0), uint2(size, size));
         const float discretePdf = luminanceTexture[idx] * float(size * size) / integral;
 

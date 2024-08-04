@@ -40,23 +40,6 @@ float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame
     return 0;
 }
 
-// no MIS, just light
-template <class Light, class BSDF>
-float3 estimateDirect(RaytracingAccelerationStructure accel, Frame frame, Light light, BSDF material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
-    const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
-    const float3 lightDirFs = frame.worldToFrame(lightSample.dirWs);
-
-    if (lightSample.pdf > 0.0) {
-        const float3 brdf = material.eval(lightDirFs, outgoingDirFs);
-        const float3 totalRadiance = lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) / lightSample.pdf;
-        if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs)), lightSample.dirWs, lightSample.lightDistance)) {
-            return totalRadiance;
-        }
-    }
-
-    return 0;
-}
-
 // selects a shading normal based on the most preferred normal that is plausible
 Frame selectFrame(const MeshAttributes attrs, const Material material, const float3 outgoingDirWs) {
     const Frame textureFrame = material.getTextureFrame(attrs.texcoord, attrs.frame);
@@ -239,19 +222,18 @@ struct DirectLightIntegrator : Integrator {
                         if (its.hit()) {
                             // decode mesh attributes and material from intersection
                             const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
-                            const float3 emissiveLight = scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(attrs.texcoord);
 
                             // collect light from emissive meshes
                             // lights only emit from front face
                             if (dot(-ray.Direction, attrs.triangleFrame.n) > 0.0) {
                                 const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                                const float weight = misWeight(1, sample.pdf, !isMaterialDelta ? meshSamples : 0, lightPdf);
-                                accumulatedColor += throughput * material.getEmissive(attrs.texcoord) * weight;
+                                const float weight = misWeight(brdfSamples, sample.pdf, !isMaterialDelta ? meshSamples : 0, lightPdf);
+                                accumulatedColor += throughput * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(attrs.texcoord) * weight;
                             }
                         } else {
                             // miss -- collect light from env map
                             const LightEval l = scene.envMap.eval(ray.Direction);
-                            const float weight = misWeight(1, sample.pdf, !isMaterialDelta ? envSamples : 0, l.pdf);
+                            const float weight = misWeight(brdfSamples, sample.pdf, !isMaterialDelta ? envSamples : 0, l.pdf);
                             accumulatedColor += throughput * l.radiance * weight;
                         }
                     }
