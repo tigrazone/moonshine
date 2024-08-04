@@ -99,7 +99,7 @@ struct PathTracingIntegrator : Integrator {
         RayDesc ray = initialRay;
         float3 throughput = float3(1.0, 1.0, 1.0);
         uint bounceCount = 0;
-        float lastMaterialPdf;
+        float lastMaterialPdf = 1;
         bool isLastMaterialDelta = false;
 
         // main path tracing loop
@@ -117,17 +117,10 @@ struct PathTracingIntegrator : Integrator {
             // collect light from emissive meshes
             // lights only emit from front face
             if (dot(outgoingDirWs, attrs.triangleFrame.n) > 0.0) {
-                const float3 emissiveLight = material.getEmissive(attrs.texcoord);
-                const float areaPdf = scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                if (meshSamplesPerBounce == 0 || bounceCount == 0 || isLastMaterialDelta || areaPdf == 0) {
-                    // add emissive light at point if light not explicitly sampled or initial bounce
-                    accumulatedColor += throughput * emissiveLight;
-                } else {
-                    // MIS emissive light if it is sampled at later bounces
-                    const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * areaPdf;
-                    const float weight = misWeight(1, lastMaterialPdf, meshSamplesPerBounce, lightPdf);
-                    accumulatedColor += throughput * emissiveLight * weight;
-                }
+                const bool canMeshSample = bounceCount != 0 && !isLastMaterialDelta;
+                const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
+                const float weight = misWeight(1, lastMaterialPdf, canMeshSample ? meshSamplesPerBounce : 0, lightPdf);
+                accumulatedColor += throughput * material.getEmissive(attrs.texcoord) * weight;
             }
 
             // possibly terminate if reached max bounce cutoff or lose at russian roulette
@@ -173,17 +166,11 @@ struct PathTracingIntegrator : Integrator {
         // we only get here on misses -- terminations for other reasons return from loop
 
         // handle env map
-        if (envSamplesPerBounce == 0 || bounceCount == 0 || isLastMaterialDelta) {
-            // add background color if it isn't explicitly sampled or this is a primary ray
-            accumulatedColor += throughput * scene.envMap.incomingRadiance(ray.Direction);
-        } else {
-            // MIS env map if it is sampled at later bounces
-            LightEval l = scene.envMap.eval(ray.Direction);
-
-            if (l.pdf > 0.0) {
-                float weight = misWeight(1, lastMaterialPdf, envSamplesPerBounce, l.pdf);
-                accumulatedColor += throughput * l.radiance * weight;
-            }
+        {
+            const bool canEnvSample = bounceCount != 0 && !isLastMaterialDelta;
+            const LightEval l = scene.envMap.eval(ray.Direction);
+            const float weight = misWeight(1, lastMaterialPdf, canEnvSample ? envSamplesPerBounce : 0, l.pdf);
+            accumulatedColor += throughput * l.radiance * weight;
         }
 
         return accumulatedColor;
@@ -257,34 +244,22 @@ struct DirectLightIntegrator : Integrator {
                             // collect light from emissive meshes
                             // lights only emit from front face
                             if (dot(-ray.Direction, attrs.triangleFrame.n) > 0.0) {
-                                const float areaPdf = scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                                if (meshSamples == 0 || isMaterialDelta || areaPdf == 0) {
-                                    // add emissive light at point if light not explicitly sampled or initial bounce
-                                    accumulatedColor += throughput * emissiveLight / brdfSamples;
-                                } else {
-                                    // MIS emissive light if it is sampled at later bounces
-                                    const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * areaPdf;
-                                    const float weight = misWeight(brdfSamples, sample.pdf, meshSamples, lightPdf);
-                                    accumulatedColor += throughput * emissiveLight * weight;
-                                }
+                                const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
+                                const float weight = misWeight(1, sample.pdf, !isMaterialDelta ? meshSamples : 0, lightPdf);
+                                accumulatedColor += throughput * material.getEmissive(attrs.texcoord) * weight;
                             }
                         } else {
-                            if (envSamples == 0 || isMaterialDelta) {
-                                accumulatedColor += throughput * scene.envMap.incomingRadiance(ray.Direction) / brdfSamples;
-                            } else {
-                                LightEval l = scene.envMap.eval(ray.Direction);
-                                if (l.pdf > 0) {
-                                    const float weight = misWeight(brdfSamples, sample.pdf, envSamples, l.pdf);
-                                    accumulatedColor += throughput * scene.envMap.incomingRadiance(ray.Direction) * weight;
-                                }
-                            }
+                            // miss -- collect light from env map
+                            const LightEval l = scene.envMap.eval(ray.Direction);
+                            const float weight = misWeight(1, sample.pdf, !isMaterialDelta ? envSamples : 0, l.pdf);
+                            accumulatedColor += throughput * l.radiance * weight;
                         }
                     }
                 }
             }
         } else {
             // add background color
-            accumulatedColor += scene.envMap.incomingRadiance(initialRay.Direction);
+            accumulatedColor += scene.envMap.eval(initialRay.Direction).radiance;
         }
 
         return accumulatedColor;
