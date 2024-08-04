@@ -31,8 +31,8 @@ pub fn build(b: *std.Build) !void {
 
         const tests = b.addTest(.{
             .name = "tests",
-            .root_source_file = b.path("engine/tests.zig"),
-            .test_runner = b.path("engine/test_runner.zig"),
+            .root_source_file = b.path("src/lib/tests.zig"),
+            .test_runner = b.path("src/lib/test_runner.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -50,7 +50,7 @@ pub fn build(b: *std.Build) !void {
         const engine = makeEngineModule(b, vulkan, engine_options, target);
         const exe = b.addExecutable(.{
             .name = "online",
-            .root_source_file = b.path("online/main.zig"),
+            .root_source_file = b.path("src/bin/online.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -74,7 +74,7 @@ pub fn build(b: *std.Build) !void {
         const engine = makeEngineModule(b, vulkan, engine_options, target);
         const exe = b.addExecutable(.{
             .name = "offline",
-            .root_source_file = b.path("offline/main.zig"),
+            .root_source_file = b.path("src/bin/offline.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -98,7 +98,7 @@ pub fn build(b: *std.Build) !void {
         // wont need to make own header
         const zig_lib = b.addSharedLibrary(.{
             .name = "moonshine",
-            .root_source_file = b.path("hydra/hydra.zig"),
+            .root_source_file = b.path("src/bin/hydra/hydra.zig"),
             .target = target,
             .optimize = optimize,
             .pic = true,
@@ -349,7 +349,7 @@ fn makeEngineModule(b: *std.Build, vk: *std.Build.Module, options: EngineOptions
     }) catch @panic("OOM");
 
     const module = b.createModule(.{
-        .root_source_file = b.path("engine/engine.zig"),
+        .root_source_file = b.path("src/lib/engine.zig"),
         .imports = imports.items,
     });
 
@@ -626,7 +626,7 @@ const ShaderType = enum {
 };
 
 fn compileShader(b: *std.Build, shader_type: ShaderType, path: []const u8) std.Build.Module.Import {
-    const input_file_path = b.path(b.pathJoin(&.{ "shaders", path }));
+    const input_file_path = b.path(b.pathJoin(&.{ "src/lib/shaders", path }));
 
     const get_dependendies = std.Build.Step.Run.create(b, b.fmt("get dependencies of {s}", .{ path }));
     get_dependendies.addArgs(&base_shader_compile_cmd);

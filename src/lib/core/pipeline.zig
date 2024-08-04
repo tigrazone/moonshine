@@ -24,7 +24,7 @@ pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: [:0]co
             .ray_tracing => build_options.rt_shader_compile_cmd,
             .compute => build_options.compute_shader_compile_cmd,
         };
-        var compile_process = std.process.Child.init(compile_cmd ++ &[_][]const u8 { "shaders/" ++ shader_path }, allocator);
+        var compile_process = std.process.Child.init(compile_cmd ++ &[_][]const u8 { "src/lib/shaders/" ++ shader_path }, allocator);
         compile_process.stdout_behavior = .Pipe;
         try compile_process.spawn();
         const stdout = blk_inner: {
