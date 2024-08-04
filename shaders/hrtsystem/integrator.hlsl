@@ -7,12 +7,12 @@
 #include "world.hlsl"
 #include "light.hlsl"
 
-float powerHeuristic(uint numf, float fPdf, uint numg, float gPdf) {
-    float f = numf * fPdf;
-    float g = numg * gPdf;
+float powerHeuristic(const uint fCount, const float fPdf, const uint gCount, const float gPdf) {
+    return pow(fPdf, 2) / (fCount * pow(fPdf, 2) + gCount * pow(gPdf, 2));
+}
 
-    float f2 = f * f;
-    return (f2 / (f2 + g * g));
+float misWeight(const uint fCount, const float fPdf, const uint gCount, const float gPdf) {
+    return powerHeuristic(fCount, fPdf, gCount, gPdf);
 }
 
 // estimates direct lighting from light + brdf via MIS
@@ -26,7 +26,7 @@ float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame
         const float scatteringPdf = material.pdf(lightDirFs, outgoingDirFs);
         if (scatteringPdf > 0.0) {
             const float3 brdf = material.eval(lightDirFs, outgoingDirFs);
-            const float weight = powerHeuristic(lightSamplesTaken, lightSample.pdf, brdfSamplesTaken, scatteringPdf);
+            const float weight = misWeight(lightSamplesTaken, lightSample.pdf, brdfSamplesTaken, scatteringPdf);
             const float3 totalRadiance = lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) * weight / lightSample.pdf;
             if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs)), lightSample.dirWs, lightSample.lightDistance)) {
                 return totalRadiance;
@@ -123,7 +123,7 @@ struct PathTracingIntegrator : Integrator {
                 } else {
                     // MIS emissive light if it is sampled at later bounces
                     const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * areaPdf;
-                    const float weight = powerHeuristic(1, lastMaterialPdf, meshSamplesPerBounce, lightPdf);
+                    const float weight = misWeight(1, lastMaterialPdf, meshSamplesPerBounce, lightPdf);
                     accumulatedColor += throughput * emissiveLight * weight;
                 }
             }
@@ -145,13 +145,13 @@ struct PathTracingIntegrator : Integrator {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamplesPerBounce; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, envSamplesPerBounce, 1) / envSamplesPerBounce;
+                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, envSamplesPerBounce, 1);
                 }
 
                 // accumulate direct light samples from emissive meshes
                 for (uint directCount = 0; directCount < meshSamplesPerBounce; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, meshSamplesPerBounce, 1) / meshSamplesPerBounce;
+                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, meshSamplesPerBounce, 1);
                 }
             }
 
@@ -179,7 +179,7 @@ struct PathTracingIntegrator : Integrator {
             LightEval l = scene.envMap.eval(ray.Direction);
 
             if (l.pdf > 0.0) {
-                float weight = powerHeuristic(1, lastMaterialPdf, envSamplesPerBounce, l.pdf);
+                float weight = misWeight(1, lastMaterialPdf, envSamplesPerBounce, l.pdf);
                 accumulatedColor += throughput * l.radiance * weight;
             }
         }
@@ -226,13 +226,13 @@ struct DirectLightIntegrator : Integrator {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamples; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, envSamples, brdfSamples) / envSamples;
+                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, envSamples, brdfSamples);
                 }
 
                 // accumulate direct light samples from emissive meshes
                 for (uint directCount = 0; directCount < meshSamples; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, meshSamples, brdfSamples) / meshSamples;
+                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, attrs.position, attrs.triangleFrame.n, rand, meshSamples, brdfSamples);
                 }
             }
 
@@ -262,8 +262,8 @@ struct DirectLightIntegrator : Integrator {
                                 } else {
                                     // MIS emissive light if it is sampled at later bounces
                                     const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * areaPdf;
-                                    const float weight = powerHeuristic(brdfSamples, sample.pdf, meshSamples, lightPdf);
-                                    accumulatedColor += throughput * emissiveLight * weight / brdfSamples;
+                                    const float weight = misWeight(brdfSamples, sample.pdf, meshSamples, lightPdf);
+                                    accumulatedColor += throughput * emissiveLight * weight;
                                 }
                             }
                         } else {
@@ -272,8 +272,8 @@ struct DirectLightIntegrator : Integrator {
                             } else {
                                 LightEval l = scene.envMap.eval(ray.Direction);
                                 if (l.pdf > 0) {
-                                    const float weight = powerHeuristic(brdfSamples, sample.pdf, envSamples, l.pdf);
-                                    accumulatedColor += throughput * scene.envMap.incomingRadiance(ray.Direction) * weight / brdfSamples;
+                                    const float weight = misWeight(brdfSamples, sample.pdf, envSamples, l.pdf);
+                                    accumulatedColor += throughput * scene.envMap.incomingRadiance(ray.Direction) * weight;
                                 }
                             }
                         }
