@@ -101,10 +101,10 @@ struct EnvMap : Light {
 };
 
 float areaMeasureToSolidAngleMeasure(float3 pos1, float3 pos2, float3 dir1, float3 dir2) {
-    float r2 = dot(pos1 - pos2, pos1 - pos2);
-    float lightCos = dot(-dir1, dir2);
+    const float r2 = dot(pos1 - pos2, pos1 - pos2);
+    const float lightCos = dot(-dir1, dir2);
 
-    return lightCos > 0.0f ? r2 / lightCos : 0.0f;
+    return r2 / lightCos;
 }
 
 struct TriangleLight: Light {
