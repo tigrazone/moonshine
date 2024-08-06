@@ -34,28 +34,15 @@ float3 accumulate(const float3 priorAverage, const float3 newSample, const uint 
 }
 
 // https://research.nvidia.com/publication/2019-03_fast-and-robust-method-avoiding-self-intersection
+// omitting the origin special case here, seems to cause discontinuities which I don't fully understand
 float3 offsetAlongNormal(float3 p, float3 n) {
-    float origin = 1.0f / 32.0f;
-    float float_scale = 1.0f / 65536.0f;
-    float int_scale = 256.0f;
-
-    int3 of_i = n * int_scale;
-
-    float3 p_i = asfloat(asint(p) + select(p < 0.f, -of_i, of_i));
-
-    return select(abs(p) < origin, p + n * float_scale, p_i);
+    const int3 of_i = n * 256.0f;
+    return asfloat(asint(p) + select(p < 0.f, -of_i, of_i));
 }
 
 float2 offsetAlongNormal(float2 p, float2 n) {
-    float origin = 1.0f / 32.0f;
-    float float_scale = 1.0f / 65536.0f;
-    float int_scale = 256.0f;
-
-    int2 of_i = n * int_scale;
-
-    float2 p_i = asfloat(asint(p) + select(p < 0.f, -of_i, of_i));
-
-    return select(abs(p) < origin, p + n * float_scale, p_i);
+    const int2 of_i = n * 256.0f;
+    return asfloat(asint(p) + select(p < 0.f, -of_i, of_i));
 }
 
 void coordinateSystem(float3 v1, out float3 v2, out float3 v3) {

@@ -132,10 +132,9 @@ struct TriangleLight: Light {
         lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) / MeshAttributes::triangleArea(world, instanceIndex, geometryIndex, primitiveIndex);
 
         // compute precise ray distance
-        const float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, attrs.triangleFrame.n);
+        const float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, faceForward(attrs.triangleFrame.n, -lightSample.dirWs));
         const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs));
-        const float tmax = distance(offsetLightPositionWs, offsetShadingPositionWs);
-        lightSample.lightDistance = tmax;
+        lightSample.lightDistance = distance(offsetLightPositionWs, offsetShadingPositionWs);
 
         return lightSample;
     }
