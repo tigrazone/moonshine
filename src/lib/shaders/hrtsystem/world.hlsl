@@ -64,18 +64,18 @@ float3 loadNormal(uint64_t addr, uint index) {
 }
 
 void getTangentBitangent(float3 p0, float3 p1, float3 p2, float2 t0, float2 t1, float2 t2, out float3 tangent, out float3 bitangent) {
-    float2 deltaT02 = t0 - t2;
-    float2 deltaT12 = t1 - t2;
+    float2 deltaT10 = t1 - t0;
+    float2 deltaT20 = t2 - t0;
 
-    float3 deltaP02 = p0 - p2;
-    float3 deltaP12 = p1 - p2;
+    float3 deltaP10 = p1 - p0;
+    float3 deltaP20 = p2 - p0;
 
-    float det = deltaT02.x * deltaT12.y - deltaT02.y * deltaT12.x;
+    float det = deltaT10.x * deltaT20.y - deltaT10.y * deltaT20.x;
     if (det == 0.0) {
-        coordinateSystem(normalize(cross(p2 - p0, p1 - p0)), tangent, bitangent);
+        coordinateSystem(normalize(cross(deltaP10, deltaP20)), tangent, bitangent);
     } else {
-        tangent = normalize((deltaT12.y * deltaP02 - deltaT02.y * deltaP12) / det);
-        bitangent = normalize((-deltaT12.x * deltaP02 + deltaT02.x * deltaP12) / det);
+        tangent = normalize((deltaT20.y * deltaP10 - deltaT10.y * deltaP20) / det);
+        bitangent = normalize((-deltaT20.x * deltaP10 + deltaT10.x * deltaP20) / det);
     }
 }
 
@@ -120,7 +120,7 @@ struct MeshAttributes {
         attrs.texcoord = interpolate(barycentrics, t0, t1, t2);
 
         getTangentBitangent(p0, p1, p2, t0, t1, t2, attrs.triangleFrame.s, attrs.triangleFrame.t);
-        attrs.triangleFrame.n = normalize(cross(p0 - p2, p1 - p2));
+        attrs.triangleFrame.n = normalize(cross(p1 - p0, p2 - p0));
         attrs.triangleFrame.reorthogonalize();
 
         // normals optional
