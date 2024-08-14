@@ -27,30 +27,6 @@ struct Mesh {
     uint64_t indexAddress; // may be zero, for unindexed geometry
 };
 
-struct World {
-    StructuredBuffer<Instance> instances;
-    StructuredBuffer<row_major float3x4> worldToInstance;
-
-    StructuredBuffer<Mesh> meshes;
-    StructuredBuffer<Geometry> geometries;
-
-    StructuredBuffer<Material> materials;
-
-    // TODO: there's a lot of indirection in these two functions just to load some data
-    // probably can reorganize this for there to be some more direct path 
-    Mesh mesh(uint instanceIndex, uint geometryIndex) {
-        const uint instanceID = instances[instanceIndex].instanceID();
-        const Geometry geometry = geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
-        return meshes[NonUniformResourceIndex(geometry.meshIndex)];
-    }
-
-    Material material(uint instanceIndex, uint geometryIndex) {
-        const uint instanceID = instances[instanceIndex].instanceID();
-        const Geometry geometry = geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
-        return materials[NonUniformResourceIndex(geometry.materialIndex)];
-    }
-};
-
 float3 loadPosition(uint64_t addr, uint index) {
     return vk::RawBufferLoad<float3>(addr + sizeof(float3) * index);
 }
@@ -83,6 +59,43 @@ template <typename T>
 T interpolate(float3 barycentrics, T v1, T v2, T v3) {
     return barycentrics.x * v1 + barycentrics.y * v2 + barycentrics.z * v3;
 }
+
+struct World {
+    StructuredBuffer<Instance> instances;
+    StructuredBuffer<row_major float3x4> worldToInstance;
+
+    StructuredBuffer<Mesh> meshes;
+    StructuredBuffer<Geometry> geometries;
+
+    StructuredBuffer<Material> materials;
+
+    // TODO: there's a lot of indirection in these two functions just to load some data
+    // probably can reorganize this for there to be some more direct path 
+    Mesh mesh(uint instanceIndex, uint geometryIndex) {
+        const uint instanceID = instances[instanceIndex].instanceID();
+        const Geometry geometry = geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
+        return meshes[NonUniformResourceIndex(geometry.meshIndex)];
+    }
+
+    Material material(uint instanceIndex, uint geometryIndex) {
+        const uint instanceID = instances[instanceIndex].instanceID();
+        const Geometry geometry = geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
+        return materials[NonUniformResourceIndex(geometry.materialIndex)];
+    }
+
+    float triangleArea(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
+        Mesh mesh = this.mesh(instanceIndex, geometryIndex);
+
+        const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
+
+        float3x4 toWorld = instances[NonUniformResourceIndex(instanceIndex)].transform;
+        float3 p0 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.x), 1.0));
+        float3 p1 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.y), 1.0));
+        float3 p2 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.z), 1.0));
+
+        return length(cross(p1 - p0, p2 - p0)) / 2.0;
+    }
+};
 
 struct MeshAttributes {
     float3 position;
@@ -151,18 +164,5 @@ struct MeshAttributes {
         }
 
         return attrs;
-    }
-
-    static float triangleArea(World world, uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
-        Mesh mesh = world.mesh(instanceIndex, geometryIndex);
-
-        const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
-
-        float3x4 toWorld = world.instances[NonUniformResourceIndex(instanceIndex)].transform;
-        float3 p0 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.x), 1.0));
-        float3 p1 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.y), 1.0));
-        float3 p2 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.z), 1.0));
-
-        return length(cross(p1 - p0, p2 - p0)) / 2.0;
     }
 };

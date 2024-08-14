@@ -129,7 +129,7 @@ struct TriangleLight: Light {
         LightSample lightSample;
         lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(attrs.texcoord);
         lightSample.dirWs = normalize(attrs.position - positionWs);
-        lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) / MeshAttributes::triangleArea(world, instanceIndex, geometryIndex, primitiveIndex);
+        lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
 
         // compute precise ray distance
         const float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, faceForward(attrs.triangleFrame.n, -lightSample.dirWs));
@@ -198,7 +198,7 @@ struct MeshLights : Light {
 
     float areaPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
         const float triangleSelectionPdf = selectionPdf(instanceIndex, geometryIndex, primitiveIndex);
-        const float triangleAreaPdf = 1.0 / MeshAttributes::triangleArea(world, instanceIndex, geometryIndex, primitiveIndex);
+        const float triangleAreaPdf = 1.0 / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
         return triangleSelectionPdf * triangleAreaPdf;
     }
 

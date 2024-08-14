@@ -48,7 +48,7 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 
 	const float average_emissive = total_emissive / float(samples_per_dim * samples_per_dim);
 
-	const float power = PI * MeshAttributes::triangleArea(world, pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive) * average_emissive;
+	const float power = PI * world.triangleArea(pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive) * average_emissive;
 
 	const uint dstOffset = emissiveTriangleCount[0];
 	dstPower[dstOffset + srcPrimitive] = power;
