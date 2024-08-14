@@ -4,8 +4,7 @@
 #include "material.hlsl"
 
 struct LightSample {
-    float3 dirWs;
-    float lightDistance;
+    float3 connection; // connection vector in world space from initial position to sampled position
     float3 radiance;
     float pdf;
 };
@@ -62,10 +61,10 @@ struct EnvMap : Light {
         const float discretePdf = luminanceTexture[idx] * float(size * size) / integral;
         const float2 uv = (float2(idx) + rand) / float2(size, size);
 
+        const float envMapDistance = INFINITY;
         LightSample lightSample;
         lightSample.pdf = discretePdf / (4.0 * PI);
-        lightSample.dirWs = squareToEqualAreaSphere(uv);
-        lightSample.lightDistance = INFINITY;
+        lightSample.connection = squareToEqualAreaSphere(uv) * envMapDistance;
         lightSample.radiance = rgbTexture[idx];
 
         return lightSample;
@@ -128,13 +127,13 @@ struct TriangleLight: Light {
 
         LightSample lightSample;
         lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(surface.texcoord);
-        lightSample.dirWs = normalize(surface.position - positionWs);
-        lightSample.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, lightSample.dirWs, surface.triangleFrame.n) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
+        lightSample.connection = surface.position - positionWs;
 
         // compute precise ray distance
-        const float3 offsetLightPositionWs = offsetAlongNormal(surface.position, faceForward(surface.triangleFrame.n, -lightSample.dirWs));
-        const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs));
-        lightSample.lightDistance = distance(offsetLightPositionWs, offsetShadingPositionWs);
+        const float3 offsetLightPositionWs = offsetAlongNormal(surface.position, faceForward(surface.triangleFrame.n, -lightSample.connection));
+        const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.connection));
+        lightSample.connection = offsetLightPositionWs - offsetShadingPositionWs;
+        lightSample.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
 
         return lightSample;
     }

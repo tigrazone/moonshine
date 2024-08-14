@@ -23,15 +23,16 @@ float misWeight(const uint fCount, const float fPdf, const uint gCount, const fl
 template <class Light, class BSDF>
 float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, BSDF material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand, uint lightSamplesTaken, uint brdfSamplesTaken) {
     const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
+    const float3 lightDirWs = normalize(lightSample.connection);
 
     if (lightSample.pdf > 0.0) {
-        const float3 lightDirFs = frame.worldToFrame(lightSample.dirWs);
+        const float3 lightDirFs = frame.worldToFrame(lightDirWs);
         const float scatteringPdf = material.pdf(lightDirFs, outgoingDirFs);
         if (scatteringPdf > 0.0) {
             const float3 brdf = material.eval(lightDirFs, outgoingDirFs);
             const float weight = misWeight(lightSamplesTaken, lightSample.pdf, brdfSamplesTaken, scatteringPdf);
             const float3 totalRadiance = lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) * weight / lightSample.pdf;
-            if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs)), lightSample.dirWs, lightSample.lightDistance)) {
+            if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightDirWs)), lightSample.connection)) {
                 return totalRadiance;
             }
         }
