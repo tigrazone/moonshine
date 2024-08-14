@@ -92,48 +92,62 @@ struct MeshAttributes {
     Frame frame; // from vertex attributes
 
     static MeshAttributes lookupAndInterpolate(World world, uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
-        Mesh mesh = world.mesh(instanceIndex, geometryIndex);
-        float3 barycentrics = float3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
-
         MeshAttributes attrs;
 
-        const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
+        // construct attributes in object space
+        {
+            Mesh mesh = world.mesh(instanceIndex, geometryIndex);
 
-        // positions always available
-        float3 p0 = loadPosition(mesh.positionAddress, ind.x);
-        float3 p1 = loadPosition(mesh.positionAddress, ind.y);
-        float3 p2 = loadPosition(mesh.positionAddress, ind.z);
-        attrs.position = interpolate(barycentrics, p0, p1, p2);
+            const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
+            const float3 barycentrics = float3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
 
-        // texcoords optional
-        float2 t0, t1, t2;
-        if (mesh.texcoordAddress != 0) {
-            t0 = loadTexcoord(mesh.texcoordAddress, ind.x);
-            t1 = loadTexcoord(mesh.texcoordAddress, ind.y);
-            t2 = loadTexcoord(mesh.texcoordAddress, ind.z);
-        } else {
-            // textures should be constant in this case
-            t0 = float2(0, 0);
-            t1 = float2(1, 0);
-            t2 = float2(1, 1);
+            // positions always available
+            float3 p0 = loadPosition(mesh.positionAddress, ind.x);
+            float3 p1 = loadPosition(mesh.positionAddress, ind.y);
+            float3 p2 = loadPosition(mesh.positionAddress, ind.z);
+            attrs.position = interpolate(barycentrics, p0, p1, p2);
+
+            // texcoords optional
+            float2 t0, t1, t2;
+            if (mesh.texcoordAddress != 0) {
+                t0 = loadTexcoord(mesh.texcoordAddress, ind.x);
+                t1 = loadTexcoord(mesh.texcoordAddress, ind.y);
+                t2 = loadTexcoord(mesh.texcoordAddress, ind.z);
+            } else {
+                // textures should be constant in this case
+                t0 = float2(0, 0);
+                t1 = float2(1, 0);
+                t2 = float2(1, 1);
+            }
+            attrs.texcoord = interpolate(barycentrics, t0, t1, t2);
+
+            getTangentBitangent(p0, p1, p2, t0, t1, t2, attrs.triangleFrame.s, attrs.triangleFrame.t);
+            attrs.triangleFrame.n = normalize(cross(p1 - p0, p2 - p0));
+            attrs.triangleFrame.reorthogonalize();
+
+            // normals optional
+            if (mesh.normalAddress != 0) {
+                float3 n0 = loadNormal(mesh.normalAddress, ind.x);
+                float3 n1 = loadNormal(mesh.normalAddress, ind.y);
+                float3 n2 = loadNormal(mesh.normalAddress, ind.z);
+                attrs.frame = attrs.triangleFrame;
+                attrs.frame.n = normalize(interpolate(barycentrics, n0, n1, n2));
+                attrs.frame.reorthogonalize();
+            } else {
+                // just use one from triangle
+                attrs.frame = attrs.triangleFrame;
+            }
         }
-        attrs.texcoord = interpolate(barycentrics, t0, t1, t2);
 
-        getTangentBitangent(p0, p1, p2, t0, t1, t2, attrs.triangleFrame.s, attrs.triangleFrame.t);
-        attrs.triangleFrame.n = normalize(cross(p1 - p0, p2 - p0));
-        attrs.triangleFrame.reorthogonalize();
+        // convert to world space
+        {
+            const float3x4 toWorld = world.instances[NonUniformResourceIndex(instanceIndex)].transform;
+            const float3x4 toMesh = world.worldToInstance[NonUniformResourceIndex(instanceIndex)];
 
-        // normals optional
-        if (mesh.normalAddress != 0) {
-            float3 n0 = loadNormal(mesh.normalAddress, ind.x);
-            float3 n1 = loadNormal(mesh.normalAddress, ind.y);
-            float3 n2 = loadNormal(mesh.normalAddress, ind.z);
-            attrs.frame = attrs.triangleFrame;
-            attrs.frame.n = normalize(interpolate(barycentrics, n0, n1, n2));
-            attrs.frame.reorthogonalize();
-        } else {
-            // just use one from triangle
-            attrs.frame = attrs.triangleFrame;
+            attrs.position = mul(toWorld, float4(attrs.position, 1.0));
+
+            attrs.triangleFrame = attrs.triangleFrame.inSpace(transpose(toMesh));
+            attrs.frame = attrs.frame.inSpace(transpose(toMesh));
         }
 
         return attrs;
@@ -150,17 +164,5 @@ struct MeshAttributes {
         float3 p2 = mul(toWorld, float4(loadPosition(mesh.positionAddress, ind.z), 1.0));
 
         return length(cross(p1 - p0, p2 - p0)) / 2.0;
-    }
-
-    MeshAttributes inWorld(World world, uint instanceIndex) {
-        float3x4 toWorld = world.instances[NonUniformResourceIndex(instanceIndex)].transform;
-        float3x4 toMesh = world.worldToInstance[NonUniformResourceIndex(instanceIndex)];
-
-        position = mul(toWorld, float4(position, 1.0));
-
-        triangleFrame = triangleFrame.inSpace(transpose(toMesh));
-        frame = frame.inSpace(transpose(toMesh));
-
-        return this;
     }
 };

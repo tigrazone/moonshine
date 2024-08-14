@@ -89,7 +89,7 @@ struct PathTracingIntegrator : Integrator {
         for (Intersection its = Intersection::find(scene.tlas, ray); its.hit(); its = Intersection::find(scene.tlas, ray)) {
 
             // decode mesh attributes and material from intersection
-            const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
+            const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
             const Material material = scene.world.material(its.instanceIndex, its.geometryIndex);
             const PolymorphicBSDF bsdf = PolymorphicBSDF::load(material, attrs.texcoord);
 
@@ -180,7 +180,7 @@ struct DirectLightIntegrator : Integrator {
         Intersection its = Intersection::find(scene.tlas, initialRay);
         if (its.hit()) {
             // decode mesh attributes and material from intersection
-            const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
+            const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
             const Material material = scene.world.material(its.instanceIndex, its.geometryIndex);
             const PolymorphicBSDF bsdf = PolymorphicBSDF::load(material, attrs.texcoord);
 
@@ -220,7 +220,7 @@ struct DirectLightIntegrator : Integrator {
                         Intersection its = Intersection::find(scene.tlas, ray);
                         if (its.hit()) {
                             // hit -- collect light from emissive meshes
-                            const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics).inWorld(scene.world, its.instanceIndex);
+                            const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(scene.world, its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
                             const float lightPdf = areaMeasureToSolidAngleMeasure(attrs.position, ray.Origin, ray.Direction, attrs.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
                             const float weight = misWeight(brdfSamples, sample.pdf, !isMaterialDelta ? meshSamples : 0, lightPdf);
                             accumulatedColor += throughput * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(attrs.texcoord) * weight;

@@ -124,7 +124,7 @@ struct TriangleLight: Light {
 
     LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
         const float2 barycentrics = squareToTriangle(rand);
-        const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, instanceIndex, geometryIndex, primitiveIndex, barycentrics).inWorld(world, instanceIndex);
+        const MeshAttributes attrs = MeshAttributes::lookupAndInterpolate(world, instanceIndex, geometryIndex, primitiveIndex, barycentrics);
 
         LightSample lightSample;
         lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(attrs.texcoord);
