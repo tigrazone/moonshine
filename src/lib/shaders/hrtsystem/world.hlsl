@@ -27,6 +27,14 @@ struct Mesh {
     uint64_t indexAddress; // may be zero, for unindexed geometry
 };
 
+struct MeshAttributes {
+    float3 position;
+    float2 texcoord;
+
+    Frame triangleFrame; // from triangle positions
+    Frame frame; // from vertex attributes
+};
+
 float3 loadPosition(uint64_t addr, uint index) {
     return vk::RawBufferLoad<float3>(addr + sizeof(float3) * index);
 }
@@ -95,21 +103,13 @@ struct World {
 
         return length(cross(p1 - p0, p2 - p0)) / 2.0;
     }
-};
 
-struct MeshAttributes {
-    float3 position;
-    float2 texcoord;
-
-    Frame triangleFrame; // from triangle positions
-    Frame frame; // from vertex attributes
-
-    static MeshAttributes lookupAndInterpolate(World world, uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
+    MeshAttributes meshAttributes(uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
         MeshAttributes attrs;
 
         // construct attributes in object space
         {
-            Mesh mesh = world.mesh(instanceIndex, geometryIndex);
+            Mesh mesh = this.mesh(instanceIndex, geometryIndex);
 
             const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
             const float3 barycentrics = float3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
@@ -154,8 +154,8 @@ struct MeshAttributes {
 
         // convert to world space
         {
-            const float3x4 toWorld = world.instances[NonUniformResourceIndex(instanceIndex)].transform;
-            const float3x4 toMesh = world.worldToInstance[NonUniformResourceIndex(instanceIndex)];
+            const float3x4 toWorld = instances[NonUniformResourceIndex(instanceIndex)].transform;
+            const float3x4 toMesh = worldToInstance[NonUniformResourceIndex(instanceIndex)];
 
             attrs.position = mul(toWorld, float4(attrs.position, 1.0));
 
