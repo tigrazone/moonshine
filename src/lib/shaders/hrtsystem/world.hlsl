@@ -27,7 +27,7 @@ struct Mesh {
     uint64_t indexAddress; // may be zero, for unindexed geometry
 };
 
-struct MeshAttributes {
+struct SurfacePoint {
     float3 position;
     float2 texcoord;
 
@@ -104,8 +104,8 @@ struct World {
         return length(cross(p1 - p0, p2 - p0)) / 2.0;
     }
 
-    MeshAttributes meshAttributes(uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
-        MeshAttributes attrs;
+    SurfacePoint surfacePoint(uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
+        SurfacePoint surface;
 
         // construct attributes in object space
         {
@@ -118,7 +118,7 @@ struct World {
             float3 p0 = loadPosition(mesh.positionAddress, ind.x);
             float3 p1 = loadPosition(mesh.positionAddress, ind.y);
             float3 p2 = loadPosition(mesh.positionAddress, ind.z);
-            attrs.position = interpolate(barycentrics, p0, p1, p2);
+            surface.position = interpolate(barycentrics, p0, p1, p2);
 
             // texcoords optional
             float2 t0, t1, t2;
@@ -132,23 +132,23 @@ struct World {
                 t1 = float2(1, 0);
                 t2 = float2(1, 1);
             }
-            attrs.texcoord = interpolate(barycentrics, t0, t1, t2);
+            surface.texcoord = interpolate(barycentrics, t0, t1, t2);
 
-            getTangentBitangent(p0, p1, p2, t0, t1, t2, attrs.triangleFrame.s, attrs.triangleFrame.t);
-            attrs.triangleFrame.n = normalize(cross(p1 - p0, p2 - p0));
-            attrs.triangleFrame.reorthogonalize();
+            getTangentBitangent(p0, p1, p2, t0, t1, t2, surface.triangleFrame.s, surface.triangleFrame.t);
+            surface.triangleFrame.n = normalize(cross(p1 - p0, p2 - p0));
+            surface.triangleFrame.reorthogonalize();
 
             // normals optional
             if (mesh.normalAddress != 0) {
                 float3 n0 = loadNormal(mesh.normalAddress, ind.x);
                 float3 n1 = loadNormal(mesh.normalAddress, ind.y);
                 float3 n2 = loadNormal(mesh.normalAddress, ind.z);
-                attrs.frame = attrs.triangleFrame;
-                attrs.frame.n = normalize(interpolate(barycentrics, n0, n1, n2));
-                attrs.frame.reorthogonalize();
+                surface.frame = surface.triangleFrame;
+                surface.frame.n = normalize(interpolate(barycentrics, n0, n1, n2));
+                surface.frame.reorthogonalize();
             } else {
                 // just use one from triangle
-                attrs.frame = attrs.triangleFrame;
+                surface.frame = surface.triangleFrame;
             }
         }
 
@@ -157,12 +157,12 @@ struct World {
             const float3x4 toWorld = instances[NonUniformResourceIndex(instanceIndex)].transform;
             const float3x4 toMesh = worldToInstance[NonUniformResourceIndex(instanceIndex)];
 
-            attrs.position = mul(toWorld, float4(attrs.position, 1.0));
+            surface.position = mul(toWorld, float4(surface.position, 1.0));
 
-            attrs.triangleFrame = attrs.triangleFrame.inSpace(transpose(toMesh));
-            attrs.frame = attrs.frame.inSpace(transpose(toMesh));
+            surface.triangleFrame = surface.triangleFrame.inSpace(transpose(toMesh));
+            surface.frame = surface.frame.inSpace(transpose(toMesh));
         }
 
-        return attrs;
+        return surface;
     }
 };

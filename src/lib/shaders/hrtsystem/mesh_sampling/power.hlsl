@@ -41,8 +41,8 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 	for (uint i = 0; i < samples_per_dim; i++) {
 		for (uint j = 0; j < samples_per_dim; j++) {
 			const float2 barycentrics = squareToTriangle(float2(i, j) / float(samples_per_dim));
-			const MeshAttributes attrs = world.meshAttributes(pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive, barycentrics);
-        	total_emissive += luminance(world.material(pushConsts.instanceIndex, pushConsts.geometryIndex).getEmissive(attrs.texcoord));
+			const SurfacePoint surface = world.surfacePoint(pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive, barycentrics);
+        	total_emissive += luminance(world.material(pushConsts.instanceIndex, pushConsts.geometryIndex).getEmissive(surface.texcoord));
 		}
 	}
 

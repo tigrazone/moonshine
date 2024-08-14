@@ -124,15 +124,15 @@ struct TriangleLight: Light {
 
     LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
         const float2 barycentrics = squareToTriangle(rand);
-        const MeshAttributes attrs = world.meshAttributes(instanceIndex, geometryIndex, primitiveIndex, barycentrics);
+        const SurfacePoint surface = world.surfacePoint(instanceIndex, geometryIndex, primitiveIndex, barycentrics);
 
         LightSample lightSample;
-        lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(attrs.texcoord);
-        lightSample.dirWs = normalize(attrs.position - positionWs);
-        lightSample.pdf = areaMeasureToSolidAngleMeasure(attrs.position, positionWs, lightSample.dirWs, attrs.triangleFrame.n) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
+        lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(surface.texcoord);
+        lightSample.dirWs = normalize(surface.position - positionWs);
+        lightSample.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, lightSample.dirWs, surface.triangleFrame.n) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
 
         // compute precise ray distance
-        const float3 offsetLightPositionWs = offsetAlongNormal(attrs.position, faceForward(attrs.triangleFrame.n, -lightSample.dirWs));
+        const float3 offsetLightPositionWs = offsetAlongNormal(surface.position, faceForward(surface.triangleFrame.n, -lightSample.dirWs));
         const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.dirWs));
         lightSample.lightDistance = distance(offsetLightPositionWs, offsetShadingPositionWs);
 
