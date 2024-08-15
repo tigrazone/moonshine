@@ -33,6 +33,8 @@ struct SurfacePoint {
 
     Frame triangleFrame; // from triangle positions
     Frame frame; // from vertex attributes
+
+    float spawnOffset; // minimum offset along normal that a ray will not intersect
 };
 
 float3 loadPosition(uint64_t addr, uint index) {
@@ -107,18 +109,21 @@ struct World {
     SurfacePoint surfacePoint(uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
         SurfacePoint surface;
 
-        // construct attributes in object space
+
+        Mesh mesh = this.mesh(instanceIndex, geometryIndex);
+
+        const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
+        const float3 barycentrics = float3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+
+        // positions always available
+        const float3 p0 = loadPosition(mesh.positionAddress, ind.x);
+        const float3 p1 = loadPosition(mesh.positionAddress, ind.y);
+        const float3 p2 = loadPosition(mesh.positionAddress, ind.z);
+        const float3 edge1 = p1 - p0;
+        const float3 edge2 = p2 - p0;
+        surface.position = p0 + ((attribs.x * edge1) + (attribs.y * edge2));
+
         {
-            Mesh mesh = this.mesh(instanceIndex, geometryIndex);
-
-            const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
-            const float3 barycentrics = float3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
-
-            // positions always available
-            float3 p0 = loadPosition(mesh.positionAddress, ind.x);
-            float3 p1 = loadPosition(mesh.positionAddress, ind.y);
-            float3 p2 = loadPosition(mesh.positionAddress, ind.z);
-            surface.position = interpolate(barycentrics, p0, p1, p2);
 
             // texcoords optional
             float2 t0, t1, t2;
@@ -135,7 +140,7 @@ struct World {
             surface.texcoord = interpolate(barycentrics, t0, t1, t2);
 
             getTangentBitangent(p0, p1, p2, t0, t1, t2, surface.triangleFrame.s, surface.triangleFrame.t);
-            surface.triangleFrame.n = normalize(cross(p1 - p0, p2 - p0));
+            surface.triangleFrame.n = normalize(cross(edge1, edge2));
             surface.triangleFrame.reorthogonalize();
 
             // normals optional
@@ -152,12 +157,40 @@ struct World {
             }
         }
 
+        const float3x4 toWorld = instances[NonUniformResourceIndex(instanceIndex)].transform;
+        const float3x4 toMesh = worldToInstance[NonUniformResourceIndex(instanceIndex)];
+        const float3 worldPosition = mul(toWorld, float4(surface.position, 1.0));
+
+        // https://developer.nvidia.com/blog/solving-self-intersection-artifacts-in-directx-raytracing/
+        {
+            float3 wldNormal = mul(transpose((float3x3)toMesh), surface.triangleFrame.n);
+
+            const float wldScale = rsqrt(dot(wldNormal, wldNormal));
+            wldNormal = mul(wldScale, wldNormal);
+
+            // nvidia magic constants
+            const float c0 = 5.9604644775390625E-8f;
+            const float c1 = 1.788139769587360206060111522674560546875E-7f;
+            const float c2 = 1.19209317972490680404007434844970703125E-7f;
+
+            const float3 extent3 = abs(edge1) + abs(edge2) + abs(edge1 - edge2);
+            const float extent = max(max(extent3.x, extent3.y), extent3.z);
+
+            float3 objErr = c0 * abs(p0) + mul(c1, extent);
+
+            const float3 wldErr = c1 * mul(abs((float3x3)toWorld), abs(surface.position)) + mul(c2, abs(transpose(toWorld)[3]));
+
+            objErr += c2 * mul(abs(toMesh), float4(abs(worldPosition), 1));
+
+            const float wldOffset = dot(wldErr, abs(wldNormal));
+            const float objOffset = dot(objErr, abs(surface.triangleFrame.n));
+
+            surface.spawnOffset = wldScale * objOffset + wldOffset;
+        }
+
         // convert to world space
         {
-            const float3x4 toWorld = instances[NonUniformResourceIndex(instanceIndex)].transform;
-            const float3x4 toMesh = worldToInstance[NonUniformResourceIndex(instanceIndex)];
-
-            surface.position = mul(toWorld, float4(surface.position, 1.0));
+            surface.position = worldPosition;
 
             surface.triangleFrame = surface.triangleFrame.inSpace(transpose(toMesh));
             surface.frame = surface.frame.inSpace(transpose(toMesh));

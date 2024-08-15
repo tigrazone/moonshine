@@ -21,7 +21,7 @@ float misWeight(const uint fCount, const float fPdf, const uint gCount, const fl
 // estimates direct lighting from light + brdf via MIS
 // only samples light
 template <class Light, class BSDF>
-float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, BSDF material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float2 rand, uint lightSamplesTaken, uint brdfSamplesTaken) {
+float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, BSDF material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float spawnOffset, float2 rand, uint lightSamplesTaken, uint brdfSamplesTaken) {
     const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
     const float3 lightDirWs = normalize(lightSample.connection);
 
@@ -32,7 +32,7 @@ float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame
             const float3 brdf = material.eval(lightDirFs, outgoingDirFs);
             const float weight = misWeight(lightSamplesTaken, lightSample.pdf, brdfSamplesTaken, scatteringPdf);
             const float3 totalRadiance = lightSample.radiance * brdf * abs(Frame::cosTheta(lightDirFs)) * weight / lightSample.pdf;
-            if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightDirWs)), lightSample.connection)) {
+            if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, positionWs + faceForward(triangleNormalDirWs, lightDirWs) * spawnOffset, lightSample.connection - faceForward(triangleNormalDirWs, lightDirWs) * spawnOffset)) {
                 return totalRadiance;
             }
         }
@@ -123,13 +123,13 @@ struct PathTracingIntegrator : Integrator {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamplesPerBounce; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, surface.position, surface.triangleFrame.n, rand, envSamplesPerBounce, 1);
+                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, surface.position, surface.triangleFrame.n, surface.spawnOffset, rand, envSamplesPerBounce, 1);
                 }
 
                 // accumulate direct light samples from emissive meshes
                 for (uint directCount = 0; directCount < meshSamplesPerBounce; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, surface.position, surface.triangleFrame.n, rand, meshSamplesPerBounce, 1);
+                    accumulatedColor += throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, surface.position, surface.triangleFrame.n, surface.spawnOffset, rand, meshSamplesPerBounce, 1);
                 }
             }
 
@@ -139,7 +139,7 @@ struct PathTracingIntegrator : Integrator {
 
             // set up info for next bounce
             ray.Direction = shadingFrame.frameToWorld(sample.dirFs);
-            ray.Origin = offsetAlongNormal(surface.position, faceForward(surface.triangleFrame.n, ray.Direction));
+            ray.Origin = surface.position + faceForward(surface.triangleFrame.n, ray.Direction) * surface.spawnOffset;
             throughput *= bsdf.eval(sample.dirFs, outgoingDirSs) * abs(Frame::cosTheta(sample.dirFs)) / sample.pdf;
             bounceCount += 1;
             isLastMaterialDelta = isCurrentMaterialDelta;
@@ -198,13 +198,13 @@ struct DirectLightIntegrator : Integrator {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamples; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, surface.position, surface.triangleFrame.n, rand, envSamples, brdfSamples);
+                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, surface.position, surface.triangleFrame.n, surface.spawnOffset, rand, envSamples, brdfSamples);
                 }
 
                 // accumulate direct light samples from emissive meshes
                 for (uint directCount = 0; directCount < meshSamples; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
-                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, surface.position, surface.triangleFrame.n, rand, meshSamples, brdfSamples);
+                    accumulatedColor += estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, surface.position, surface.triangleFrame.n, surface.spawnOffset, rand, meshSamples, brdfSamples);
                 }
             }
 
@@ -217,7 +217,7 @@ struct DirectLightIntegrator : Integrator {
                         ray.TMin = 0;
                         ray.TMax = INFINITY;
                         ray.Direction = shadingFrame.frameToWorld(sample.dirFs);
-                        ray.Origin = offsetAlongNormal(surface.position, faceForward(surface.triangleFrame.n, ray.Direction));
+                        ray.Origin = surface.position + faceForward(surface.triangleFrame.n, ray.Direction) * surface.spawnOffset;
                         Intersection its = Intersection::find(scene.tlas, ray);
                         if (its.hit()) {
                             // hit -- collect light from emissive meshes

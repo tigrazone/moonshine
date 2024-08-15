@@ -128,11 +128,7 @@ struct TriangleLight: Light {
         LightSample lightSample;
         lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(surface.texcoord);
         lightSample.connection = surface.position - positionWs;
-
-        // compute precise ray distance
-        const float3 offsetLightPositionWs = offsetAlongNormal(surface.position, faceForward(surface.triangleFrame.n, -lightSample.connection));
-        const float3 offsetShadingPositionWs = offsetAlongNormal(positionWs, faceForward(triangleNormalDirWs, lightSample.connection));
-        lightSample.connection = offsetLightPositionWs - offsetShadingPositionWs;
+        lightSample.connection += faceForward(surface.triangleFrame.n, -lightSample.connection) * surface.spawnOffset;
         lightSample.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
 
         return lightSample;
