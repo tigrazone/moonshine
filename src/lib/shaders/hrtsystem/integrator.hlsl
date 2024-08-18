@@ -84,7 +84,7 @@ struct PathTracingIntegrator : Integrator {
         float3 throughput = float3(1.0, 1.0, 1.0);
         uint bounceCount = 0;
         float lastMaterialPdf = 1;
-        bool isLastMaterialDelta = false;
+        bool isLastMaterialDelta = true;
 
         // main path tracing loop
         for (Intersection its = Intersection::find(scene.tlas, ray); its.hit(); its = Intersection::find(scene.tlas, ray)) {
@@ -100,9 +100,8 @@ struct PathTracingIntegrator : Integrator {
 
             // collect light from emissive meshes
             {
-                const bool canMeshSample = bounceCount != 0 && !isLastMaterialDelta;
                 const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, ray.Origin, ray.Direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                const float weight = misWeight(1, lastMaterialPdf, canMeshSample ? meshSamplesPerBounce : 0, lightPdf);
+                const float weight = misWeight(1, lastMaterialPdf, isLastMaterialDelta ? 0: meshSamplesPerBounce, lightPdf);
                 accumulatedColor += throughput * material.getEmissive(surface.texcoord) * weight;
             }
 
@@ -150,9 +149,8 @@ struct PathTracingIntegrator : Integrator {
 
         // handle env map
         {
-            const bool canEnvSample = bounceCount != 0 && !isLastMaterialDelta;
             const LightEval l = scene.envMap.eval(ray.Direction);
-            const float weight = misWeight(1, lastMaterialPdf, canEnvSample ? envSamplesPerBounce : 0, l.pdf);
+            const float weight = misWeight(1, lastMaterialPdf, isLastMaterialDelta ? 0: envSamplesPerBounce, l.pdf);
             accumulatedColor += throughput * l.radiance * weight;
         }
 
@@ -223,12 +221,12 @@ struct DirectLightIntegrator : Integrator {
                             // hit -- collect light from emissive meshes
                             const SurfacePoint surface = scene.world.surfacePoint(its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
                             const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, ray.Origin, ray.Direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                            const float weight = misWeight(brdfSamples, sample.pdf, !isMaterialDelta ? meshSamples : 0, lightPdf);
+                            const float weight = misWeight(brdfSamples, sample.pdf, isMaterialDelta ? 0: meshSamples, lightPdf);
                             accumulatedColor += throughput * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(surface.texcoord) * weight;
                         } else {
                             // miss -- collect light from env map
                             const LightEval l = scene.envMap.eval(ray.Direction);
-                            const float weight = misWeight(brdfSamples, sample.pdf, !isMaterialDelta ? envSamples : 0, l.pdf);
+                            const float weight = misWeight(brdfSamples, sample.pdf, isMaterialDelta ? 0: envSamples, l.pdf);
                             accumulatedColor += throughput * l.radiance * weight;
                         }
                     }
