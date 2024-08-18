@@ -61,7 +61,7 @@ struct EnvMap : Light {
         const float discretePdf = luminanceTexture[idx] * float(size * size) / integral;
         const float2 uv = (float2(idx) + rand) / float2(size, size);
 
-        const float envMapDistance = INFINITY;
+        const float envMapDistance = 10000000000;
         LightSample lightSample;
         lightSample.pdf = discretePdf / (4.0 * PI);
         lightSample.connection = squareToEqualAreaSphere(uv) * envMapDistance;

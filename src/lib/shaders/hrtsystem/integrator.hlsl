@@ -210,9 +210,7 @@ struct DirectLightIntegrator : Integrator {
                 if (sample.eval.pdf > 0.0) {
                     const float3 throughput = sample.eval.reflectance * abs(Frame::cosTheta(sample.dirFs)) / sample.eval.pdf;
                     if (all(throughput != 0)) {
-                        RayDesc ray;
-                        ray.TMin = 0;
-                        ray.TMax = INFINITY;
+                        RayDesc ray = initialRay;
                         ray.Direction = shadingFrame.frameToWorld(sample.dirFs);
                         ray.Origin = surface.position + faceForward(surface.triangleFrame.n, ray.Direction) * surface.spawnOffset;
                         Intersection its = Intersection::find(scene.tlas, ray);
