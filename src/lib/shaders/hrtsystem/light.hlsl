@@ -9,7 +9,7 @@ struct LightSample {
     float pdf;
 };
 
-struct LightEval {
+struct LightEvaluation {
     float3 radiance;
     float pdf;
 };
@@ -71,13 +71,13 @@ struct EnvMap : Light {
     }
 
     // pdf is with respect to solid angle (no trace)
-    LightEval eval(float3 dirWs) {
+    LightEvaluation evaluate(float3 dirWs) {
         const uint size = textureDimensions(luminanceTexture).x;
         const uint mipCount = log2(size) + 1;
         const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
 
         if (integral == 0) {
-            LightEval l;
+            LightEvaluation l;
             l.pdf = 0;
             l.radiance = 0;
             return l;
@@ -87,7 +87,7 @@ struct EnvMap : Light {
         const uint2 idx = clamp(uint2(uv * size), uint2(0, 0), uint2(size, size));
         const float discretePdf = luminanceTexture[idx] * float(size * size) / integral;
 
-        LightEval l;
+        LightEvaluation l;
         l.pdf = discretePdf / (4.0 * PI);
         l.radiance = rgbTexture[idx];
         return l;

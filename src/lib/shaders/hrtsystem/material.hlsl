@@ -165,14 +165,18 @@ namespace Fresnel {
     }
 };
 
-struct BSDFSample {
-    float3 dirFs;
+struct BSDFEvaluation {
+    float3 reflectance;
     float pdf;
 };
 
+struct BSDFSample {
+    float3 dirFs;
+    BSDFEvaluation eval;
+};
+
 interface BSDF {
-    float pdf(float3 w_o, float3 w_i);
-    float3 eval(float3 w_o, float3 w_i);
+    BSDFEvaluation evaluate(float3 w_o, float3 w_i);
     BSDFSample sample(float3 w_o, float2 square);
 };
 
@@ -194,12 +198,11 @@ struct Lambert : BSDF {
         return material;
     }
 
-    float pdf(float3 w_i, float3 w_o) {
-        return Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) / PI : 0.0;
-    }
-
-    float3 eval(float3 w_i, float3 w_o) {
-        return r / PI;
+    BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
+        BSDFEvaluation eval;
+        eval.reflectance = r / PI;
+        eval.pdf = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) / PI : 0.0;
+        return eval;
     }
 
     BSDFSample sample(float3 w_o, float2 square) {
@@ -207,8 +210,8 @@ struct Lambert : BSDF {
         if (w_o.z < 0.0) w_i.z *= -1;
 
         BSDFSample sample;
-        sample.pdf = pdf(w_i, w_o);
         sample.dirFs = w_i;
+        sample.eval = evaluate(w_i, w_o);
         return sample;
     }
 
@@ -247,36 +250,19 @@ struct StandardPBR : BSDF {
         return distr.pdf(w_o, h) / (4.0 * dot(w_o, h));
     }
 
-    BSDFSample microfacetSample(float3 w_o, float2 square) {
-        float3 h = distr.sample(w_o, square);
-        float3 w_i = -reflect(w_o, h); // reflect in HLSL is negative of what papers usually mean for some reason
-
-        BSDFSample sample;
-        sample.pdf = Frame::sameHemisphere(w_o, w_i) ? distr.pdf(w_o, h) / (4.0 * dot(w_o, h)) : 0.0;
-        sample.dirFs = w_i;
-        return sample;
-    }
-
     BSDFSample sample(float3 w_o, float2 square) {
         float specularWeight = 1;
         float diffuseWeight = 1 - metalness;
         float pSpecularSample = specularWeight / (specularWeight + diffuseWeight);
 
         BSDFSample sample;
-        Lambert diffuse = Lambert::create(color);
         if (coinFlipRemap(pSpecularSample, square.x)) {
-            BSDFSample microSample = microfacetSample(w_o, square);
-            float pdf2 = diffuse.pdf(microSample.dirFs, w_o);
-
-            sample.pdf = lerp(pdf2, microSample.pdf, pSpecularSample);
-            sample.dirFs = microSample.dirFs;
+            float3 h = distr.sample(w_o, square);
+            sample.dirFs = -reflect(w_o, h);
         } else {
-            BSDFSample diffuseSample = diffuse.sample(w_o, square);
-            float pdf2 = microfacetPdf(diffuseSample.dirFs, w_o);
-
-            sample.pdf = lerp(diffuseSample.pdf, pdf2, pSpecularSample);
-            sample.dirFs = diffuseSample.dirFs;
+            sample.dirFs = Lambert::create(color).sample(w_o, square).dirFs;
         }
+        sample.eval = evaluate(sample.dirFs, w_o);
         return sample;
     }
 
@@ -285,13 +271,13 @@ struct StandardPBR : BSDF {
         float diffuseWeight = 1 - metalness;
         float pSpecularSample = specularWeight / (specularWeight + diffuseWeight);
 
-        float lambert_pdf = Lambert::create(color).pdf(w_i, w_o);
+        float lambert_pdf = Lambert::create(color).evaluate(w_i, w_o).pdf;
         float micro_pdf = microfacetPdf(w_i, w_o);
 
         return lerp(lambert_pdf, micro_pdf, pSpecularSample);
     }
 
-    float3 eval(float3 w_i, float3 w_o) {
+    BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         float3 h = normalize(w_i + w_o);
 
         float3 fDielectric = Fresnel::dielectric(dot(w_i, h), AIR_IOR, ior);
@@ -302,9 +288,12 @@ struct StandardPBR : BSDF {
         float D = distr.D(h);
         float3 specular = Frame::sameHemisphere(w_o, w_i) ? (F * G * D) / (4.0 * abs(Frame::cosTheta(w_i)) * abs(Frame::cosTheta(w_o))) : 0.0;
 
-        float3 diffuse = Lambert::create(color).eval(w_i, w_o);
+        float3 diffuse = Lambert::create(color).evaluate(w_i, w_o).reflectance;
 
-        return specular + (1.0 - metalness) * diffuse;
+        BSDFEvaluation eval;
+        eval.reflectance = specular + (1.0 - metalness) * diffuse;
+        eval.pdf = pdf(w_i, w_o);
+        return eval;
     }
 
     static bool isDelta() {
@@ -327,12 +316,8 @@ struct DisneyDiffuse : BSDF {
         return Lambert::create(color).sample(w_o, square);
     }
 
-    float pdf(float3 w_i, float3 w_o) {
-        return Lambert::create(color).pdf(w_i, w_o);
-    }
-
-    float3 eval(float3 w_i, float3 w_o) {
-        float3 lambertian = Lambert::create(color).eval(w_i, w_o);
+    BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
+        BSDFEvaluation eval = Lambert::create(color).evaluate(w_i, w_o);
 
         float3 h = normalize(w_i + w_o);
         float cosThetaHI = dot(w_i, h);
@@ -345,7 +330,8 @@ struct DisneyDiffuse : BSDF {
         float R_R = 2 * roughness * cosThetaHI * cosThetaHI;
         float3 retro = R_R * (F_I + F_O + F_I * F_O * (R_R - 1));
 
-        return lambertian * ((1 - F_I / 2) * (1 - F_O / 2) + retro);
+        eval.reflectance *= ((1 - F_I / 2) * (1 - F_O / 2) + retro);
+        return eval;
     }
 
     static bool isDelta() {
@@ -356,17 +342,17 @@ struct DisneyDiffuse : BSDF {
 struct PerfectMirror : BSDF {
     BSDFSample sample(float3 w_o, float2 square) {
         BSDFSample sample;
-        sample.pdf = 1.0;
         sample.dirFs = float3(-w_o.x, -w_o.y, w_o.z);
+        sample.eval = evaluate(sample.dirFs, w_o);
+        sample.eval.pdf = 1.0;
         return sample;
     }
 
-    float pdf(float3 w_i, float3 w_o) {
-        return 0.0;
-    }
-
-    float3 eval(float3 w_i, float3 w_o) {
-        return 1.0 / abs(Frame::cosTheta(w_i));
+    BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
+        BSDFEvaluation eval;
+        eval.reflectance = 1.0 / abs(Frame::cosTheta(w_i));
+        eval.pdf = 0.0;
+        return eval;
     }
 
     static bool isDelta() {
@@ -398,8 +384,7 @@ struct Glass : BSDF {
         float fresnel = Fresnel::dielectric(Frame::cosTheta(w_o), AIR_IOR, intIOR);
         BSDFSample sample;
 
-        if (square.x < fresnel) {
-            sample.pdf = fresnel;
+        if (coinFlipRemap(fresnel, square.x)) {
             sample.dirFs = float3(-w_o.x, -w_o.y, w_o.z);
         } else {
             float etaI;
@@ -412,22 +397,22 @@ struct Glass : BSDF {
                 etaI = intIOR;
             }
             sample.dirFs = refractDir(w_o, faceForward(float3(0.0, 0.0, 1.0), w_o), etaI / etaT);
-            sample.pdf = all(sample.dirFs == 0.0) ? 0.0 : 1.0 - fresnel;
+        }
+        if (all(sample.dirFs != 0.0)) {
+            sample.eval.pdf = 1.0;
+            sample.eval.reflectance = 1.0 / abs(Frame::cosTheta(sample.dirFs));
+        } else {
+            sample.eval.pdf = 0.0;
+            sample.eval.reflectance = 0.0;
         }
         return sample;
     }
 
-    float pdf(float3 w_i, float3 w_o) {
-        return 0.0;
-    }
-
-    float3 eval(float3 w_i, float3 w_o) {
-        float fresnel = Fresnel::dielectric(Frame::cosTheta(w_o), AIR_IOR, intIOR);
-        if (Frame::sameHemisphere(w_i, w_o)) {
-            return fresnel / abs(Frame::cosTheta(w_i));
-        } else {
-            return (1.0 - fresnel) / abs(Frame::cosTheta(w_i));
-        }
+    BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
+        BSDFEvaluation eval;
+        eval.pdf = 0.0;
+        eval.reflectance = 0.0;
+        return eval;
     }
 
     static bool isDelta() {
@@ -448,44 +433,23 @@ struct PolymorphicBSDF : BSDF {
         return bsdf;
     }
 
-    float pdf(float3 w_i, float3 w_o) {
+    BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         switch (type) {
             case BSDFType::StandardPBR: {
                 StandardPBR m = StandardPBR::load(addr, texcoords);
-                return m.pdf(w_i, w_o);
+                return m.evaluate(w_i, w_o);
             }
             case BSDFType::Lambert: {
                 Lambert m = Lambert::load(addr, texcoords);
-                return m.pdf(w_i, w_o);
+                return m.evaluate(w_i, w_o);
             }
             case BSDFType::PerfectMirror: {
                 PerfectMirror m;
-                return m.pdf(w_i, w_o);
+                return m.evaluate(w_i, w_o);
             }
             case BSDFType::Glass: {
                 Glass m = Glass::load(addr);
-                return m.pdf(w_i, w_o);
-            }
-        }
-    }
-
-    float3 eval(float3 w_i, float3 w_o) {
-        switch (type) {
-            case BSDFType::StandardPBR: {
-                StandardPBR m = StandardPBR::load(addr, texcoords);
-                return m.eval(w_i, w_o);
-            }
-            case BSDFType::Lambert: {
-                Lambert m = Lambert::load(addr, texcoords);
-                return m.eval(w_i, w_o);
-            }
-            case BSDFType::PerfectMirror: {
-                PerfectMirror m;
-                return m.eval(w_i, w_o);
-            }
-            case BSDFType::Glass: {
-                Glass m = Glass::load(addr);
-                return m.eval(w_i, w_o);
+                return m.evaluate(w_i, w_o);
             }
         }
     }
