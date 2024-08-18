@@ -15,6 +15,7 @@ float powerHeuristic(const uint fCount, const float fPdf, const uint gCount, con
 }
 
 float misWeight(const uint fCount, const float fPdf, const uint gCount, const float gPdf) {
+    if (fPdf == 1.#INF) return 1.0 / fCount; // delta distribution for f, g not relevant
     return powerHeuristic(fCount, fPdf, gCount, gPdf, 2);
 }
 
@@ -82,8 +83,7 @@ struct PathTracingIntegrator : Integrator {
         RayDesc ray = initialRay;
         float3 throughput = float3(1.0, 1.0, 1.0);
         uint bounceCount = 0;
-        float lastMaterialPdf = 1;
-        bool isLastMaterialDelta = true;
+        float lastMaterialPdf = 1.#INF;
 
         // main path tracing loop
         for (Intersection its = Intersection::find(scene.tlas, ray); its.hit(); its = Intersection::find(scene.tlas, ray)) {
@@ -100,7 +100,7 @@ struct PathTracingIntegrator : Integrator {
             // collect light from emissive meshes
             {
                 const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, ray.Origin, ray.Direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                const float weight = misWeight(1, lastMaterialPdf, isLastMaterialDelta ? 0: meshSamplesPerBounce, lightPdf);
+                const float weight = misWeight(1, lastMaterialPdf, meshSamplesPerBounce, lightPdf);
                 accumulatedColor += throughput * material.getEmissive(surface.texcoord) * weight;
             }
 
@@ -115,9 +115,7 @@ struct PathTracingIntegrator : Integrator {
                 throughput /= pSurvive;
             }
 
-            const bool isCurrentMaterialDelta = bsdf.isDelta();
-
-            if (!isCurrentMaterialDelta) {
+            if (!bsdf.isDelta()) {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamplesPerBounce; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
@@ -138,9 +136,9 @@ struct PathTracingIntegrator : Integrator {
             // set up info for next bounce
             ray.Direction = shadingFrame.frameToWorld(sample.dirFs);
             ray.Origin = surface.position + faceForward(surface.triangleFrame.n, ray.Direction) * surface.spawnOffset;
-            throughput *= sample.eval.reflectance * abs(Frame::cosTheta(sample.dirFs)) / sample.eval.pdf;
+            throughput *= sample.eval.reflectance * abs(Frame::cosTheta(sample.dirFs));
+            if (sample.eval.pdf != 1.#INF) throughput /= sample.eval.pdf;
             bounceCount += 1;
-            isLastMaterialDelta = isCurrentMaterialDelta;
             lastMaterialPdf = sample.eval.pdf;
         }
 
@@ -149,7 +147,7 @@ struct PathTracingIntegrator : Integrator {
         // handle env map
         {
             const LightEvaluation l = scene.envMap.evaluate(ray.Direction);
-            const float weight = misWeight(1, lastMaterialPdf, isLastMaterialDelta ? 0: envSamplesPerBounce, l.pdf);
+            const float weight = misWeight(1, lastMaterialPdf, envSamplesPerBounce, l.pdf);
             accumulatedColor += throughput * l.radiance * weight;
         }
 
@@ -189,9 +187,7 @@ struct DirectLightIntegrator : Integrator {
             // collect light from emissive meshes
             accumulatedColor += material.getEmissive(surface.texcoord);
 
-            const bool isMaterialDelta = bsdf.isDelta();
-
-            if (!isMaterialDelta) {
+            if (!bsdf.isDelta()) {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamples; directCount++) {
                     float2 rand = float2(rng.getFloat(), rng.getFloat());
@@ -208,7 +204,8 @@ struct DirectLightIntegrator : Integrator {
             for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
                 const BSDFSample sample = bsdf.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
                 if (sample.eval.pdf > 0.0) {
-                    const float3 throughput = sample.eval.reflectance * abs(Frame::cosTheta(sample.dirFs)) / sample.eval.pdf;
+                    float3 throughput = sample.eval.reflectance * abs(Frame::cosTheta(sample.dirFs));
+                    if (sample.eval.pdf != 1.#INF) throughput /= sample.eval.pdf;
                     if (all(throughput != 0)) {
                         RayDesc ray = initialRay;
                         ray.Direction = shadingFrame.frameToWorld(sample.dirFs);
@@ -218,12 +215,12 @@ struct DirectLightIntegrator : Integrator {
                             // hit -- collect light from emissive meshes
                             const SurfacePoint surface = scene.world.surfacePoint(its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
                             const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, ray.Origin, ray.Direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                            const float weight = misWeight(brdfSamples, sample.eval.pdf, isMaterialDelta ? 0: meshSamples, lightPdf);
+                            const float weight = misWeight(brdfSamples, sample.eval.pdf, meshSamples, lightPdf);
                             accumulatedColor += throughput * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(surface.texcoord) * weight;
                         } else {
                             // miss -- collect light from env map
                             const LightEvaluation l = scene.envMap.evaluate(ray.Direction);
-                            const float weight = misWeight(brdfSamples, sample.eval.pdf, isMaterialDelta ? 0: envSamples, l.pdf);
+                            const float weight = misWeight(brdfSamples, sample.eval.pdf, envSamples, l.pdf);
                             accumulatedColor += throughput * l.radiance * weight;
                         }
                     }
