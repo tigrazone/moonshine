@@ -5,13 +5,11 @@
 
 struct Instance { // same required by vulkan on host side
     row_major float3x4 transform;
-    uint instanceCustomIndexAndMask;
-    uint instanceShaderBindingTableRecordOffsetAndFlags;
+    uint instanceCustomIndex : 24;
+    uint mask : 8;
+    uint instanceShaderBindingTableRecordOffset : 24;
+    uint flags : 8;
     uint64_t accelerationStructureReference;
-
-    uint instanceID() {
-        return instanceCustomIndexAndMask & 0x00FFFFFF;
-    }
 };
 
 struct Geometry {
@@ -80,15 +78,15 @@ struct World {
     StructuredBuffer<Material> materials;
 
     // TODO: there's a lot of indirection in these two functions just to load some data
-    // probably can reorganize this for there to be some more direct path 
+    // probably can reorganize this for there to be some more direct path
     Mesh mesh(uint instanceIndex, uint geometryIndex) {
-        const uint instanceID = instances[instanceIndex].instanceID();
+        const uint instanceID = instances[instanceIndex].instanceCustomIndex;
         const Geometry geometry = geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
         return meshes[NonUniformResourceIndex(geometry.meshIndex)];
     }
 
     Material material(uint instanceIndex, uint geometryIndex) {
-        const uint instanceID = instances[instanceIndex].instanceID();
+        const uint instanceID = instances[instanceIndex].instanceCustomIndex;
         const Geometry geometry = geometries[NonUniformResourceIndex(instanceID + geometryIndex)];
         return materials[NonUniformResourceIndex(geometry.materialIndex)];
     }
