@@ -2,6 +2,7 @@
 
 #include "world.hlsl"
 #include "material.hlsl"
+#include "../utils/reservoir.hlsl"
 
 struct LightSample {
     float3 connection; // connection vector in world space from initial position to sampled position
@@ -44,17 +45,14 @@ struct EnvMap : Light {
 
         uint2 idx = uint2(0, 0);
         for (uint level = mipCount; level-- > 0;) {
-            idx *= 2;
-            const float2 probs_x = float2(
-                luminanceTexture.Load(uint3(idx + uint2(0, 0), level)) + luminanceTexture.Load(uint3(idx + uint2(0, 1), level)),
-                luminanceTexture.Load(uint3(idx + uint2(1, 0), level)) + luminanceTexture.Load(uint3(idx + uint2(1, 1), level))
-            );
-            idx.x += coinFlipRemap(probs_x.y / (probs_x.x + probs_x.y), rand.x);
-            const float2 probs_y = float2(
-                luminanceTexture.Load(uint3(idx + uint2(0, 0), level)),
-                luminanceTexture.Load(uint3(idx + uint2(0, 1), level))
-            );
-            idx.y += coinFlipRemap(probs_y.y / (probs_y.x + probs_y.y), rand.y);
+            Reservoir<uint2> r = Reservoir<uint2>::empty();
+            for (uint i = 0; i < 2; i++) {
+                for (uint j = 0; j < 2; j++) {
+                    const uint2 coords = 2 * idx + uint2(i, j);
+                    r.update(coords, luminanceTexture.Load(uint3(coords, level)), rand.x);
+                }
+            }
+            idx = r.selected;
         }
         const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
 
@@ -163,12 +161,12 @@ struct MeshLights : Light {
 
         uint idx = 0;
         for (uint level = mipCount; level-- > 0;) {
-            idx *= 2;
-            const float2 probs = float2(
-                power.Load(uint2(idx + 0, level)),
-                power.Load(uint2(idx + 1, level))
-            );
-            idx += coinFlipRemap(probs.y / (probs.x + probs.y), rand.x);
+            Reservoir<uint> r = Reservoir<uint>::empty();
+            for (uint i = 0; i < 2; i++) {
+                const uint coord = 2 * idx + i;
+                r.update(coord, power.Load(uint2(coord, level)), rand.x);
+            }
+            idx = r.selected;
         }
         const TriangleMetadata meta = metadata[idx];
 
