@@ -383,9 +383,8 @@ pub fn main() !void {
             } else {
                 window.setCursorMode(.normal);
                 if (imgui.isMouseClicked(.left)) {
-                    const pos = imgui.getMousePos().div(window_size);
-                    current_clicked_object = try object_picker.getClickedObject(&context, pos, scene.camera, scene.world.accel.tlas_handle, scene.camera.sensors.items[active_sensor]);
-                    const clicked_pixel = try sync_copier.copyImagePixel(&context, F32x4, scene.camera.sensors.items[active_sensor].image.handle, .transfer_src_optimal, vk.Offset3D { .x = @intFromFloat(pos.x), .y = @intFromFloat(pos.y), .z = 0 });
+                    current_clicked_object = try object_picker.getClickedObject(&context, imgui.getMousePos().div(window_size), scene.camera, scene.world.accel.tlas_handle, scene.camera.sensors.items[active_sensor]);
+                    const clicked_pixel = try sync_copier.copyImagePixel(&context, F32x4, scene.camera.sensors.items[active_sensor].image.handle, .transfer_src_optimal, vk.Offset3D { .x = @intFromFloat(imgui.getMousePos().x), .y = @intFromFloat(imgui.getMousePos().y), .z = 0 });
                     current_clicked_color = clicked_pixel.truncate();
                     has_clicked = true;
                 }

@@ -23,13 +23,11 @@ struct PushConsts {
 
 [shader("raygeneration")]
 void raygen() {
-    float2 uv = pushConsts.coords;
-    uv.y = (1 - uv.y);
     Camera camera = pushConsts.camera;
     // make camera have perfect focus
     camera.focus_distance = 1.0f;
     camera.aperture = 0.0f;
-    RayDesc ray = pushConsts.camera.generateRay(dOutputImage, uv, float2(0, 0));
+    RayDesc ray = pushConsts.camera.generateRay(dOutputImage, pushConsts.coords, float2(0, 0));
 
     Payload payload;
     TraceRay(TLAS, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 0, 0, ray, payload);
