@@ -2,6 +2,7 @@
 
 #include "../utils/mappings.hlsl"
 #include "../utils/helpers.hlsl"
+#include "ray.hlsl"
 
 struct Camera {
     float3 origin;
@@ -11,7 +12,7 @@ struct Camera {
     float aperture;
     float focus_distance;
 
-    RayDesc generateRay(RWTexture2D<float4> outputImage, float2 uv, float2 rand) {
+    Ray generateRay(RWTexture2D<float4> outputImage, float2 uv, float2 rand) {
         uint2 sensor_size = textureDimensions(outputImage);
         float aspect = float(sensor_size.x) / float(sensor_size.y);
 
@@ -32,13 +33,12 @@ struct Camera {
         float2 rd = aperture * sampled_rand / 2.0f;
         float3 defocusOffset = u * rd.x + v * rd.y;
         
-        RayDesc rayDesc;
-        rayDesc.Origin = origin + defocusOffset;
-        rayDesc.Direction = normalize(lower_left_corner + uv.x * horizontal + uv.y * vertical - defocusOffset - origin);
-        rayDesc.TMin = 0;
-        rayDesc.TMax = 1.#INF;
+        Ray ray;
+        ray.origin = origin + defocusOffset;
+        ray.direction = normalize(lower_left_corner + uv.x * horizontal + uv.y * vertical - defocusOffset - origin);
+        ray.pdf = 1.#INF;
 
-        return rayDesc;
+        return ray;
     }
 };
 

@@ -58,7 +58,7 @@ void integrate(Integrator integrator) {
     // set up initial ray
     const float2 jitter = float2(rng.getFloat(), rng.getFloat());
     const float2 imageUV = (imageCoords + jitter) / imageSize;
-    const RayDesc initialRay = pushConsts.camera.generateRay(dOutputImage, imageUV, float2(rng.getFloat(), rng.getFloat()));
+    const Ray initialRay = pushConsts.camera.generateRay(dOutputImage, imageUV, float2(rng.getFloat(), rng.getFloat()));
 
     // trace the ray
     const float3 newSample = integrator.incomingRadiance(scene, initialRay, rng);

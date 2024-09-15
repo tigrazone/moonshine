@@ -27,10 +27,10 @@ void raygen() {
     // make camera have perfect focus
     camera.focus_distance = 1.0f;
     camera.aperture = 0.0f;
-    RayDesc ray = pushConsts.camera.generateRay(dOutputImage, pushConsts.coords, float2(0, 0));
+    Ray ray = pushConsts.camera.generateRay(dOutputImage, pushConsts.coords, float2(0, 0));
 
     Payload payload;
-    TraceRay(TLAS, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 0, 0, ray, payload);
+    TraceRay(TLAS, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 0, 0, ray.desc(), payload);
 
     click_data[0] = payload.click_data;
 }
