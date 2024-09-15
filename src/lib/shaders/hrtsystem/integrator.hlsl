@@ -115,9 +115,9 @@ struct PathTracingIntegrator : Integrator {
             }
 
             // possibly terminate if reached max bounce cutoff or lose at russian roulette
-            // this needs to be before NEE below otherwise MIS would need to be adjusted
+            // max bounce cutoff needs to be before NEE below, and after light contribution above, otherwise MIS would need to be adjusted
             {
-                const float pSurvive = path.bounceCount >= maxBounces + 1 ? 0 : (path.bounceCount > 3 ? min(0.95, luminance(path.throughput)) : 1);
+                const float pSurvive = path.bounceCount > maxBounces ? 0 : (path.bounceCount > 3 ? min(0.95, luminance(path.throughput)) : 1);
                 if (rng.getFloat() > pSurvive) return path.radiance;
                 path.throughput /= pSurvive;
             }
