@@ -168,6 +168,13 @@ namespace Fresnel {
 struct BSDFEvaluation {
     float3 reflectance;
     float pdf;
+
+    static BSDFEvaluation empty() {
+        BSDFEvaluation eval;
+        eval.reflectance = 0;
+        eval.pdf = 0;
+        return eval;
+    }
 };
 
 struct BSDFSample {
@@ -347,16 +354,13 @@ struct PerfectMirror : BSDF {
     BSDFSample sample(float3 w_o, float2 square) {
         BSDFSample sample;
         sample.dirFs = float3(-w_o.x, -w_o.y, w_o.z);
-        sample.eval = evaluate(sample.dirFs, w_o);
+        sample.eval.reflectance = 1.0;
         sample.eval.pdf = 1.#INF;
         return sample;
     }
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
-        BSDFEvaluation eval;
-        eval.reflectance = 1.0;
-        eval.pdf = 0.0;
-        return eval;
+        return BSDFEvaluation::empty();
     }
 
     static bool isDelta() {
@@ -403,20 +407,16 @@ struct Glass : BSDF {
             sample.dirFs = refractDir(w_o, faceForward(float3(0.0, 0.0, 1.0), w_o), etaI / etaT);
         }
         if (all(sample.dirFs != 0.0)) {
-            sample.eval.pdf = 1.#INF;
             sample.eval.reflectance = 1.0;
+            sample.eval.pdf = 1.#INF;
         } else {
-            sample.eval.pdf = 0.0;
-            sample.eval.reflectance = 0.0;
+            sample.eval = BSDFEvaluation::empty();
         }
         return sample;
     }
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
-        BSDFEvaluation eval;
-        eval.pdf = 0.0;
-        eval.reflectance = 0.0;
-        return eval;
+        return BSDFEvaluation::empty();
     }
 
     static bool isDelta() {
