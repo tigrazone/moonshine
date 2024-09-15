@@ -32,7 +32,7 @@ float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame
         const BSDFEvaluation bsdfEval = material.evaluate(lightDirFs, outgoingDirFs);
         if (bsdfEval.pdf > 0.0) {
             const float weight = misWeight(lightSamplesTaken, lightSample.pdf, brdfSamplesTaken, bsdfEval.pdf);
-            const float3 totalRadiance = lightSample.radiance * bsdfEval.reflectance * abs(Frame::cosTheta(lightDirFs)) * weight;
+            const float3 totalRadiance = lightSample.radiance * bsdfEval.reflectance * weight;
             if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, positionWs + faceForward(triangleNormalDirWs, lightDirWs) * spawnOffset, lightSample.connection - faceForward(triangleNormalDirWs, lightDirWs) * spawnOffset)) {
                 return totalRadiance;
             }
@@ -147,7 +147,7 @@ struct PathTracingIntegrator : Integrator {
             path.ray.direction = shadingFrame.frameToWorld(sample.dirFs);
             path.ray.origin = surface.position + faceForward(surface.triangleFrame.n, path.ray.direction) * surface.spawnOffset;
             path.ray.pdf = sample.eval.pdf;
-            path.throughput *= sample.eval.reflectance * abs(Frame::cosTheta(sample.dirFs));
+            path.throughput *= sample.eval.reflectance;
             path.bounceCount += 1;
         }
 
@@ -213,8 +213,7 @@ struct DirectLightIntegrator : Integrator {
             for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
                 const BSDFSample sample = bsdf.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
                 if (sample.eval.pdf > 0.0) {
-                    const float3 throughput = sample.eval.reflectance * abs(Frame::cosTheta(sample.dirFs));
-                    if (all(throughput != 0)) {
+                    if (all(sample.eval.reflectance != 0)) {
                         Ray ray = initialRay;
                         ray.direction = shadingFrame.frameToWorld(sample.dirFs);
                         ray.origin = surface.position + faceForward(surface.triangleFrame.n, ray.direction) * surface.spawnOffset;
@@ -224,12 +223,12 @@ struct DirectLightIntegrator : Integrator {
                             const SurfacePoint surface = scene.world.surfacePoint(its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
                             const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, ray.origin, ray.direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
                             const float weight = misWeight(brdfSamples, sample.eval.pdf, meshSamples, lightPdf);
-                            pathRadiance += throughput * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(surface.texcoord) * weight;
+                            pathRadiance += sample.eval.reflectance * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(surface.texcoord) * weight;
                         } else {
                             // miss -- collect light from env map
                             const LightEvaluation l = scene.envMap.evaluate(ray.direction);
                             const float weight = misWeight(brdfSamples, sample.eval.pdf, envSamples, l.pdf);
-                            pathRadiance += throughput * l.radiance * weight;
+                            pathRadiance += sample.eval.reflectance * l.radiance * weight;
                         }
                     }
                 }

@@ -200,7 +200,7 @@ struct Lambert : BSDF {
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         BSDFEvaluation eval;
-        eval.reflectance = r / PI;
+        eval.reflectance = abs(Frame::cosTheta(w_i)) * r / PI;
         eval.pdf = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) / PI : 0.0;
         return eval;
     }
@@ -293,7 +293,7 @@ struct StandardPBR : BSDF {
         float3 diffuse = Lambert::create(color).evaluate(w_i, w_o).reflectance;
 
         BSDFEvaluation eval;
-        eval.reflectance = specular + (1.0 - metalness) * diffuse;
+        eval.reflectance = abs(Frame::cosTheta(w_i)) * specular + (1.0 - metalness) * diffuse;
         eval.pdf = pdf(w_i, w_o);
         return eval;
     }
@@ -352,7 +352,7 @@ struct PerfectMirror : BSDF {
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         BSDFEvaluation eval;
-        eval.reflectance = 1.0 / abs(Frame::cosTheta(w_i));
+        eval.reflectance = 1.0;
         eval.pdf = 0.0;
         return eval;
     }
@@ -402,7 +402,7 @@ struct Glass : BSDF {
         }
         if (all(sample.dirFs != 0.0)) {
             sample.eval.pdf = 1.#INF;
-            sample.eval.reflectance = 1.0 / abs(Frame::cosTheta(sample.dirFs));
+            sample.eval.reflectance = 1.0;
         } else {
             sample.eval.pdf = 0.0;
             sample.eval.reflectance = 0.0;
