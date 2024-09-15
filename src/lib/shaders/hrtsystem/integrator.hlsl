@@ -212,24 +212,22 @@ struct DirectLightIntegrator : Integrator {
 
             for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
                 const BSDFSample sample = bsdf.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
-                if (sample.eval.pdf > 0.0) {
-                    if (all(sample.eval.reflectance != 0)) {
-                        Ray ray = initialRay;
-                        ray.direction = shadingFrame.frameToWorld(sample.dirFs);
-                        ray.origin = surface.position + faceForward(surface.triangleFrame.n, ray.direction) * surface.spawnOffset;
-                        Intersection its = Intersection::find(scene.tlas, ray.desc());
-                        if (its.hit()) {
-                            // hit -- collect light from emissive meshes
-                            const SurfacePoint surface = scene.world.surfacePoint(its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
-                            const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, ray.origin, ray.direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
-                            const float weight = misWeight(brdfSamples, sample.eval.pdf, meshSamples, lightPdf);
-                            pathRadiance += sample.eval.reflectance * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(surface.texcoord) * weight;
-                        } else {
-                            // miss -- collect light from env map
-                            const LightEvaluation l = scene.envMap.evaluate(ray.direction);
-                            const float weight = misWeight(brdfSamples, sample.eval.pdf, envSamples, l.pdf);
-                            pathRadiance += sample.eval.reflectance * l.radiance * weight;
-                        }
+                if (sample.eval.pdf > 0 && all(sample.eval.reflectance != 0)) {
+                    Ray ray = initialRay;
+                    ray.direction = shadingFrame.frameToWorld(sample.dirFs);
+                    ray.origin = surface.position + faceForward(surface.triangleFrame.n, ray.direction) * surface.spawnOffset;
+                    Intersection its = Intersection::find(scene.tlas, ray.desc());
+                    if (its.hit()) {
+                        // hit -- collect light from emissive meshes
+                        const SurfacePoint surface = scene.world.surfacePoint(its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
+                        const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, ray.origin, ray.direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
+                        const float weight = misWeight(brdfSamples, sample.eval.pdf, meshSamples, lightPdf);
+                        pathRadiance += sample.eval.reflectance * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(surface.texcoord) * weight;
+                    } else {
+                        // miss -- collect light from env map
+                        const LightEvaluation l = scene.envMap.evaluate(ray.direction);
+                        const float weight = misWeight(brdfSamples, sample.eval.pdf, envSamples, l.pdf);
+                        pathRadiance += sample.eval.reflectance * l.radiance * weight;
                     }
                 }
             }
