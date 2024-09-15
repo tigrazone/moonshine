@@ -90,11 +90,6 @@ struct EnvMap : Light {
         l.radiance = rgbTexture[idx];
         return l;
     }
-
-    float3 incomingRadiance(float3 dirWs) {
-        float2 uv = squareToEqualAreaSphereInverse(dirWs);
-        return rgbTexture.SampleLevel(sampler, uv, 0);
-    }
 };
 
 float areaMeasureToSolidAngleMeasure(float3 pos1, float3 pos2, float3 dir1, float3 dir2) {
