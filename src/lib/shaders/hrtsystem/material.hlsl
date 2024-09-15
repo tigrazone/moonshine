@@ -344,7 +344,7 @@ struct PerfectMirror : BSDF {
         BSDFSample sample;
         sample.dirFs = float3(-w_o.x, -w_o.y, w_o.z);
         sample.eval = evaluate(sample.dirFs, w_o);
-        sample.eval.pdf = 1.0;
+        sample.eval.pdf = 1.#INF;
         return sample;
     }
 
@@ -399,7 +399,7 @@ struct Glass : BSDF {
             sample.dirFs = refractDir(w_o, faceForward(float3(0.0, 0.0, 1.0), w_o), etaI / etaT);
         }
         if (all(sample.dirFs != 0.0)) {
-            sample.eval.pdf = 1.0;
+            sample.eval.pdf = 1.#INF;
             sample.eval.reflectance = 1.0 / abs(Frame::cosTheta(sample.dirFs));
         } else {
             sample.eval.pdf = 0.0;
