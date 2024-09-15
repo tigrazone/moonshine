@@ -141,7 +141,7 @@ struct PathTracingIntegrator : Integrator {
 
             // sample direction for next bounce
             const BSDFSample sample = bsdf.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
-            if (sample.eval.pdf == 0.0) return path.radiance; // in a perfect world this would never happen
+            if (all(sample.eval.reflectance == 0)) return path.radiance;
 
             // set up info for next bounce
             path.ray.direction = shadingFrame.frameToWorld(sample.dirFs);
@@ -212,7 +212,7 @@ struct DirectLightIntegrator : Integrator {
 
             for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
                 const BSDFSample sample = bsdf.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
-                if (sample.eval.pdf > 0 && all(sample.eval.reflectance != 0)) {
+                if (all(sample.eval.reflectance != 0)) {
                     Ray ray = initialRay;
                     ray.direction = shadingFrame.frameToWorld(sample.dirFs);
                     ray.origin = surface.position + faceForward(surface.triangleFrame.n, ray.direction) * surface.spawnOffset;
