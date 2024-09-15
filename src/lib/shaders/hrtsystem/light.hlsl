@@ -63,7 +63,7 @@ struct EnvMap : Light {
         LightSample lightSample;
         lightSample.pdf = discretePdf / (4.0 * PI);
         lightSample.connection = squareToEqualAreaSphere(uv) * envMapDistance;
-        lightSample.radiance = rgbTexture[idx];
+        lightSample.radiance = rgbTexture[idx] / lightSample.pdf;
 
         return lightSample;
     }
@@ -124,10 +124,10 @@ struct TriangleLight: Light {
         const SurfacePoint surface = world.surfacePoint(instanceIndex, geometryIndex, primitiveIndex, barycentrics);
 
         LightSample lightSample;
-        lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(surface.texcoord);
         lightSample.connection = surface.position - positionWs;
         lightSample.connection += faceForward(surface.triangleFrame.n, -lightSample.connection) * surface.spawnOffset;
         lightSample.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
+        lightSample.radiance = world.material(instanceIndex, geometryIndex).getEmissive(surface.texcoord) / lightSample.pdf;
 
         return lightSample;
     }
@@ -176,6 +176,7 @@ struct MeshLights : Light {
         const TriangleLight inner = TriangleLight::create(meta.instanceIndex, meta.geometryIndex, primitiveIndex, world);
         lightSample = inner.sample(positionWs, triangleNormalDirWs, rand);
         lightSample.pdf *= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
+        lightSample.radiance /= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
         return lightSample;
     }
 

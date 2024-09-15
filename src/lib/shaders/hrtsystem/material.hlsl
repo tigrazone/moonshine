@@ -212,6 +212,7 @@ struct Lambert : BSDF {
         BSDFSample sample;
         sample.dirFs = w_i;
         sample.eval = evaluate(w_i, w_o);
+        sample.eval.reflectance /= sample.eval.pdf;
         return sample;
     }
 
@@ -263,6 +264,7 @@ struct StandardPBR : BSDF {
             sample.dirFs = Lambert::create(color).sample(w_o, square).dirFs;
         }
         sample.eval = evaluate(sample.dirFs, w_o);
+        sample.eval.reflectance /= sample.eval.pdf;
         return sample;
     }
 
