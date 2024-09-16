@@ -27,10 +27,10 @@ float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame
     const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
     const float3 lightDirWs = normalize(lightSample.connection);
 
-    if (lightSample.eval.pdf > 0.0) {
+    if (!all(lightSample.eval.radiance == 0)) {
         const float3 lightDirFs = frame.worldToFrame(lightDirWs);
         const BSDFEvaluation bsdfEval = material.evaluate(lightDirFs, outgoingDirFs);
-        if (bsdfEval.pdf > 0.0) {
+        if (!all(bsdfEval.reflectance == 0)) {
             const float weight = misWeight(lightSamplesTaken, lightSample.eval.pdf, brdfSamplesTaken, bsdfEval.pdf);
             const float3 totalRadiance = lightSample.eval.radiance * bsdfEval.reflectance * weight;
             if (any(totalRadiance != 0) && !ShadowIntersection::hit(accel, positionWs + faceForward(triangleNormalDirWs, lightDirWs) * spawnOffset, lightSample.connection - faceForward(triangleNormalDirWs, lightDirWs) * spawnOffset)) {
