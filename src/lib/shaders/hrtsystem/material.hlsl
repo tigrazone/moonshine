@@ -207,7 +207,7 @@ struct Lambert : BSDF {
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         BSDFEvaluation eval;
-        eval.reflectance = abs(Frame::cosTheta(w_i)) * r / PI;
+        eval.reflectance = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) * r / PI : 0.0;
         eval.pdf = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) / PI : 0.0;
         return eval;
     }
