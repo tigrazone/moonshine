@@ -24,7 +24,7 @@ float misWeight(const uint fCount, const float fPdf, const uint gCount, const fl
 // only samples light
 template <class Light, class BSDF>
 float3 estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, BSDF material, float3 outgoingDirFs, float3 positionWs, float3 triangleNormalDirWs, float spawnOffset, float2 rand, uint lightSamplesTaken, uint brdfSamplesTaken) {
-    const LightSample lightSample = light.sample(positionWs, triangleNormalDirWs, rand);
+    const LightSample lightSample = light.sample(positionWs, rand);
     const float3 lightDirWs = normalize(lightSample.connection);
 
     if (!all(lightSample.eval.radiance == 0)) {

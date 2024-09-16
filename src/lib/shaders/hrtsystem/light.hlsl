@@ -27,9 +27,9 @@ struct TriangleMetadata {
 };
 
 interface Light {
-    // samples a light direction based on given position and geometric normal, returning
+    // samples a light direction based on given position, returns
     // radiance at that point from light and pdf of this direction + radiance, ignoring visibility
-    LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 square);
+    LightSample sample(float3 positionWs, float2 square);
 };
 
 struct EnvMap : Light {
@@ -45,7 +45,7 @@ struct EnvMap : Light {
         return map;
     }
 
-    LightSample sample(float3 positionWs, float3 normalWs, float2 rand) {
+    LightSample sample(float3 positionWs, float2 rand) {
         const uint size = textureDimensions(luminanceTexture).x;
         const uint mipCount = log2(size) + 1;
 
@@ -115,7 +115,7 @@ struct TriangleLight: Light {
         return light;
     }
 
-    LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
+    LightSample sample(float3 positionWs, float2 rand) {
         const float2 barycentrics = squareToTriangle(rand);
         const SurfacePoint surface = t.surfacePoint(barycentrics, toWorld, toMesh);
 
@@ -147,7 +147,7 @@ struct MeshLights : Light {
         return lights;
     }
 
-    LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
+    LightSample sample(float3 positionWs, float2 rand) {
         LightSample lightSample;
         lightSample.eval = LightEvaluation::empty();
 
@@ -170,7 +170,7 @@ struct MeshLights : Light {
         const uint primitiveIndex = idx - geometryToTrianglePowerOffset[instanceID + meta.geometryIndex];
 
         const TriangleLight inner = TriangleLight::create(meta.instanceIndex, meta.geometryIndex, primitiveIndex, world);
-        lightSample = inner.sample(positionWs, triangleNormalDirWs, rand);
+        lightSample = inner.sample(positionWs, rand);
         lightSample.eval.pdf *= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
         lightSample.eval.radiance /= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
         return lightSample;
