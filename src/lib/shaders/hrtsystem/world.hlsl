@@ -209,9 +209,15 @@ struct World {
         return t;
     }
 
+    float3x4 toWorld(uint instanceIndex) {
+        return instances[NonUniformResourceIndex(instanceIndex)].transform;
+    }
+
+    float3x4 toMesh(uint instanceIndex) {
+        return worldToInstance[NonUniformResourceIndex(instanceIndex)];
+    }
+
     SurfacePoint surfacePoint(uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
-        const float3x4 toWorld = instances[NonUniformResourceIndex(instanceIndex)].transform;
-        const float3x4 toMesh = worldToInstance[NonUniformResourceIndex(instanceIndex)];
-        return triangleLocalSpace(instanceIndex, geometryIndex, primitiveIndex).surfacePoint(attribs, toWorld, toMesh);
+        return triangleLocalSpace(instanceIndex, geometryIndex, primitiveIndex).surfacePoint(attribs, toWorld(instanceIndex), toMesh(instanceIndex));
     }
 };

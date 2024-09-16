@@ -101,29 +101,29 @@ float areaMeasureToSolidAngleMeasure(float3 pos1, float3 pos2, float3 dir1, floa
 }
 
 struct TriangleLight: Light {
-	uint instanceIndex;
-	uint geometryIndex;
-	uint primitiveIndex;
-    World world;
+    TriangleLocalSpace t;
+    float3x4 toWorld;
+    float3x4 toMesh;
+    Material material;
 
     static TriangleLight create(uint instanceIndex, uint geometryIndex, uint primitiveIndex, World world) {
         TriangleLight light;
-        light.instanceIndex = instanceIndex;
-        light.geometryIndex = geometryIndex;
-        light.primitiveIndex = primitiveIndex;
-        light.world = world;
+        light.t = world.triangleLocalSpace(instanceIndex, geometryIndex, primitiveIndex);
+        light.toWorld = world.toWorld(instanceIndex);
+        light.toMesh = world.toMesh(instanceIndex);
+        light.material = world.material(instanceIndex, geometryIndex);
         return light;
     }
 
     LightSample sample(float3 positionWs, float3 triangleNormalDirWs, float2 rand) {
         const float2 barycentrics = squareToTriangle(rand);
-        const SurfacePoint surface = world.surfacePoint(instanceIndex, geometryIndex, primitiveIndex, barycentrics);
+        const SurfacePoint surface = t.surfacePoint(barycentrics, toWorld, toMesh);
 
         LightSample lightSample;
         lightSample.connection = surface.position - positionWs;
         lightSample.connection += faceForward(surface.triangleFrame.n, -lightSample.connection) * surface.spawnOffset;
-        lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
-        lightSample.eval.radiance = world.material(instanceIndex, geometryIndex).getEmissive(surface.texcoord) / lightSample.eval.pdf;
+        lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) / t.area(toWorld);
+        lightSample.eval.radiance = material.getEmissive(surface.texcoord) / lightSample.eval.pdf;
 
         return lightSample;
     }
