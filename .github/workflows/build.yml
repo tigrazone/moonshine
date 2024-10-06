@@ -31,7 +31,7 @@ jobs:
         cache: true
 
     - name: Setup Zig
-      uses: goto-bus-stop/setup-zig@v2
+      uses: mlugg/setup-zig@v1
       with:
         version: ${{env.ZIG_VERSION}}
 
@@ -54,7 +54,7 @@ jobs:
         cache: true
 
     - name: Setup Zig
-      uses: goto-bus-stop/setup-zig@v2
+      uses: mlugg/setup-zig@v1
       with:
         version: ${{env.ZIG_VERSION}}
 
