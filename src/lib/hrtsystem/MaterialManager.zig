@@ -318,7 +318,7 @@ pub const TextureManager = struct {
         defer staging_buffer.destroy(vc);
         @memcpy(staging_buffer.data, bytes);
         try encoder.begin();
-        encoder.uploadDataToImage(image.handle, staging_buffer, extent, .shader_read_only_optimal);
+        encoder.uploadDataToImage(u8, image.handle, staging_buffer, extent, .shader_read_only_optimal);
         try encoder.submitAndIdleUntilDone(vc);
 
         vc.device.updateDescriptorSets(1, @ptrCast(&.{

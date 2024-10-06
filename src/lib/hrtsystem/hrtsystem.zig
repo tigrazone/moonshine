@@ -7,6 +7,7 @@ pub const ObjectPicker = @import("ObjectPicker.zig");
 pub const pipeline = @import("pipeline.zig");
 pub const World = @import("World.zig");
 pub const Scene = @import("Scene.zig");
+pub const ConstantSpectra = @import("ConstantSpectra.zig");
 
 const vk = @import("vulkan");
 

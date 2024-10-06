@@ -86,7 +86,7 @@ pub fn idleUntilDone(self: Self, vc: *const VulkanContext) !void {
     try vc.device.resetCommandPool(self.pool, .{});
 }
 
-pub fn uploadDataToImage(self: Self, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(u8), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
+pub fn uploadDataToImage(self: Self, T: type, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(T), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
     self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {

@@ -5,6 +5,7 @@
 
 #include "../utils/math.hlsl"
 #include "../utils/mappings.hlsl"
+#include "spectrum.hlsl"
 
 float3 decodeNormal(float2 rg) {
     rg = rg * 2 - 1;
@@ -45,8 +46,8 @@ struct Material {
         return createTextureFrame(normalWorldSpace, tangentFrame);
     }
 
-    float3 getEmissive(float2 texcoords) {
-        return dTextures[NonUniformResourceIndex(emissive)].SampleLevel(dTextureSampler, texcoords, 0).rgb;
+    float getEmissive(float λ, float2 texcoords) {
+        return Spectrum::sampleEmission(λ, dTextures[NonUniformResourceIndex(emissive)].SampleLevel(dTextureSampler, texcoords, 0).rgb);
     }
 };
 
@@ -124,13 +125,9 @@ namespace Fresnel {
         return lerp(schlickWeight(cosTheta), 1, R0);
     }
 
-    float3 schlick(float cosTheta, float3 R0) {
-        return lerp(schlickWeight(cosTheta), 1, R0);
-    }
-
     // lerp between layer1 and layer2 based on schlick fresnel
-    float3 fresnelLerp(float cosTheta, float ηi, float ηt, float3 layer1, float3 layer2) {
-        float f = schlick(cosTheta, schlickR0(ηi, ηt));
+    float fresnelLerp(float cosTheta, float ηi, float ηt, float layer1, float layer2) {
+        const float f = schlick(cosTheta, schlickR0(ηi, ηt));
         return lerp(layer1, layer2, f);
     }
 
@@ -166,7 +163,7 @@ namespace Fresnel {
 };
 
 struct BSDFEvaluation {
-    float3 reflectance;
+    float reflectance;
     float pdf;
 
     static BSDFEvaluation empty() {
@@ -189,25 +186,25 @@ interface BSDF {
 
 // evenly diffuse lambertian material
 struct Lambert : BSDF {
-    float3 r; // color (technically, fraction of light that is reflected)
+    float reflectance; // fraction of light that is reflected
 
-    static Lambert create(float3 r) {
+    static Lambert create(float reflectance) {
         Lambert lambert;
-        lambert.r = r;
+        lambert.reflectance = reflectance;
         return lambert;
     }
 
-    static Lambert load(uint64_t addr, float2 texcoords) {
+    static Lambert load(const uint64_t addr, const float2 texcoords, float λ) {
         uint colorTextureIndex = vk::RawBufferLoad<uint>(addr);
 
         Lambert material;
-        material.r = dTextures[NonUniformResourceIndex(colorTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).rgb;
+        material.reflectance = Spectrum::sampleReflectance(λ, dTextures[NonUniformResourceIndex(colorTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).rgb);
         return material;
     }
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         BSDFEvaluation eval;
-        eval.reflectance = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) * r / PI : 0.0;
+        eval.reflectance = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) * reflectance / PI : 0.0;
         eval.pdf = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) / PI : 0.0;
         return eval;
     }
@@ -233,18 +230,18 @@ struct Lambert : BSDF {
 struct StandardPBR : BSDF {
     GGX distr;      // microfacet distribution used by this material
 
-    float3 color; // color - linear color; each component is [0, 1]
+    float reflectance; // reflectance - everywhere within [0, 1]
     float metalness; // metalness - k_s - part it is specular. diffuse is (1 - specular); [0, 1]
     float ior; // ior - internal index of refraction; [0, inf)
 
-    static StandardPBR load(uint64_t addr, float2 texcoords) {
+    static StandardPBR load(const uint64_t addr, const float2 texcoords, const float λ) {
         uint colorTextureIndex = vk::RawBufferLoad<uint>(addr + sizeof(uint) * 0);
         uint metalnessTextureIndex = vk::RawBufferLoad<uint>(addr + sizeof(uint) * 1);
         uint roughnessTextureIndex = vk::RawBufferLoad<uint>(addr + sizeof(uint) * 2);
         float ior = vk::RawBufferLoad<float>(addr + sizeof(uint) * 3);
 
         StandardPBR material;
-        material.color = dTextures[NonUniformResourceIndex(colorTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).rgb;
+        material.reflectance = Spectrum::sampleReflectance(λ, dTextures[NonUniformResourceIndex(colorTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).rgb);
         material.metalness = dTextures[NonUniformResourceIndex(metalnessTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).r;
         float roughness = dTextures[NonUniformResourceIndex(roughnessTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).r;
         material.distr = GGX::create(max(pow(roughness, 2), 0.001));
@@ -268,7 +265,7 @@ struct StandardPBR : BSDF {
             float3 h = distr.sample(w_o, square);
             sample.dirFs = -reflect(w_o, h);
         } else {
-            sample.dirFs = Lambert::create(color).sample(w_o, square).dirFs;
+            sample.dirFs = Lambert::create(reflectance).sample(w_o, square).dirFs;
         }
         sample.eval = evaluate(sample.dirFs, w_o);
         // ideally we would never sample something with a zero pdf...
@@ -282,7 +279,7 @@ struct StandardPBR : BSDF {
         float diffuseWeight = 1 - metalness;
         float pSpecularSample = specularWeight / (specularWeight + diffuseWeight);
 
-        float lambert_pdf = Lambert::create(color).evaluate(w_i, w_o).pdf;
+        float lambert_pdf = Lambert::create(reflectance).evaluate(w_i, w_o).pdf;
         float micro_pdf = microfacetPdf(w_i, w_o);
 
         return lerp(lambert_pdf, micro_pdf, pSpecularSample);
@@ -291,15 +288,15 @@ struct StandardPBR : BSDF {
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         float3 h = normalize(w_i + w_o);
 
-        float3 fDielectric = Fresnel::dielectric(dot(w_i, h), AIR_IOR, ior);
-        float3 fMetallic = Fresnel::schlick(dot(w_i, h), color);
+        float fDielectric = Fresnel::dielectric(dot(w_i, h), AIR_IOR, ior);
+        float fMetallic = Fresnel::schlick(dot(w_i, h), reflectance);
 
-        float3 F = lerp(fDielectric, fMetallic, metalness);
+        float F = lerp(fDielectric, fMetallic, metalness);
         float G = distr.G(w_i, w_o);
         float D = distr.D(h);
-        float3 specular = Frame::sameHemisphere(w_o, w_i) ? (F * G * D) / (4.0 * abs(Frame::cosTheta(w_i)) * abs(Frame::cosTheta(w_o))) : 0.0;
+        float specular = Frame::sameHemisphere(w_o, w_i) ? (F * G * D) / (4 * abs(Frame::cosTheta(w_i)) * abs(Frame::cosTheta(w_o))) : 0;
 
-        float3 diffuse = Lambert::create(color).evaluate(w_i, w_o).reflectance;
+        float diffuse = Lambert::create(reflectance).evaluate(w_i, w_o).reflectance;
 
         BSDFEvaluation eval;
         eval.reflectance = abs(Frame::cosTheta(w_i)) * specular + (1.0 - metalness) * diffuse;
@@ -313,22 +310,22 @@ struct StandardPBR : BSDF {
 };
 
 struct DisneyDiffuse : BSDF {
-    float3 color;
+    float reflectance;
     float roughness;
 
-    static DisneyDiffuse create(float3 color, float roughness) {
+    static DisneyDiffuse create(float reflectance, float roughness) {
         DisneyDiffuse material;
-        material.color = color;
+        material.reflectance = reflectance;
         material.roughness = roughness;
         return material;
     }
 
     BSDFSample sample(float3 w_o, float2 square) {
-        return Lambert::create(color).sample(w_o, square);
+        return Lambert::create(reflectance).sample(w_o, square);
     }
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
-        BSDFEvaluation eval = Lambert::create(color).evaluate(w_i, w_o);
+        BSDFEvaluation eval = Lambert::create(reflectance).evaluate(w_i, w_o);
 
         float3 h = normalize(w_i + w_o);
         float cosThetaHI = dot(w_i, h);
@@ -339,7 +336,7 @@ struct DisneyDiffuse : BSDF {
         float F_O = pow(1 - cosThetaNO, 5);
 
         float R_R = 2 * roughness * cosThetaHI * cosThetaHI;
-        float3 retro = R_R * (F_I + F_O + F_I * F_O * (R_R - 1));
+        float retro = R_R * (F_I + F_O + F_I * F_O * (R_R - 1));
 
         eval.reflectance *= ((1 - F_I / 2) * (1 - F_O / 2) + retro);
         return eval;
@@ -354,7 +351,7 @@ struct PerfectMirror : BSDF {
     BSDFSample sample(float3 w_o, float2 square) {
         BSDFSample sample;
         sample.dirFs = float3(-w_o.x, -w_o.y, w_o.z);
-        sample.eval.reflectance = 1.0;
+        sample.eval.reflectance = 1;
         sample.eval.pdf = 1.#INF;
         return sample;
     }
@@ -407,7 +404,7 @@ struct Glass : BSDF {
             sample.dirFs = refractDir(w_o, faceForward(float3(0.0, 0.0, 1.0), w_o), etaI / etaT);
         }
         if (all(sample.dirFs != 0.0)) {
-            sample.eval.reflectance = 1.0;
+            sample.eval.reflectance = 1;
             sample.eval.pdf = 1.#INF;
         } else {
             sample.eval = BSDFEvaluation::empty();
@@ -428,23 +425,25 @@ struct PolymorphicBSDF : BSDF {
     BSDFType type;
     uint64_t addr;
     float2 texcoords;
+    float λ;
 
-    static PolymorphicBSDF load(Material material, float2 texcoords) {
+    static PolymorphicBSDF load(Material material, float2 texcoords, float λ) {
         PolymorphicBSDF bsdf;
         bsdf.type = material.type;
         bsdf.addr = material.addr;
         bsdf.texcoords = texcoords;
+        bsdf.λ = λ;
         return bsdf;
     }
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         switch (type) {
             case BSDFType::StandardPBR: {
-                StandardPBR m = StandardPBR::load(addr, texcoords);
+                StandardPBR m = StandardPBR::load(addr, texcoords, λ);
                 return m.evaluate(w_i, w_o);
             }
             case BSDFType::Lambert: {
-                Lambert m = Lambert::load(addr, texcoords);
+                Lambert m = Lambert::load(addr, texcoords, λ);
                 return m.evaluate(w_i, w_o);
             }
             case BSDFType::PerfectMirror: {
@@ -461,11 +460,11 @@ struct PolymorphicBSDF : BSDF {
     BSDFSample sample(float3 w_o, float2 square) {
         switch (type) {
             case BSDFType::StandardPBR: {
-                StandardPBR m = StandardPBR::load(addr, texcoords);
+                StandardPBR m = StandardPBR::load(addr, texcoords, λ);
                 return m.sample(w_o, square);
             }
             case BSDFType::Lambert: {
-                Lambert m = Lambert::load(addr, texcoords);
+                Lambert m = Lambert::load(addr, texcoords, λ);
                 return m.sample(w_o, square);
             }
             case BSDFType::PerfectMirror: {

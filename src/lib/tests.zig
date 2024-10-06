@@ -61,7 +61,7 @@ const TestingContext = struct {
 
         // bind our stuff
         pipeline.recordBindPipeline(self.encoder.buffer);
-        pipeline.recordBindAdditionalDescriptorSets(self.encoder.buffer, .{ scene.world.materials.textures.descriptor_set });
+        pipeline.recordBindAdditionalDescriptorSets(self.encoder.buffer, .{ scene.world.materials.textures.descriptor_set, scene.world.constant_specta.descriptor_set });
         pipeline.recordPushDescriptors(self.encoder.buffer, scene.pushDescriptors(0, 0));
 
         for (0..spp) |sample_count| {
@@ -257,11 +257,31 @@ fn icosphere(order: usize, allocator: std.mem.Allocator, reverse_winding_order: 
 
 // TODO: use actual statistical tests
 
-// theoretically any convex shape works for the furnace test
+// some furnace tests
+//
+// theoretically any shape works for the furnace test
 // the reason to use a sphere (rather than e.g., a box or pyramid with less geometric complexity)
-// is that a sphere will test the BRDF with all incoming directions
+// is that a sphere is the simplest shape that will test the BRDF with all incoming directions
 // this is technically an argument for supporting primitives other than triangles,
 // if the goal is just to test the BRDF in the most comprehensive way
+
+// used so that we can care less for less perceptable error
+fn luminance(color: [3]f32) f32 {
+    return 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2];
+}
+
+// spectral causes a decent amount of color variance so our per-pixel error bounds
+// are fairly high.
+// however, we additionally make sure that the total image average is 1
+fn assertWhiteFurnaceImage(image: []const [4]f32) !void {
+    var average: f64 = 0.0;
+    for (image) |pixel| {
+        const val = luminance(pixel[0..3].*);
+        average += val / @as(f64, @floatFromInt(image.len));
+        if (!std.math.approxEqAbs(f32, val, 1.0, 0.3)) return error.NonWhitePixel;
+    }
+    if (!std.math.approxEqAbs(f64, average, 1.0, 0.001)) return error.NonWhiteAverage;
+}
 
 test "white sphere on white background is white" {
     const allocator = std.testing.allocator;
@@ -335,7 +355,7 @@ test "white sphere on white background is white" {
     };
     defer scene.destroy(&tc.vc, allocator);
 
-    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 0,
@@ -343,12 +363,7 @@ test "white sphere on white background is white" {
     defer pipeline.destroy(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 512);
-
-    for (tc.output_buffer.data) |pixel| {
-        for (pixel[0..3]) |component| {
-            if (!std.math.approxEqAbs(f32, component, 1.0, 0.00001)) return error.NonWhitePixel;
-        }
-    }
+    try assertWhiteFurnaceImage(tc.output_buffer.data);
 
     // do that again but with env sampling
     const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{
@@ -359,14 +374,7 @@ test "white sphere on white background is white" {
     defer tc.vc.device.destroyPipeline(other_pipeline, null);
 
     try tc.renderToOutput(&pipeline, &scene, 512);
-
-    // MIS is expected to increase variance where one sampling strategy is much better than the other
-    // so I'm fairly confident this test is expected to have fairly high error bounds
-    for (tc.output_buffer.data) |pixel| {
-        for (pixel[0..3]) |component| {
-            if (!std.math.approxEqAbs(f32, component, 1.0, 0.1)) return error.NonWhitePixel;
-        }
-    }
+    try assertWhiteFurnaceImage(tc.output_buffer.data);
 }
 
 test "inside illuminating sphere is white" {
@@ -442,7 +450,7 @@ test "inside illuminating sphere is white" {
     };
     defer scene.destroy(&tc.vc, allocator);
 
-    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 0,
@@ -450,12 +458,7 @@ test "inside illuminating sphere is white" {
     defer pipeline.destroy(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 1024);
-
-    for (tc.output_buffer.data) |pixel| {
-        for (pixel[0..3]) |component| {
-            if (!std.math.approxEqAbs(f32, component, 1.0, 0.02)) return error.NonWhitePixel;
-        }
-    }
+    try assertWhiteFurnaceImage(tc.output_buffer.data);
 
     // do that again but with mesh sampling
     const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{
@@ -466,10 +469,5 @@ test "inside illuminating sphere is white" {
     defer tc.vc.device.destroyPipeline(other_pipeline, null);
 
     try tc.renderToOutput(&pipeline, &scene, 1024);
-
-    for (tc.output_buffer.data) |pixel| {
-        for (pixel[0..3]) |component| {
-            if (!std.math.approxEqAbs(f32, component, 1.0, 0.02)) return error.NonWhitePixel;
-        }
-    }
+    try assertWhiteFurnaceImage(tc.output_buffer.data);
 }

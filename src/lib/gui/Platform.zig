@@ -222,7 +222,7 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
         defer staging_buffer.destroy(vc);
         @memcpy(staging_buffer.data, img_data);
         try encoder.begin();
-        encoder.uploadDataToImage(image.handle, staging_buffer, tex_data[1], .shader_read_only_optimal);
+        encoder.uploadDataToImage(u8, image.handle, staging_buffer, tex_data[1], .shader_read_only_optimal);
         try encoder.submitAndIdleUntilDone(vc);
         break :blk image;
         //     io.Fonts->SetTexID((ImTextureID)bd->FontDescriptorSet); TODO required?

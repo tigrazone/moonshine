@@ -20,6 +20,7 @@ const TextureManager = MaterialManager.TextureManager;
 
 const MeshManager = engine.hrtsystem.MeshManager;
 const Accel = engine.hrtsystem.Accel;
+const ConstantSpectra = engine.hrtsystem.ConstantSpectra;
 
 const vector = engine.vector;
 const Mat3x4 = vector.Mat3x4(f32);
@@ -37,6 +38,8 @@ meshes: MeshManager,
 materials: MaterialManager,
 
 accel: Accel,
+
+constant_specta: ConstantSpectra,
 
 const Self = @This();
 
@@ -381,8 +384,8 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
     return Self {
         .materials = materials,
         .meshes = meshes,
-
         .accel = accel,
+        .constant_specta = try ConstantSpectra.create(vc, vk_allocator, encoder),
     };
 }
 
@@ -394,6 +397,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
         .materials = materials,
         .meshes = .{},
         .accel = try Accel.createEmpty(vc, vk_allocator, allocator, materials.textures.descriptor_layout, encoder),
+        .constant_specta = try ConstantSpectra.create(vc, vk_allocator, encoder),
     };
 }
 
@@ -409,4 +413,5 @@ pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocat
     self.materials.destroy(vc, allocator);
     self.meshes.destroy(vc, allocator);
     self.accel.destroy(vc, allocator);
+    self.constant_specta.destroy(vc);
 }

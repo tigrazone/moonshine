@@ -111,7 +111,7 @@ const Integrator = struct {
         integrator.active = .path_tracing;
 
         inline for (@typeInfo(Variants).Struct.fields) |field| {
-            @field(integrator.variants, field.name).pipeline = try @typeInfo(field.type).Struct.fields[0].type.create(vc, vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{}, .{ scene.background.sampler });
+            @field(integrator.variants, field.name).pipeline = try @typeInfo(field.type).Struct.fields[0].type.create(vc, vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{}, .{ scene.background.sampler });
             @field(integrator.variants, field.name).options = .{};
         }
 
@@ -134,7 +134,7 @@ const Integrator = struct {
 
                 // bind some stuff
                 integrator.recordBindPipeline(encoder.buffer);
-                integrator.recordBindAdditionalDescriptorSets(encoder.buffer, .{ scene.world.materials.textures.descriptor_set });
+                integrator.recordBindAdditionalDescriptorSets(encoder.buffer, .{ scene.world.materials.textures.descriptor_set, scene.world.constant_specta.descriptor_set });
 
                 // push some stuff
                 integrator.recordPushDescriptors(encoder.buffer, scene.pushDescriptors(active_sensor, 0));

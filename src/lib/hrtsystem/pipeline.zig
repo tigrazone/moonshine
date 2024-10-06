@@ -298,7 +298,7 @@ pub const PathTracing = Pipeline(.{
         lens: Camera.Lens,
         sample_count: u32,
     },
-    .additional_descriptor_layout_count = 1,
+    .additional_descriptor_layout_count = 2,
     .PushSetBindings = StandardBindings,
     .stages = &[_]Stage {
         .{ .type = .raygen, .entrypoint = "raygen" },
@@ -319,7 +319,7 @@ pub const DirectLighting = Pipeline(.{
         lens: Camera.Lens,
         sample_count: u32,
     },
-    .additional_descriptor_layout_count = 1,
+    .additional_descriptor_layout_count = 2,
     .PushSetBindings = StandardBindings,
     .stages = &[_]Stage {
         .{ .type = .raygen, .entrypoint = "raygen" },

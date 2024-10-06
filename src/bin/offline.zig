@@ -103,7 +103,7 @@ pub fn main() !void {
 
     try logger.log("load world");
 
-    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 1,
         .mesh_samples_per_bounce = 1,
@@ -124,7 +124,7 @@ pub fn main() !void {
 
         // bind our stuff
         pipeline.recordBindPipeline(encoder.buffer);
-        pipeline.recordBindAdditionalDescriptorSets(encoder.buffer, .{ scene.world.materials.textures.descriptor_set });
+        pipeline.recordBindAdditionalDescriptorSets(encoder.buffer, .{ scene.world.materials.textures.descriptor_set, scene.world.constant_specta.descriptor_set });
         pipeline.recordPushDescriptors(encoder.buffer, scene.pushDescriptors(0, 0));
 
         for (0..config.spp) |sample_count| {

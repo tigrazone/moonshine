@@ -9,8 +9,8 @@ float3 vectorToColor(float3 v) {
     return (v + 1.0) / 2.0;
 }
 
-bool isBlack(float3 c) {
-    return all(c == float3(0, 0, 0));
+float atanh(float x) {
+    return log((1 + x) / (1 - x)) / 2;
 }
 
 float luminance(float3 color) {

@@ -42,7 +42,8 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 		for (uint j = 0; j < samples_per_dim; j++) {
 			const float2 barycentrics = squareToTriangle(float2(i, j) / float(samples_per_dim));
 			const SurfacePoint surface = world.surfacePoint(pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive, barycentrics);
-        	total_emissive += luminance(world.material(pushConsts.instanceIndex, pushConsts.geometryIndex).getEmissive(surface.texcoord));
+			const Material material = world.material(pushConsts.instanceIndex, pushConsts.geometryIndex);
+			total_emissive += luminance(dTextures[NonUniformResourceIndex(material.emissive)].SampleLevel(dTextureSampler, surface.texcoord, 0).rgb);
 		}
 	}
 

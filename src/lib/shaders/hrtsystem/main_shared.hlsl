@@ -61,11 +61,12 @@ void integrate(Integrator integrator) {
     const Ray initialRay = pushConsts.camera.generateRay(dOutputImage, imageUV, float2(rng.getFloat(), rng.getFloat()));
 
     // trace the ray
-    const float3 newSample = integrator.incomingRadiance(scene, initialRay, rng);
+    WavelengthSample w = WavelengthSample::sampleVisible(rng.getFloat());
+    const float newSample = integrator.incomingRadiance(scene, initialRay, w.λ, rng);
 
     // accumulate
     const float3 priorSampleAverage = pushConsts.sampleCount == 0 ? 0 : dOutputImage[imageCoords].xyz;
-    dOutputImage[imageCoords] = float4(accumulate(priorSampleAverage, newSample, pushConsts.sampleCount), 1);
+    dOutputImage[imageCoords] = float4(accumulate(priorSampleAverage, Spectrum::toLinearSRGB(w.λ, newSample) / w.pdf, pushConsts.sampleCount), 1);
 }
 
 struct Attributes

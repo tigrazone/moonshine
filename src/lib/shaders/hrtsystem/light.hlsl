@@ -2,10 +2,11 @@
 
 #include "world.hlsl"
 #include "material.hlsl"
+#include "spectrum.hlsl"
 #include "../utils/reservoir.hlsl"
 
 struct LightEvaluation {
-    float3 radiance;
+    float radiance;
     float pdf;
 
     static LightEvaluation empty() {
@@ -29,7 +30,7 @@ struct TriangleMetadata {
 interface Light {
     // samples a light direction based on given position, returns
     // radiance at that point from light and pdf of this direction + radiance, ignoring visibility
-    LightSample sample(float3 positionWs, float2 square);
+    LightSample sample(float λ, float3 positionWs, float2 square);
 };
 
 struct EnvMap : Light {
@@ -45,7 +46,7 @@ struct EnvMap : Light {
         return map;
     }
 
-    LightSample sample(float3 positionWs, float2 rand) {
+    LightSample sample(float λ, float3 positionWs, float2 rand) {
         const uint size = textureDimensions(luminanceTexture).x;
         const uint mipCount = log2(size) + 1;
 
@@ -69,13 +70,13 @@ struct EnvMap : Light {
         LightSample lightSample;
         lightSample.connection = squareToEqualAreaSphere(uv) * envMapDistance;
         lightSample.eval.pdf = discretePdf / (4.0 * PI);
-        lightSample.eval.radiance = rgbTexture[idx] / lightSample.eval.pdf;
+        lightSample.eval.radiance = Spectrum::sampleEmission(λ, rgbTexture[idx]) / lightSample.eval.pdf;
 
         return lightSample;
     }
 
     // pdf is with respect to solid angle (no trace)
-    LightEvaluation evaluate(float3 dirWs) {
+    LightEvaluation evaluate(float λ, float3 dirWs) {
         const uint size = textureDimensions(luminanceTexture).x;
         const uint mipCount = log2(size) + 1;
         const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
@@ -88,7 +89,7 @@ struct EnvMap : Light {
 
         LightEvaluation eval;
         eval.pdf = discretePdf / (4.0 * PI);
-        eval.radiance = rgbTexture[idx];
+        eval.radiance = Spectrum::sampleEmission(λ, rgbTexture[idx]);
         return eval;
     }
 };
@@ -115,7 +116,7 @@ struct TriangleLight: Light {
         return light;
     }
 
-    LightSample sample(float3 positionWs, float2 rand) {
+    LightSample sample(float λ, float3 positionWs, float2 rand) {
         const float2 barycentrics = squareToTriangle(rand);
         const SurfacePoint surface = t.surfacePoint(barycentrics, toWorld, toMesh);
 
@@ -123,7 +124,7 @@ struct TriangleLight: Light {
         lightSample.connection = surface.position - positionWs;
         lightSample.connection += faceForward(surface.triangleFrame.n, -lightSample.connection) * surface.spawnOffset;
         lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) / t.area(toWorld);
-        lightSample.eval.radiance = material.getEmissive(surface.texcoord) / lightSample.eval.pdf;
+        lightSample.eval.radiance = material.getEmissive(λ, surface.texcoord) / lightSample.eval.pdf;
 
         return lightSample;
     }
@@ -147,7 +148,7 @@ struct MeshLights : Light {
         return lights;
     }
 
-    LightSample sample(float3 positionWs, float2 rand) {
+    LightSample sample(float λ, float3 positionWs, float2 rand) {
         LightSample lightSample;
         lightSample.eval = LightEvaluation::empty();
 
@@ -170,7 +171,7 @@ struct MeshLights : Light {
         const uint primitiveIndex = idx - geometryToTrianglePowerOffset[instanceID + meta.geometryIndex];
 
         const TriangleLight inner = TriangleLight::create(meta.instanceIndex, meta.geometryIndex, primitiveIndex, world);
-        lightSample = inner.sample(positionWs, rand);
+        lightSample = inner.sample(λ, positionWs, rand);
         lightSample.eval.pdf *= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
         lightSample.eval.radiance /= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
         return lightSample;
