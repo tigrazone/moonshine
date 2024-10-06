@@ -216,7 +216,9 @@ struct Lambert : BSDF {
         BSDFSample sample;
         sample.dirFs = w_i;
         sample.eval = evaluate(w_i, w_o);
-        sample.eval.reflectance /= sample.eval.pdf;
+        // ideally we would never sample something with a zero pdf...
+        // not sure if there's a bug here currently or if this is to be expected
+        sample.eval.reflectance = sample.eval.pdf > 0 ? sample.eval.reflectance / sample.eval.pdf : 0;
         return sample;
     }
 
