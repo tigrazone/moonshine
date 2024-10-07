@@ -40,18 +40,15 @@
 * Tonemapping
 * HDR display
 * Cameras
-  * Projection
-    * Orthographic
-    * Arbitrary distortion
-  * Bloom
-  * Glare
+ * Orthographic
+ * Fisheye
+ * Lens System
 * Materials
   * Metal
   * Transmissive with roughness
   * Mix
   * Layer
 * Volumetric
-* Spectral
 * Lights
   * Experiment with sampling triangle via solid angle after selecting it via area
   * Experiment with unifying sampling mesh lights and environment map
@@ -66,8 +63,7 @@
   * Need some sort of way to do async resource creation (transfers, processing)
 * Use physical (with correct scales) units
 * Integrators
-  * ReSTIR DI
-  * ReSTIR PT
+  * ReSTIR
 
 ### Some notes about conventions
 * `+z` is up
