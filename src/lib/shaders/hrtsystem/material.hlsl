@@ -378,12 +378,18 @@ float3 refractDir(float3 wi, float3 n, float eta) {
     return eta * -wi + (eta * cosThetaI - cosThetaT) * n;
 }
 
+float cauchyIOR(const float a, const float b, const float λ) {
+    return a + b / (λ * λ);
+}
+
 struct Glass : BSDF {
     float intIOR;
 
-    static Glass load(uint64_t addr) {
+    static Glass load(const uint64_t addr, const float λ) {
         Glass material;
-        material.intIOR = vk::RawBufferLoad<float>(addr);
+        const float a = vk::RawBufferLoad<float>(addr + sizeof(float) * 0);
+        const float b = vk::RawBufferLoad<float>(addr + sizeof(float) * 1);
+        material.intIOR = cauchyIOR(a, b, λ);
         return material;
     }
 
@@ -453,7 +459,7 @@ struct PolymorphicBSDF : BSDF {
                 return m.evaluate(w_i, w_o);
             }
             case BSDFType::Glass: {
-                Glass m = Glass::load(addr);
+                Glass m = Glass::load(addr, λ);
                 return m.evaluate(w_i, w_o);
             }
         }
@@ -474,7 +480,7 @@ struct PolymorphicBSDF : BSDF {
                 return m.sample(w_o, square);
             }
             case BSDFType::Glass: {
-                Glass m = Glass::load(addr);
+                Glass m = Glass::load(addr, λ);
                 return m.sample(w_o, square);
             }
         }

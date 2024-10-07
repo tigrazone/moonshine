@@ -75,7 +75,8 @@ pub const Lambert = extern struct {
 };
 
 pub const Glass = extern struct {
-    ior: f32,
+    cauchy_a: f32,
+    cauchy_b: f32,
 };
 
 // takes in a tagged union and returns a struct that has each of the union fields as a field,

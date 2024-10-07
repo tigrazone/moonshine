@@ -123,7 +123,16 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
     standard_pbr.ior = gltf_material.ior;
 
     if (gltf_material.transmission_factor == 1.0) {
-        material.bsdf = .{ .glass = .{ .ior = standard_pbr.ior } };
+        // infer cauchy's equation A, B constants assuming IOR
+        // was measured at 560nm and material has dispersion of BK7
+        const b = 0.00420; // BK7
+        const b_nm = b * 1000000.0;  // μm2 to nm2
+        const measured_ior_wavelength = 560.0;
+        const a = standard_pbr.ior - b_nm / (measured_ior_wavelength * measured_ior_wavelength);
+        material.bsdf = .{ .glass = .{
+            .cauchy_a = a,
+            .cauchy_b = b_nm,
+        }};
         return material;
     }
 
