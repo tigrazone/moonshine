@@ -62,6 +62,7 @@
   * GPU resource arrays should be resizable
   * Need some sort of way to do async resource creation (transfers, processing)
 * Use physical (with correct scales) units
+* Spectral EXR output
 * Integrators
   * ReSTIR
 
