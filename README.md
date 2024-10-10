@@ -39,6 +39,7 @@
 ### // TODO
 * Tonemapping
 * HDR display
+  * A satisfying implementation is blocked by [this](https://github.com/KhronosGroup/Vulkan-Docs/issues/1787)
 * Cameras
   * Orthographic
   * Fisheye
