@@ -2,7 +2,7 @@
 
 # Moonshine
 
-**A general purpose GPU ray traced renderer built with Zig + Vulkan**
+**A spectral path tracer built with Zig + Vulkan**
 </div>
 
 [![A bathroom scene rendered with moonshine](https://repository-images.githubusercontent.com/378788480/b9ad3836-4558-43f6-82ed-6668d99399b4)](https://blendswap.com/blend/12584)
@@ -14,7 +14,7 @@
     * online -- a real-time windowed renderer
     * hydra -- a hydra render delegate
 * Light Transport
-    * Full path tracing
+    * Full spectral path tracing
     * Direct light sampling with multiple importance sampling for all lights and materials
 * Lights
     * 360° environment maps
@@ -22,7 +22,7 @@
 * Materials
     * Standard PBR with metallic + roughness
     * Mirror
-    * Glass
+    * Glass with dispersion
 
 ### Dependencies
 #### Build
@@ -32,27 +32,23 @@
   * For Linux (Ubuntu, similar on others):
       * For Wayland: `wayland-protocols` `libwayland-dev` `libxkbcommon-dev`
       * For X11: `libxcursor-dev` `libxrandr-dev` `libxinerama-dev` `libxi-dev`
-  * Should work on Windows without additional dependencies
 #### Run
 * A GPU supporting Vulkan ray tracing
 
 ### // TODO
-* Tonemapping
-* HDR display
-  * A satisfying implementation is blocked by [this](https://github.com/KhronosGroup/Vulkan-Docs/issues/1787)
 * Cameras
   * Orthographic
   * Fisheye
   * Lens System
 * Materials
-  * Metal
+  * Conductor with complex IOR
   * Transmissive with roughness
-  * Mix
-  * Layer
-* Volumetric
+  * Material composition
+* Volumetrics
 * Lights
   * Experiment with sampling triangle via solid angle after selecting it via area
   * Experiment with unifying sampling mesh lights and environment map
+  * BVH
 * Testing
   * Proper statistical tests GPU sampling routines
   * Proper statistical tests to make sure images have expected mean/variance
@@ -63,9 +59,12 @@
   * GPU resource arrays should be resizable
   * Need some sort of way to do async resource creation (transfers, processing)
 * Use physical (with correct scales) units
-* Spectral EXR output
 * Integrators
   * ReSTIR
+* Spectral EXR output
+* Tonemapping
+* HDR display
+  * A satisfying implementation is blocked by [HDR display metadata querying in Vulkan](https://github.com/KhronosGroup/Vulkan-Docs/issues/1787)
 
 ### Some notes about conventions
 * `+z` is up
@@ -77,7 +76,6 @@
 - [Multiple importance sampling](https://graphics.stanford.edu/courses/cs348b-03/papers/veach-chapter9.pdf)
 - [Microfacets](https://agraphicsguy.wordpress.com/2015/11/01/sampling-microfacet-brdf/)
 - [Actual materials](https://github.com/wdas/brdf) - ton of BRDF examples, in **CODE**!
-- [Better sky](https://sebh.github.io/publications/egsr2020.pdf)
 
 ### License
 
