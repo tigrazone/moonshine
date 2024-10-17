@@ -86,15 +86,15 @@ const Integrator = struct {
     };
 
     const Type = blk: {
-        var fields: [@typeInfo(Variants).Struct.fields.len]std.builtin.Type.EnumField = undefined;
-        for (@typeInfo(Variants).Struct.fields, &fields, 0..) |struct_field, *enum_field, i| {
+        var fields: [@typeInfo(Variants).@"struct".fields.len]std.builtin.Type.EnumField = undefined;
+        for (@typeInfo(Variants).@"struct".fields, &fields, 0..) |struct_field, *enum_field, i| {
             enum_field.* = std.builtin.Type.EnumField {
                 .name = struct_field.name,
                 .value = i,
             };
         }
         break :blk @Type(std.builtin.Type {
-            .Enum = std.builtin.Type.Enum {
+            .@"enum" = std.builtin.Type.Enum {
                 .tag_type = usize,
                 .fields = &fields,
                 .decls = &.{},
@@ -110,8 +110,8 @@ const Integrator = struct {
         var integrator: Integrator = undefined;
         integrator.active = .path_tracing;
 
-        inline for (@typeInfo(Variants).Struct.fields) |field| {
-            @field(integrator.variants, field.name).pipeline = try @typeInfo(field.type).Struct.fields[0].type.create(vc, vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{}, .{ scene.background.sampler });
+        inline for (@typeInfo(Variants).@"struct".fields) |field| {
+            @field(integrator.variants, field.name).pipeline = try @typeInfo(field.type).@"struct".fields[0].type.create(vc, vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{}, .{ scene.background.sampler });
             @field(integrator.variants, field.name).options = .{};
         }
 
@@ -119,16 +119,16 @@ const Integrator = struct {
     }
 
     // recreates all so that a change in a shader doesn't get missed
-    pub fn recreate(self: *Integrator, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder) std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).Struct.fields.len) {
-        var out = std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).Struct.fields.len) {};
-        inline for (@typeInfo(Variants).Struct.fields) |field| {
+    pub fn recreate(self: *Integrator, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder) std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).@"struct".fields.len) {
+        var out = std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).@"struct".fields.len) {};
+        inline for (@typeInfo(Variants).@"struct".fields) |field| {
             out.append(@field(self.variants, field.name).pipeline.recreate(vc, vk_allocator, allocator, encoder, @field(self.variants, field.name).options)) catch unreachable;
         }
         return out;
     }
 
     pub fn integrate(self: Integrator, scene: Scene, encoder: Encoder, active_sensor: u32) void {
-        inline for (@typeInfo(Variants).Struct.fields) |field| {
+        inline for (@typeInfo(Variants).@"struct".fields) |field| {
             if (std.mem.eql(u8, field.name, @tagName(self.active))) {
                 const integrator = @field(self.variants, field.name).pipeline;
 
@@ -148,9 +148,9 @@ const Integrator = struct {
     }
 
     pub fn exposeToImgui(self: *Integrator) void {
-        inline for (@typeInfo(Variants).Struct.fields) |field| {
+        inline for (@typeInfo(Variants).@"struct".fields) |field| {
             if (std.mem.eql(u8, field.name, @tagName(self.active))) {
-                inline for (@typeInfo(@TypeOf(@field(self.variants, field.name).options)).Struct.fields) |option| {
+                inline for (@typeInfo(@TypeOf(@field(self.variants, field.name).options)).@"struct".fields) |option| {
                     _ = switch (option.type) {
                         u32 => imgui.dragScalar(u32, option.name, &@field(@field(self.variants, field.name).options, option.name), 1.0, 0, std.math.maxInt(u32)),
                         else => unreachable, // TODO
@@ -163,7 +163,7 @@ const Integrator = struct {
     }
 
     pub fn destroy(self: *Integrator, vc: *const VulkanContext) void {
-        inline for (@typeInfo(Variants).Struct.fields) |field| {
+        inline for (@typeInfo(Variants).@"struct".fields) |field| {
             @field(self.variants, field.name).pipeline.destroy(vc);
         }
     }
@@ -334,12 +334,12 @@ pub fn main() !void {
                 try imgui.textFmt("normal: {}", .{material.normal});
                 try imgui.textFmt("emissive: {}", .{material.emissive});
                 try imgui.textFmt("type: {s}", .{@tagName(material.type)});
-                inline for (@typeInfo(MaterialManager.BSDF).Enum.fields, @typeInfo(MaterialManager.PolymorphicBSDF).Union.fields) |enum_field, union_field| {
+                inline for (@typeInfo(MaterialManager.BSDF).@"enum".fields, @typeInfo(MaterialManager.PolymorphicBSDF).@"union".fields) |enum_field, union_field| {
                     const VariantType = union_field.type;
                     if (VariantType != void and enum_field.value == @intFromEnum(material.type)) {
                         const material_idx: u32 = @intCast((material.addr - @field(scene.world.materials.variant_buffers, enum_field.name).addr) / @sizeOf(VariantType));
                         var material_variant = try sync_copier.copyBufferItem(&context, VariantType, @field(scene.world.materials.variant_buffers, enum_field.name).buffer, material_idx);
-                        inline for (@typeInfo(VariantType).Struct.fields) |struct_field| {
+                        inline for (@typeInfo(VariantType).@"struct".fields) |struct_field| {
                             switch (struct_field.type) {
                                 f32 => if (imgui.dragScalar(f32, (struct_field.name[0..struct_field.name.len].* ++ .{ 0 })[0..struct_field.name.len :0], &@field(material_variant, struct_field.name), 0.01, 0, std.math.inf(f32))) {
                                     scene.world.materials.recordUpdateSingleVariant(VariantType, frame_encoder.buffer, material_idx, material_variant);

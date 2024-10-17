@@ -4,8 +4,8 @@
 
     .dependencies = .{
         .vulkan_zig = .{
-            .url = "https://github.com/Snektron/vulkan-zig/archive/f2c2e0ff80374563357cc4fe72bf7d8a2c956824.tar.gz",
-            .hash = "1220cf0972c6fe05437c1a8689b955084385eb7ca1f8c14010d49ca5a89570a5d90d",
+            .url = "https://github.com/Snektron/vulkan-zig/archive/e43d635893de4c8b89d5ca8aa142984872b7e68f.tar.gz",
+            .hash = "122064f889ea10097a67fc28744fe95d0bfde9af252de147a9b90aa55cecfc30c01c",
         },
         .vulkan_headers = .{
             .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/5677bafb820e476441e9e1f745371b72133407d3.tar.gz",
@@ -28,12 +28,12 @@
             .hash = "12200bc8d56902f9f4c74f9561a77c8b606007f0c153de48c0192c9d4264dbcbe5db",
         },
         .zgltf = .{
-            .url = "https://github.com/ashpil/zgltf/archive/b26bc5bae7a0c03821ca4d73ec26d2bbad1f5bf2.tar.gz",
-            .hash = "1220ff2dbebeb83461da67b185d994ae61ebcea747c1bfbfb48b23c8e456cc53ea83",
+            .url = "https://github.com/kooparse/zgltf/archive/b8a821d5fc6d1cd2913cead6cc149f94cfbc92ae.tar.gz",
+            .hash = "1220ebbbf8f55960a27c4d0543463b26662b12d5d9d801abf2eba665859b9bfdbd15",
         },
         .zigimg = .{
-            .url = "https://github.com/zigimg/zigimg/archive/3a667bdb3d7f0955a5a51c8468eac83210c1439e.tar.gz",
-            .hash = "1220dd654ef941fc76fd96f9ec6adadf83f69b9887a0d3f4ee5ac0a1a3e11be35cf5",
+            .url = "https://github.com/ashpil/zigimg/archive/7894b364da45ab86a4531a85d77156b5b884045d.tar.gz",
+            .hash = "1220a2a889f0072592454d0c156ab9a8029c8671b014f75b50701353268c8374d81c",
         },
     },
     .paths = .{

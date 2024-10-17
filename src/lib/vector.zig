@@ -6,13 +6,13 @@ const std = @import("std");
 const math = std.math;
 
 fn checkValidVecT(comptime T: type) void {
-    if (!(@typeInfo(T) == .Float or @typeInfo(T) == .Int)) {
+    if (!(@typeInfo(T) == .float or @typeInfo(T) == .int)) {
         @compileError("You dum dum, you can't do addition over " ++ @typeName(T) ++ "!");
     }
 }
 
 fn intToT(comptime T: type, comptime int: comptime_int) T {
-    if (@typeInfo(T) == .Float) return @floatFromInt(int);
+    if (@typeInfo(T) == .float) return @floatFromInt(int);
     return @intCast(int);
 }
 
@@ -330,7 +330,7 @@ pub fn Mat3x4(comptime T: type) type {
             try writer.writeAll(" }");
         }
 
-        pub usingnamespace if (@typeInfo(T) != .Float) struct {} else struct {
+        pub usingnamespace if (@typeInfo(T) != .float) struct {} else struct {
             pub fn from_rotation(axis: Vec3T, angle: f32) Self {
                 const sin = math.sin(angle);
                 const cos = math.cos(angle);
@@ -420,7 +420,7 @@ pub fn Mat4(comptime T: type) type {
             return Self.new(x, y, z, w);
         }
 
-        pub usingnamespace if (@typeInfo(T) != .Float) struct {} else struct {
+        pub usingnamespace if (@typeInfo(T) != .float) struct {} else struct {
             pub fn fromAxisAngle(axis: Vec3T, radians: T) Self {
                 const axis_sin = axis.mul_scalar(math.sin(radians));
                 const cos = math.cos(radians);
@@ -515,7 +515,7 @@ pub fn Mat3(comptime T: type) type {
             );
         }
 
-        pub usingnamespace if (@typeInfo(T) != .Float) struct {} else struct {
+        pub usingnamespace if (@typeInfo(T) != .float) struct {} else struct {
             pub fn inverse(self: Self) Self {
                 const det = self.determinant();
                 std.debug.assert(det != 0);

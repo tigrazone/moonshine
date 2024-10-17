@@ -53,7 +53,7 @@ fn intToStatus(err_code: c_int) TinyExrError!void {
 }
 
 pub fn RetType(comptime T: type) type {
-    return switch (@typeInfo(T).Fn.return_type.?) {
+    return switch (@typeInfo(T).@"fn".return_type.?) {
         c_int => void,
         usize => usize,
         else => unreachable, // TODO
@@ -64,7 +64,7 @@ pub fn handleError(func: anytype, args: anytype) TinyExrError!RetType(@TypeOf(fu
     var err_message: [*c]u8 = undefined;
     const ref = &err_message;
     const new_args = args ++ .{ ref };
-    switch (@typeInfo(@TypeOf(func)).Fn.return_type.?) {
+    switch (@typeInfo(@TypeOf(func)).@"fn".return_type.?) {
         c_int => intToStatus(@call(.auto, func, new_args)) catch |err| {
             std.log.err("tinyexr: {}: {s}", .{ err, err_message });
             c.FreeEXRErrorMessage(err_message);

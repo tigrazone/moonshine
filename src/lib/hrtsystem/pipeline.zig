@@ -102,7 +102,7 @@ pub fn Pipeline(comptime options: struct {
             }
 
             if (@sizeOf(SpecConstants) != 0) {
-                const inner_fields = @typeInfo(SpecConstants).Struct.fields;
+                const inner_fields = @typeInfo(SpecConstants).@"struct".fields;
                 var map_entries: [inner_fields.len]vk.SpecializationMapEntry = undefined;
                 inline for (&map_entries, inner_fields, 0..) |*map_entry, inner_field, j| {
                     map_entry.* = vk.SpecializationMapEntry {
@@ -176,7 +176,7 @@ pub fn Pipeline(comptime options: struct {
             }
 
             if (@sizeOf(SpecConstants) != 0) {
-                const inner_fields = @typeInfo(SpecConstants).Struct.fields;
+                const inner_fields = @typeInfo(SpecConstants).@"struct".fields;
                 var map_entries: [inner_fields.len]vk.SpecializationMapEntry = undefined;
                 inline for (&map_entries, inner_fields, 0..) |*map_entry, inner_field, j| {
                     map_entry.* = vk.SpecializationMapEntry {
@@ -248,7 +248,7 @@ pub fn Pipeline(comptime options: struct {
 
         pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, bindings: options.PushSetBindings) void {
             const writes = core.pipeline.pushDescriptorDataToWriteDescriptor(options.PushSetBindings, bindings);
-            command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.bindings.layout, 0, writes.len, &writes.buffer);
+            command_buffer.pushDescriptorSetKHR(.ray_tracing_khr, self.bindings.layout, 0, @intCast(writes.len), &writes.buffer);
         }
     };
 }

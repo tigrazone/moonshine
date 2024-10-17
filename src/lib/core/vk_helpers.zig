@@ -38,20 +38,20 @@ pub fn imageSizeInBytes(format: vk.Format, extent: vk.Extent2D) u32 {
 }
 
 fn GetVkSliceInternal(comptime func: anytype) type {
-    const params = @typeInfo(@TypeOf(func)).Fn.params;
+    const params = @typeInfo(@TypeOf(func)).@"fn".params;
     const OptionalType = params[params.len - 1].type.?;
-    const PtrType = @typeInfo(OptionalType).Optional.child;
-    return @typeInfo(PtrType).Pointer.child;
+    const PtrType = @typeInfo(OptionalType).optional.child;
+    return @typeInfo(PtrType).pointer.child;
 }
 
 fn GetVkSliceBoundedReturn(comptime max_size: comptime_int, comptime func: anytype) type {
-    const FuncReturn = @typeInfo(@TypeOf(func)).Fn.return_type.?;
+    const FuncReturn = @typeInfo(@TypeOf(func)).@"fn".return_type.?;
 
     const BaseReturn = std.BoundedArray(GetVkSliceInternal(func), max_size);
 
     return switch (@typeInfo(FuncReturn)) {
-        .ErrorUnion => |err| err.error_set!BaseReturn,
-        .Void => BaseReturn,
+        .error_union => |err| err.error_set!BaseReturn,
+        .void => BaseReturn,
         else => unreachable,
     };
 }
@@ -64,11 +64,11 @@ fn GetVkSliceBoundedReturn(comptime max_size: comptime_int, comptime func: anyty
 // in safe modes, checks that the actual size does not exceed the maximum size, which may call the function more than once
 pub fn getVkSliceBounded(comptime max_size: comptime_int, func: anytype, partial_args: anytype) GetVkSliceBoundedReturn(max_size, func) {
     const T = GetVkSliceInternal(func);
-    
+
     var buffer: [max_size]T = undefined;
     var len: u32 = max_size;
 
-    const always_succeeds = @typeInfo(@TypeOf(func)).Fn.return_type == void;
+    const always_succeeds = @typeInfo(@TypeOf(func)).@"fn".return_type == void;
     if (always_succeeds) {
         if (std.debug.runtime_safety) {
             var actual_len: u32 = undefined;

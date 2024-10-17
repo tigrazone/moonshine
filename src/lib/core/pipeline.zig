@@ -80,18 +80,18 @@ fn typeToDescriptorType(comptime t: type) vk.DescriptorType {
     };
 }
 
-fn createPushDescriptorBindings(comptime Bindings: type, comptime stage_flags: vk.ShaderStageFlags) [@typeInfo(Bindings).Struct.fields.len]descriptor.Binding {
-    var bindings: [@typeInfo(Bindings).Struct.fields.len]descriptor.Binding = undefined;
-    for (@typeInfo(Bindings).Struct.fields, &bindings) |field, *binding| {
+fn createPushDescriptorBindings(comptime Bindings: type, comptime stage_flags: vk.ShaderStageFlags) [@typeInfo(Bindings).@"struct".fields.len]descriptor.Binding {
+    var bindings: [@typeInfo(Bindings).@"struct".fields.len]descriptor.Binding = undefined;
+    for (@typeInfo(Bindings).@"struct".fields, &bindings) |field, *binding| {
         const descriptor_type = typeToDescriptorType(switch (@typeInfo(field.type)) {
-            .Optional => |optional| optional.child,
+            .optional => |optional| optional.child,
             else => field.type,
         });
         binding.* = descriptor.Binding {
             .descriptor_type = descriptor_type,
             .descriptor_count = 1,
             .stage_flags = stage_flags,
-            .binding_flags = if (@typeInfo(field.type) == .Optional) .{ .partially_bound_bit = true } else .{},
+            .binding_flags = if (@typeInfo(field.type) == .optional) .{ .partially_bound_bit = true } else .{},
         };
     }
 
@@ -100,14 +100,14 @@ fn createPushDescriptorBindings(comptime Bindings: type, comptime stage_flags: v
 
 // inline so that the temporaries here end up in the parent function
 // not sure if this is part of the spec but seems to work
-pub inline fn pushDescriptorDataToWriteDescriptor(BindingsType: type, bindings: BindingsType) std.BoundedArray(vk.WriteDescriptorSet, @typeInfo(BindingsType).Struct.fields.len) {
-    var writes: [@typeInfo(BindingsType).Struct.fields.len]vk.WriteDescriptorSet = undefined;
-    inline for (@typeInfo(BindingsType).Struct.fields, &writes, 0..) |binding, *write, i| {
+pub inline fn pushDescriptorDataToWriteDescriptor(BindingsType: type, bindings: BindingsType) std.BoundedArray(vk.WriteDescriptorSet, @typeInfo(BindingsType).@"struct".fields.len) {
+    var writes: [@typeInfo(BindingsType).@"struct".fields.len]vk.WriteDescriptorSet = undefined;
+    inline for (@typeInfo(BindingsType).@"struct".fields, &writes, 0..) |binding, *write, i| {
         const descriptor_type = comptime typeToDescriptorType(switch (@typeInfo(binding.type)) {
-            .Optional => |optional| optional.child,
+            .optional => |optional| optional.child,
             else => binding.type,
         });
-        const binding_value = if (@typeInfo(binding.type) == .Optional) @field(bindings, binding.name).? else @field(bindings, binding.name);
+        const binding_value = if (@typeInfo(binding.type) == .optional) @field(bindings, binding.name).? else @field(bindings, binding.name);
         write.* = switch (descriptor_type) {
             .storage_buffer => vk.WriteDescriptorSet {
                 .dst_set = undefined,
@@ -171,7 +171,7 @@ pub inline fn pushDescriptorDataToWriteDescriptor(BindingsType: type, bindings: 
 
     // remove any writes we may not actually want, e.g.,
     // samplers or zero-size things
-    var pruned_writes = std.BoundedArray(vk.WriteDescriptorSet, @typeInfo(BindingsType).Struct.fields.len) {};
+    var pruned_writes = std.BoundedArray(vk.WriteDescriptorSet, @typeInfo(BindingsType).@"struct".fields.len) {};
     for (writes) |write| {
         if (write.descriptor_type == .sampler) continue;
         if (write.descriptor_count == 0) continue;
@@ -280,7 +280,7 @@ pub fn Pipeline(comptime options: struct {
             };
 
             if (@sizeOf(SpecConstants) != 0) {
-                const inner_fields = @typeInfo(SpecConstants).Struct.fields;
+                const inner_fields = @typeInfo(SpecConstants).@"struct".fields;
                 var map_entries: [inner_fields.len]vk.SpecializationMapEntry = undefined;
                 inline for (&map_entries, inner_fields, 0..) |*map_entry, inner_field, j| {
                     map_entry.* = vk.SpecializationMapEntry {
@@ -342,7 +342,7 @@ pub fn Pipeline(comptime options: struct {
 
         pub fn recordPushDescriptors(self: *const Self, command_buffer: VulkanContext.CommandBuffer, bindings: options.PushSetBindings) void {
             const writes = pushDescriptorDataToWriteDescriptor(options.PushSetBindings, bindings);
-            command_buffer.pushDescriptorSetKHR(.compute, self.bindings.layout, 0, writes.len, &writes.buffer);
+            command_buffer.pushDescriptorSetKHR(.compute, self.bindings.layout, 0, @intCast(writes.len), &writes.buffer);
         }
     };
 }

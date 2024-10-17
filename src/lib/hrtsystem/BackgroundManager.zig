@@ -321,7 +321,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
                 .image = luminance_image.handle,
                 .subresource_range = .{
                     .aspect_mask = .{ .color_bit = true },
-                    .base_mip_level = luminance_mips_views.len - 1,
+                    .base_mip_level = @intCast(luminance_mips_views.len - 1),
                     .level_count = 1,
                     .base_array_layer = 0,
                     .layer_count = vk.REMAINING_ARRAY_LAYERS,

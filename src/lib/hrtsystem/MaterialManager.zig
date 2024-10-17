@@ -84,8 +84,8 @@ pub const Glass = extern struct {
 //
 // sometimes I have a little too much fun with metaprogramming
 fn StructFromTaggedUnion(comptime Union: type, comptime InnerFn: fn(type) type) type {
-    if (@typeInfo(Union) != .Union) @compileError(@typeName(Union) ++ " must be a union, but is not");
-    const variants = @typeInfo(Union).Union.fields;
+    if (@typeInfo(Union) != .@"union") @compileError(@typeName(Union) ++ " must be a union, but is not");
+    const variants = @typeInfo(Union).@"union".fields;
     comptime var fields: [variants.len]std.builtin.Type.StructField = undefined;
     for (&fields, variants) |*field, variant| {
         const T = InnerFn(variant.type);
@@ -98,7 +98,7 @@ fn StructFromTaggedUnion(comptime Union: type, comptime InnerFn: fn(type) type) 
         };
     }
     return @Type(.{
-        .Struct = .{
+        .@"struct" = .{
             .layout = .auto,
             .fields = &fields,
             .decls = &.{},
@@ -144,7 +144,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
     std.debug.assert(self.material_count < max_materials);
 
     try encoder.begin();
-    inline for (@typeInfo(PolymorphicBSDF).Union.fields, 0..) |field, field_idx| {
+    inline for (@typeInfo(PolymorphicBSDF).@"union".fields, 0..) |field, field_idx| {
         if (@as(BSDF, @enumFromInt(field_idx)) == std.meta.activeTag(info.bsdf)) {
             if (@sizeOf(field.type) != 0) {
                 const variant_buffer = &@field(self.variant_buffers, field.name);
@@ -173,7 +173,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
 }
 
 pub fn recordUpdateSingleVariant(self: *Self, comptime VariantType: type, command_buffer: VulkanContext.CommandBuffer, variant_idx: u32, new_data: VariantType) void {
-    const variant_name = inline for (@typeInfo(PolymorphicBSDF).Union.fields) |union_field| {
+    const variant_name = inline for (@typeInfo(PolymorphicBSDF).@"union".fields) |union_field| {
         if (union_field.type == VariantType) {
             break union_field.name;
         }
@@ -203,7 +203,7 @@ pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocat
     self.textures.destroy(vc, allocator);
     self.materials.destroy(vc);
 
-    inline for (@typeInfo(VariantBuffers).Struct.fields) |field| {
+    inline for (@typeInfo(VariantBuffers).@"struct".fields) |field| {
         @field(self.variant_buffers, field.name).buffer.destroy(vc);
     }
 }
