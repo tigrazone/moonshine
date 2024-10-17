@@ -8,8 +8,8 @@
             .hash = "122064f889ea10097a67fc28744fe95d0bfde9af252de147a9b90aa55cecfc30c01c",
         },
         .vulkan_headers = .{
-            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/5677bafb820e476441e9e1f745371b72133407d3.tar.gz",
-            .hash = "1220afc8e6bb47f2b8a1eebed3a696e1e7d65f16c80b01f226e3a0c6c78f00a28ef3",
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/d91597a82f881d473887b560a03a7edf2720b72c.tar.gz",
+            .hash = "12202a292251ee4089ba107bff1357ac705c004bf7546f9cb852a1fb5019ba36ca65",
         },
         .cimgui = .{
             .url = "https://github.com/ashpil/cimgui/archive/97684ddceec2e4b9d15c4d6aa67dd7230f94b513.tar.gz",
@@ -20,12 +20,12 @@
             .hash = "1220ff68019b489a1567e4ef5eca451cf135391f7052442a6f0cff78fbe5cde903da",
         },
         .glfw = .{
-            .url = "https://github.com/glfw/glfw/archive/9a87635686c7fcb63ca63149c5b179b85a53a725.tar.gz",
-            .hash = "12203c62e66cdd7b9ae369f98ce770468adffb52138645e8c8cfb7efcf3304f95654",
+            .url = "https://github.com/glfw/glfw/archive/b35641f4a3c62aa86a0b3c983d163bc0fe36026d.tar.gz",
+            .hash = "1220652aad4648a186946f8fe6ff678f71769ca41ec0db9d6c3bd976b443f9cbcfa7",
         },
         .tinyexr = .{
-            .url = "https://github.com/syoyo/tinyexr/archive/2a5ea89728ed3baac746a75b806a97f402e197c2.tar.gz",
-            .hash = "12200bc8d56902f9f4c74f9561a77c8b606007f0c153de48c0192c9d4264dbcbe5db",
+            .url = "https://github.com/syoyo/tinyexr/archive/5fcb4dcb6e3abf96214b67e5c54db1ceec6a455c.tar.gz",
+            .hash = "1220a8e86c279b89ae07dbb82585334a5c53ebc49a5681a4d7eb757fe8b30d7aeb38",
         },
         .zgltf = .{
             .url = "https://github.com/kooparse/zgltf/archive/b8a821d5fc6d1cd2913cead6cc149f94cfbc92ae.tar.gz",

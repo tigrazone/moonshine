@@ -459,7 +459,7 @@ fn makeGlfwLibrary(b: *std.Build, target: std.Build.ResolvedTarget) !CLibrary {
     if (!build_wayland and !build_x11) return error.NoSelectedLinuxDisplayServerProtocol;
 
     if (target.result.os.tag == .linux and build_wayland) {
-        const wayland_include_path = generateWaylandHeaders(b);
+        const wayland_include_path = generateWaylandHeaders(b, glfw.path(""));
         lib.addIncludePath(wayland_include_path);
     }
 
@@ -560,45 +560,37 @@ fn makeGlfwLibrary(b: *std.Build, target: std.Build.ResolvedTarget) !CLibrary {
     };
 }
 
-fn generateWaylandHeaders(b: *std.Build) std.Build.LazyPath {
-    // ignore pkg-config errors -- this'll make wayland-scanner error down the road,
-    // but it'll mean that when glfw isn't actually being used we won't error on
-    // missing wayland
-    const protocol_path = blk: {
-        var out_code: u8 = undefined;
-        const protocol_path_untrimmed = b.runAllowFail(&.{ "pkg-config", "--variable=pkgdatadir", "wayland-protocols" }, &out_code, .Inherit) catch "";
-        break :blk std.mem.trim(u8, protocol_path_untrimmed, &std.ascii.whitespace);
-    };
-    const client_path = blk: {
-        var out_code: u8 = undefined;
-        const client_path_untrimmed = b.runAllowFail(&.{ "pkg-config", "--variable=pkgdatadir", "wayland-client" }, &out_code, .Inherit) catch "";
-        break :blk std.mem.trim(u8, client_path_untrimmed, &std.ascii.whitespace);
-    };
+fn generateWaylandHeaders(b: *std.Build, path: std.Build.LazyPath) std.Build.LazyPath {
+    const protocols_dir = path.path(b, "deps/wayland");
 
     const write_file_step = b.addWriteFiles();
     write_file_step.step.name = "Write Wayland headers";
 
-    generateWaylandHeader(b, write_file_step, protocol_path, "stable/xdg-shell/xdg-shell.xml", "-xdg-shell");
-    generateWaylandHeader(b, write_file_step, protocol_path, "unstable/xdg-decoration/xdg-decoration-unstable-v1.xml", "-xdg-decoration");
-    generateWaylandHeader(b, write_file_step, protocol_path, "stable/viewporter/viewporter.xml", "-viewporter");
-    generateWaylandHeader(b, write_file_step, protocol_path, "unstable/relative-pointer/relative-pointer-unstable-v1.xml", "-relative-pointer-unstable-v1");
-    generateWaylandHeader(b, write_file_step, protocol_path, "unstable/pointer-constraints/pointer-constraints-unstable-v1.xml", "-pointer-constraints-unstable-v1");
-    generateWaylandHeader(b, write_file_step, protocol_path, "unstable/idle-inhibit/idle-inhibit-unstable-v1.xml", "-idle-inhibit-unstable-v1");
-    generateWaylandHeader(b, write_file_step, client_path, "wayland.xml", "");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "xdg-shell");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "xdg-decoration-unstable-v1");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "xdg-activation-v1");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "viewporter");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "relative-pointer-unstable-v1");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "pointer-constraints-unstable-v1");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "idle-inhibit-unstable-v1");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "fractional-scale-v1");
+    generateWaylandHeader(b, write_file_step, protocols_dir, "wayland");
 
     return write_file_step.getDirectory();
 }
 
-fn generateWaylandHeader(b: *std.Build, write_file_step: *std.Build.Step.WriteFile, protocol_path: []const u8, xml: []const u8, out_name: []const u8) void {
-    const xml_path = b.pathJoin(&.{ protocol_path, xml });
+fn generateWaylandHeader(b: *std.Build, write_file_step: *std.Build.Step.WriteFile, protocols_dir: std.Build.LazyPath, protocol_name: []const u8) void {
+    const in_xml = protocols_dir.path(b, b.fmt("{s}.xml", .{ protocol_name }));
 
-    const out_source_name = std.fmt.allocPrint(b.allocator, "wayland{s}-client-protocol-code.h", .{ out_name }) catch @panic("OOM");
-    const gen_private_code_step = b.addSystemCommand(&.{ "wayland-scanner", "private-code", xml_path });
+    const out_source_name = b.fmt("{s}-client-protocol-code.h", .{ protocol_name });
+    const gen_private_code_step = b.addSystemCommand(&.{ "wayland-scanner", "private-code" });
+    gen_private_code_step.addFileArg(in_xml);
     const out_source = gen_private_code_step.addOutputFileArg(out_source_name);
     _ = write_file_step.addCopyFile(out_source, out_source_name);
 
-    const out_header_name = std.fmt.allocPrint(b.allocator, "wayland{s}-client-protocol.h", .{ out_name }) catch @panic("OOM");
-    const gen_client_header_step = b.addSystemCommand(&.{ "wayland-scanner", "client-header", xml_path });
+    const out_header_name = b.fmt("{s}-client-protocol.h", .{ protocol_name });
+    const gen_client_header_step = b.addSystemCommand(&.{ "wayland-scanner", "client-header" });
+    gen_client_header_step.addFileArg(in_xml);
     const out_header = gen_client_header_step.addOutputFileArg(out_header_name);
     _ = write_file_step.addCopyFile(out_header, out_header_name);
 }
