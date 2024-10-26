@@ -28,12 +28,12 @@
             .hash = "1220a8e86c279b89ae07dbb82585334a5c53ebc49a5681a4d7eb757fe8b30d7aeb38",
         },
         .zgltf = .{
-            .url = "https://github.com/kooparse/zgltf/archive/b8a821d5fc6d1cd2913cead6cc149f94cfbc92ae.tar.gz",
-            .hash = "1220ebbbf8f55960a27c4d0543463b26662b12d5d9d801abf2eba665859b9bfdbd15",
+            .url = "https://github.com/kooparse/zgltf/archive/36f4f23950cd24e5d50d2b4d078427e475a7a97d.tar.gz",
+            .hash = "122010e9def709e671fc90b8b4342567a18bbe3a794988ba8b7cc5ab7e3699fd0674",
         },
         .zigimg = .{
-            .url = "https://github.com/ashpil/zigimg/archive/7894b364da45ab86a4531a85d77156b5b884045d.tar.gz",
-            .hash = "1220a2a889f0072592454d0c156ab9a8029c8671b014f75b50701353268c8374d81c",
+            .url = "https://github.com/zigimg/zigimg/archive/5b5d718159c6ec223a54c9bb960690576e5df9c2.tar.gz",
+            .hash = "122040d9cc905342547e1e9da227a7f16fae5e7ae23134cb62aaef64c5b2c4f58828",
         },
     },
     .paths = .{
