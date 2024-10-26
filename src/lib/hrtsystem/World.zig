@@ -335,10 +335,7 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
                                 const accessor = gltf.data.accessors.items[accessor_index];
                                 gltf.getDataFromBufferView(f32, &normals, accessor, gltf.glb_binary.?);
                             },
-                            else => {
-                                std.debug.print("{any}\n", .{ attribute });
-                                return error.UnhandledAttribute;
-                            },
+                            else => {},
                         }
                     }
 
