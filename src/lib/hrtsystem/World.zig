@@ -43,18 +43,29 @@ constant_specta: ConstantSpectra,
 
 const Self = @This();
 
+fn loadImage(allocator: std.mem.Allocator, image: Gltf.Image, gltf_directory: ?[]const u8) !zigimg.Image {
+    if (image.data) |data| {
+        return try zigimg.Image.fromMemory(allocator, data);
+    } else if (image.uri) |uri| {
+        const filepath = if (gltf_directory) |dir| try std.fs.path.join(allocator, &.{ dir, uri }) else uri;
+        defer if (gltf_directory != null) allocator.free(filepath);
+        return try zigimg.Image.fromFilePath(allocator, filepath);
+    } else {
+        return error.EmptyImage;
+    }
+}
+
 // TODO: consider just uploading all textures upfront rather than as part of this function
-fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, gltf: Gltf, gltf_material: Gltf.Material, textures: *TextureManager) !Material {
+fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, gltf: Gltf, gltf_directory: ?[]const u8, gltf_material: Gltf.Material, textures: *TextureManager) !Material {
     // stuff that is in every material
     var material = blk: {
         var material: Material = undefined;
         material.normal = if (gltf_material.normal_texture) |texture| normal: {
             const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
-            std.debug.assert(std.mem.eql(u8, image.mime_type.?, "image/png"));
 
             // this gives us rgb --> need to convert to rg
             // theoretically gltf spec claims these values should already be linear
-            var img = try zigimg.Image.fromMemory(allocator, image.data.?);
+            var img = try loadImage(allocator, image, gltf_directory);
             defer img.deinit();
 
             var rg = try allocator.alloc(u8, img.pixels.len() * 2);
@@ -81,9 +92,8 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 
         material.emissive = if (gltf_material.emissive_texture) |texture| emissive: {
             const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
-            std.debug.assert(std.mem.eql(u8, image.mime_type.?, "image/png"));
 
-            var img = try zigimg.Image.fromMemory(allocator, image.data.?);
+            var img = try loadImage(allocator, image, gltf_directory);
             defer img.deinit();
 
             // image may be rgba32 or rgb24
@@ -138,9 +148,8 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 
     standard_pbr.color = if (gltf_material.metallic_roughness.base_color_texture) |texture| blk: {
         const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
-        std.debug.assert(std.mem.eql(u8, image.mime_type.?, "image/png"));
 
-        var img = try zigimg.Image.fromMemory(allocator, image.data.?);
+        var img = try loadImage(allocator, image, gltf_directory);
         defer img.deinit();
 
         // image may be rgba32 or rgb24
@@ -175,20 +184,30 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 
     if (gltf_material.metallic_roughness.metallic_roughness_texture) |texture| {
         const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
-        std.debug.assert(std.mem.eql(u8, image.mime_type.?, "image/png"));
 
         // this gives us rgb --> only need r (metallic) and g (roughness) channels
         // theoretically gltf spec claims these values should already be linear
-        var img = try zigimg.Image.fromMemory(allocator, image.data.?);
+        var img = try loadImage(allocator, image, gltf_directory);
         defer img.deinit();
 
         const rs = try allocator.alloc(u8, img.pixels.len());
         defer allocator.free(rs);
         const gs = try allocator.alloc(u8, img.pixels.len());
         defer allocator.free(gs);
-        for (img.pixels.rgb24, rs, gs) |pixel, *r, *g| {
-            r.* = pixel.r;
-            g.* = pixel.g;
+        switch (img.pixels) {
+            .rgb24 => |rgb| {
+                for (rgb, rs, gs) |pixel, *r, *g| {
+                    r.* = pixel.r;
+                    g.* = pixel.g;
+                }
+            },
+            .rgba32 => |rgba| {
+                for (rgba, rs, gs) |pixel, *r, *g| {
+                    r.* = pixel.r;
+                    g.* = pixel.g;
+                }
+            },
+            else => unreachable, // TODO
         }
         const debug_name_metalness = try std.fmt.allocPrintZ(allocator, "{s} metalness", .{ gltf_material.name });
         defer allocator.free(debug_name_metalness);
@@ -247,18 +266,17 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 
 // glTF doesn't correspond very well to the internal data structures here so this is very inefficient
 // also very inefficient because it's written very inefficiently, can remove a lot of copying, but that's a problem for another time
-// inspection bool specifies whether some buffers should be created with the `transfer_src_flag` for inspection
-pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, gltf: Gltf) !Self {
+pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, gltf: Gltf, gltf_directory: ?[]const u8) !Self {
     var materials = blk: {
         var materials = try MaterialManager.createEmpty(vc);
         errdefer materials.destroy(vc, allocator);
 
         for (gltf.data.materials.items) |material| {
-            const mat = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, material, &materials.textures);
+            const mat = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, gltf_directory, material, &materials.textures);
             _ = try materials.upload(vc, vk_allocator, allocator, encoder, mat);
         }
 
-        const default_material = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, Gltf.Material {
+        const default_material = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, gltf_directory, Gltf.Material {
             .name = "default",
         }, &materials.textures);
         _ = try materials.upload(vc, vk_allocator, allocator, encoder, default_material);
@@ -276,6 +294,21 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
     defer instances.deinit();
     defer for (instances.items) |instance| allocator.free(instance.geometries);
 
+    const buffers = try allocator.alloc([]align(4) const u8, gltf.data.buffers.items.len);
+    defer allocator.free(buffers);
+    for (gltf.data.buffers.items, buffers) |src, *dst| {
+        if (src.uri) |uri| {
+            const bytes = try allocator.alignedAlloc(u8, 4, src.byte_length);
+            const filepath = if (gltf_directory) |dir| try std.fs.path.join(allocator, &.{ dir, uri }) else uri;
+            defer if (gltf_directory != null) allocator.free(filepath);
+            _ = try std.fs.cwd().readFile(filepath, bytes);
+            dst.* = bytes;
+        } else {
+            dst.* = gltf.glb_binary.?;
+        }
+    }
+    defer for (buffers[(if (gltf.glb_binary != null) 1 else 0)..]) |buffer| allocator.free(buffer);
+
     for (gltf.data.nodes.items) |node| {
         if (node.mesh) |model_idx| {
             const mesh = gltf.data.meshes.items[model_idx];
@@ -288,13 +321,14 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
                 // get indices
                 const indices = if (primitive.indices) |indices_index| blk2: {
                     const accessor = gltf.data.accessors.items[indices_index];
+                    const buffer = buffers[gltf.data.buffer_views.items[accessor.buffer_view.?].buffer];
 
                     break :blk2 switch (accessor.component_type) {
                         .unsigned_short => blk3: {
                             var indices = std.ArrayList(u16).init(allocator);
                             defer indices.deinit();
 
-                            gltf.getDataFromBufferView(u16, &indices, accessor, gltf.glb_binary.?);
+                            gltf.getDataFromBufferView(u16, &indices, accessor, buffer);
 
                             // convert to U32x3
                             const actual_indices = try allocator.alloc(U32x3, indices.items.len / 3);
@@ -307,7 +341,7 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
                             var indices = std.ArrayList(u32).init(allocator);
                             defer indices.deinit();
 
-                            gltf.getDataFromBufferView(u32, &indices, accessor, gltf.glb_binary.?);
+                            gltf.getDataFromBufferView(u32, &indices, accessor, buffer);
 
                             break :blk3 std.mem.bytesAsSlice(U32x3, std.mem.sliceAsBytes(try indices.toOwnedSlice()));
                         },
@@ -325,15 +359,18 @@ pub fn fromGlb(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: 
                         switch (attribute) {
                             .position => |accessor_index| {
                                 const accessor = gltf.data.accessors.items[accessor_index];
-                                gltf.getDataFromBufferView(f32, &positions, accessor, gltf.glb_binary.?);
+                                const buffer = buffers[gltf.data.buffer_views.items[accessor.buffer_view.?].buffer];
+                                gltf.getDataFromBufferView(f32, &positions, accessor, buffer);
                             },
                             .texcoord => |accessor_index| {
                                 const accessor = gltf.data.accessors.items[accessor_index];
-                                gltf.getDataFromBufferView(f32, &texcoords, accessor, gltf.glb_binary.?);
+                                const buffer = buffers[gltf.data.buffer_views.items[accessor.buffer_view.?].buffer];
+                                gltf.getDataFromBufferView(f32, &texcoords, accessor, buffer);
                             },
                             .normal => |accessor_index| {
                                 const accessor = gltf.data.accessors.items[accessor_index];
-                                gltf.getDataFromBufferView(f32, &normals, accessor, gltf.glb_binary.?);
+                                const buffer = buffers[gltf.data.buffer_views.items[accessor.buffer_view.?].buffer];
+                                gltf.getDataFromBufferView(f32, &normals, accessor, buffer);
                             },
                             else => {},
                         }

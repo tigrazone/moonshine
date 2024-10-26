@@ -36,7 +36,7 @@ const Mat3x4 = vector.Mat3x4(f32);
 const vk = @import("vulkan");
 
 const Config = struct {
-    in_filepath: []const u8, // must be glb
+    in_filepath: []const u8, // must be gltf/glb
     skybox_filepath: []const u8, // must be exr
     extent: vk.Extent2D,
 
@@ -46,7 +46,7 @@ const Config = struct {
         if (args.len != 3) return error.BadArgs;
 
         const in_filepath = args[1];
-        if (!std.mem.eql(u8, std.fs.path.extension(in_filepath), ".glb")) return error.OnlySupportsGlbInput;
+        if (!std.mem.eql(u8, std.fs.path.extension(in_filepath), ".glb") and !std.mem.eql(u8, std.fs.path.extension(in_filepath), ".gltf")) return error.OnlySupportsGltfInput;
 
         const skybox_filepath = args[2];
         if (!std.mem.eql(u8, std.fs.path.extension(skybox_filepath), ".exr")) return error.OnlySupportsExrSkybox;
@@ -204,7 +204,7 @@ pub fn main() !void {
 
     std.log.info("Set up initial state!", .{});
 
-    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, encoder, config.in_filepath, config.skybox_filepath, config.extent);
+    var scene = try Scene.fromGltfExr(&context, &vk_allocator, allocator, encoder, config.in_filepath, config.skybox_filepath, config.extent);
 
     defer scene.destroy(&context, allocator);
 

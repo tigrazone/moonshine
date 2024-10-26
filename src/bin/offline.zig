@@ -18,7 +18,7 @@ const F32x3 = vector.Vec3(f32);
 const Mat3x4 = vector.Mat3x4(f32);
 
 const Config = struct {
-    in_filepath: []const u8, // must be glb
+    in_filepath: []const u8, // must be gltf/glb
     out_filepath: []const u8, // must be exr
     skybox_filepath: []const u8, // must be exr
     spp: u32,
@@ -30,7 +30,7 @@ const Config = struct {
         if (args.len < 4) return error.BadArgs;
 
         const in_filepath = args[1];
-        if (!std.mem.eql(u8, std.fs.path.extension(in_filepath), ".glb")) return error.OnlySupportsGlbInput;
+        if (!std.mem.eql(u8, std.fs.path.extension(in_filepath), ".glb") and !std.mem.eql(u8, std.fs.path.extension(in_filepath), ".gltf")) return error.OnlySupportsGltfInput;
 
         const skybox_filepath = args[2];
         if (!std.mem.eql(u8, std.fs.path.extension(skybox_filepath), ".exr")) return error.OnlySupportsExrSkybox;
@@ -98,7 +98,7 @@ pub fn main() !void {
 
     try logger.log("set up initial state");
 
-    var scene = try Scene.fromGlbExr(&context, &vk_allocator, allocator, encoder, config.in_filepath, config.skybox_filepath, config.extent);
+    var scene = try Scene.fromGltfExr(&context, &vk_allocator, allocator, encoder, config.in_filepath, config.skybox_filepath, config.extent);
     defer scene.destroy(&context, allocator);
 
     try logger.log("load world");

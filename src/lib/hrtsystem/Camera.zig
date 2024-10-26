@@ -24,7 +24,7 @@ pub const Lens = extern struct {
     aperture: f32,
     focus_distance: f32,
 
-    pub fn fromGlb(gltf: Gltf) !Lens {
+    pub fn fromGltf(gltf: Gltf) !Lens {
         // just use first camera found in nodes, if none found, use an arbitrary default
         const yfov, const transform = for (gltf.data.nodes.items) |node| {
             if (node.camera) |camera| {

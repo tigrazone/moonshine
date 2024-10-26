@@ -24,13 +24,13 @@ camera: Camera,
 // glTF doesn't correspond very well to the internal data structures here so this is very inefficient
 // also very inefficient because it's written very inefficiently, can remove a lot of copying, but that's a problem for another time
 // inspection bool specifies whether some buffers should be created with the `transfer_src_flag` for inspection
-pub fn fromGlbExr(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, glb_filepath: []const u8, skybox_filepath: []const u8, extent: vk.Extent2D) !Self {
+pub fn fromGltfExr(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, gltf_filepath: []const u8, skybox_filepath: []const u8, extent: vk.Extent2D) !Self {
     var gltf = Gltf.init(allocator);
     defer gltf.deinit();
 
     const buffer = try std.fs.cwd().readFileAllocOptions(
         allocator,
-        glb_filepath,
+        gltf_filepath,
         std.math.maxInt(usize),
         null,
         4,
@@ -39,13 +39,13 @@ pub fn fromGlbExr(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocato
     defer allocator.free(buffer);
     try gltf.parse(buffer);
 
-    const camera_create_info = try Camera.Lens.fromGlb(gltf);
+    const camera_create_info = try Camera.Lens.fromGltf(gltf);
     var camera = Camera {};
     errdefer camera.destroy(vc, allocator);
     _ = try camera.appendLens(allocator, camera_create_info);
     _ = try camera.appendSensor(vc, vk_allocator, allocator, extent);
 
-    var world = try World.fromGlb(vc, vk_allocator, allocator, encoder, gltf);
+    var world = try World.fromGltf(vc, vk_allocator, allocator, encoder, gltf, std.fs.path.dirname(gltf_filepath));
     errdefer world.destroy(vc, allocator);
 
     var background = try Background.create(vc, allocator);
