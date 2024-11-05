@@ -265,7 +265,7 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
         view.* = try vc.device.createImageView(&vk.ImageViewCreateInfo{
             .image = swapchain.images.slice()[i],
             .view_type = .@"2d",
-            .format = .b8g8r8a8_srgb,
+            .format = swapchain.image_format,
             .components = vk.ComponentMapping{
                 .r = .identity,
                 .g = .identity,
@@ -307,7 +307,7 @@ pub fn resize(self: *Self, vc: *const VulkanContext, swapchain: Swapchain) !void
         view.* = try vc.device.createImageView(&vk.ImageViewCreateInfo{
             .image = swapchain.images.slice()[i],
             .view_type = .@"2d",
-            .format = .b8g8r8a8_srgb,
+            .format = swapchain.image_format,
             .components = vk.ComponentMapping{
                 .r = .identity,
                 .g = .identity,
