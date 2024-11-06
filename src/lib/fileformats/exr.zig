@@ -201,8 +201,8 @@ pub const helpers = struct {
 
             var data: [*c]u8 = undefined;
             const file_size = try saveEXRImageToMemory(&image, &header, &data);
+            defer std.c.free(data);
             try std.fs.cwd().writeFile(.{ .sub_path = out_filename, .data = data[0..file_size]});
-            std.heap.c_allocator.free(data[0..file_size]);
         }
 
         pub fn load(allocator: std.mem.Allocator, filename: []const u8) !Rgba2D {
