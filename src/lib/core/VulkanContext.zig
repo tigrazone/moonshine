@@ -164,7 +164,7 @@ const Base = struct {
         if (validate and !(try self.validationLayersAvailable(allocator))) return VulkanContextError.UnavailableValidationLayers;
         if (!try self.instanceExtensionsAvailable(allocator, required_extensions)) return VulkanContextError.UnavailableInstanceExtensions;
 
-        const app_info = .{
+        const app_info = vk.ApplicationInfo {
             .p_application_name = app_name,
             .application_version = 0,
             .p_engine_name = "moonshine",
