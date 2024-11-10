@@ -281,7 +281,6 @@ pub fn main() !void {
             integrator.exposeToImgui();
             const last_rebuild_failed = rebuild_error;
             if (last_rebuild_failed) imgui.pushStyleColor(.text, F32x4.new(1.0, 0.0, 0.0, 1));
-            if (!core.pipeline.supports_hot_reload) imgui.beginDisabled();
             if (imgui.button(rebuild_label, imgui.Vec2{ .x = imgui.getContentRegionAvail().x, .y = 0.0 })) {
                 const start = try std.time.Instant.now();
                 rebuild_error = false;
@@ -300,8 +299,7 @@ pub fn main() !void {
                     rebuild_label = try std.fmt.bufPrintZ(&rebuild_label_buffer, "Rebuild (error)", .{});
                 }
             }
-            if (!core.pipeline.supports_hot_reload) imgui.setItemTooltip("Unsupported with configured build options");
-            if (!core.pipeline.supports_hot_reload) imgui.endDisabled();
+            if (!core.pipeline.supports_hot_reload) imgui.setItemTooltip("Shader hot reload not available");
             if (last_rebuild_failed) imgui.popStyleColor();
             imgui.popItemWidth();
         }
