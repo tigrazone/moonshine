@@ -92,9 +92,9 @@ pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, vk_allocator:
 
 // this should probably be a parameter, or should infer proper value for this
 //
-// the equal area map size will be the biggest power of two smaller than
+// the equal area map size will be the biggest power of two greater than
 // or equal to the equirectangular height, clamped to maximum_equal_area_map_size
-const maximum_equal_area_map_size = 1024;
+const maximum_equal_area_map_size = 16384;
 const shader_local_size = 8; // must be kept in sync with shader -- looks like HLSL doesn't support setting this via spec constants
 
 // color_image should be equirectangular, which is converted to equal area.
@@ -116,7 +116,7 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
     defer equirectangular_image_host.destroy(vc);
     @memcpy(equirectangular_image_host.data, color_image.asSlice());
 
-    const equal_area_map_size: u32 = @min(std.math.floorPowerOfTwo(u32, color_image.extent.height), maximum_equal_area_map_size);
+    const equal_area_map_size: u32 = @min(std.math.ceilPowerOfTwoAssert(u32, color_image.extent.width), maximum_equal_area_map_size);
     const equal_area_extent = vk.Extent2D { .width = equal_area_map_size, .height = equal_area_map_size };
 
     const equal_area_image = try Image.create(vc, vk_allocator, equal_area_extent, .{ .storage_bit = true, .sampled_bit = true }, .r32g32b32a32_sfloat, false, texture_name);
