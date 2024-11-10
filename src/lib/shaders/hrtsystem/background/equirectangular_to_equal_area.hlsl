@@ -21,7 +21,10 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 			const float2 dstCoords = (float2(pixelIndex) + subpixel) / float2(dstImageSize);
 			const float3 dir = squareToEqualAreaSphere(dstCoords);
 			const float2 srcCoords = cartesianToSpherical(dir) / float2(2 * PI, PI);
-			color += srcTexture.SampleLevel(srcTextureSampler, srcCoords, 0); // could also technically compute some sort of gradient and get area subtended by this pixel
+			// not sure if there's a standard canonical environment map orientation,
+			// but rotate this half a turn so that our default matches blender
+			const float2 srcCoordsRotated = frac(srcCoords + float2(0.5, 0));
+			color += srcTexture.SampleLevel(srcTextureSampler, srcCoordsRotated, 0); // could also technically compute some sort of gradient and get area subtended by this pixel
 		}
 	}
 
