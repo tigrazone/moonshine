@@ -1,6 +1,7 @@
 const shaders = @import("shaders");
 const vk = @import("vulkan");
 const std = @import("std");
+const builtin = @import("builtin");
 const build_options = @import("build_options");
 
 const engine = @import("../engine.zig");
@@ -10,6 +11,8 @@ const Encoder = core.Encoder;
 const VkAllocator = core.Allocator;
 const descriptor = core.descriptor;
 
+pub const supports_hot_reload = build_options.shader_source == .load;
+
 pub const ShaderType = enum {
     ray_tracing,
     compute,
@@ -18,8 +21,8 @@ pub const ShaderType = enum {
 // creates shader modules, respecting build option to statically embed or dynamically load shader code
 pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: [:0]const u8, allocator: std.mem.Allocator, comptime shader_type: ShaderType) !vk.ShaderModule {
     var to_free: []const u8 = undefined;
-    defer if (build_options.shader_source == .load) allocator.free(to_free);
-    const shader_code = if (build_options.shader_source == .embed) @embedFile(shader_path).* else blk: {
+    defer if (supports_hot_reload) allocator.free(to_free);
+    const shader_code = if (!supports_hot_reload) @embedFile(shader_path).* else blk: {
         const compile_cmd = switch (shader_type) {
             .ray_tracing => build_options.rt_shader_compile_cmd,
             .compute => build_options.compute_shader_compile_cmd,
@@ -51,7 +54,7 @@ pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: [:0]co
     };
     const module = try vc.device.createShaderModule(&.{
         .code_size = shader_code.len,
-        .p_code = @as([*]const u32, @ptrCast(@alignCast(if (build_options.shader_source == .embed) &shader_code else shader_code.ptr))),
+        .p_code = @as([*]const u32, @ptrCast(@alignCast(if (!supports_hot_reload) &shader_code else shader_code.ptr))),
     }, null);
     try core.vk_helpers.setDebugName(vc, module, shader_path);
     return module;

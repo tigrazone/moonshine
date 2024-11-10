@@ -301,6 +301,18 @@ pub fn smallButton(label: [*:0]const u8) bool {
     return c.igSmallButton(label);
 }
 
+pub fn beginDisabled() void {
+    c.igBeginDisabled(true);
+}
+
+pub fn endDisabled() void {
+    c.igEndDisabled();
+}
+
+pub fn setItemTooltip(str: [*:0]const u8) void {
+    c.igSetItemTooltip(str);
+}
+
 pub fn getContentRegionAvail() Vec2 {
     var vec2: c.ImVec2 = undefined;
     c.igGetContentRegionAvail(&vec2);
