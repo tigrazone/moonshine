@@ -13,4 +13,12 @@ struct Ray {
         desc.TMax = 1.#INF;
         return desc;
     }
+
+    Ray transformed(float4x3 mat) {
+        Ray ray;
+        ray.origin = mul(float4(origin, 1.0), mat);
+        ray.direction = normalize(mul(float4(direction, 0.0), mat));
+        ray.pdf = pdf;
+        return ray;
+    }
 };

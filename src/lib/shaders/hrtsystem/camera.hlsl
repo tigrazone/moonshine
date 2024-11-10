@@ -4,41 +4,56 @@
 #include "../utils/helpers.hlsl"
 #include "ray.hlsl"
 
+// in camera space, cameras are oriented:
+// * forward along +X
+// * right along +Y
+// * up along +Z
+
+struct ThinLens {
+    float vfov;
+    float aspect;
+    float aperture;
+    float focusDistance;
+
+    Ray generateRay(const float2 rand, const float2 uv) {
+        const float2 uvNDC = uv * 2 - 1;
+
+        const float halfViewportHeight = tan(vfov / 2);
+        const float halfViewportWidth = aspect * halfViewportHeight;
+        const float2 halfViewport = float2(halfViewportWidth, halfViewportHeight);
+
+        const float3 directionCameraSpaceUnorm = float3(1.0, uvNDC * halfViewport);
+
+        const float2 lens = aperture * squareToUniformDiskConcentric(rand) / 2.0;
+        const float3 focus = focusDistance * directionCameraSpaceUnorm;
+
+        Ray ray;
+        ray.origin = float3(0.0, lens);
+        ray.direction = normalize(focus - ray.origin);
+        ray.pdf = 1.#INF;
+
+        return ray;
+    }
+};
+
 struct Camera {
     float3 origin;
     float3 forward;
     float3 up;
     float vfov;
     float aperture;
-    float focus_distance;
+    float focusDistance;
 
-    Ray generateRay(RWTexture2D<float4> outputImage, float2 uv, float2 rand) {
-        uint2 sensor_size = textureDimensions(outputImage);
-        float aspect = float(sensor_size.x) / float(sensor_size.y);
+    Ray generateRay(const float aspect, const float2 uv, const float2 rand) {
+        const ThinLens thinLens = {vfov, aspect, aperture, focusDistance};
+        const Ray rayCameraSpace = thinLens.generateRay(rand, uv);
 
-        float3 w = forward;
-        float3 u = normalize(cross(up, w));
-        float3 v = cross(u, w);
+        const float3 w = forward;
+        const float3 u = normalize(cross(up, w));
+        const float3 v = cross(u, w);
+        const float4x3 toWorld = {w, u, v, origin};
 
-        float h = tan(vfov / 2.0f);
-        float viewport_height = 2.0 * h * focus_distance;
-        float viewport_width = aspect * viewport_height;
-
-        float3 horizontal = u * viewport_width;
-        float3 vertical = v * viewport_height;
-
-        float3 lower_left_corner = origin - (horizontal / 2.0f) - (vertical / 2.0f) + (w * focus_distance);
-
-        float2 sampled_rand = squareToUniformDiskConcentric(rand);
-        float2 rd = aperture * sampled_rand / 2.0f;
-        float3 defocusOffset = u * rd.x + v * rd.y;
-        
-        Ray ray;
-        ray.origin = origin + defocusOffset;
-        ray.direction = normalize(lower_left_corner + uv.x * horizontal + uv.y * vertical - defocusOffset - origin);
-        ray.pdf = 1.#INF;
-
-        return ray;
+        return rayCameraSpace.transformed(toWorld);
     }
 };
 
