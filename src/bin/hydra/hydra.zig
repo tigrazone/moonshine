@@ -130,7 +130,7 @@ pub const HdMoonshine = struct {
         self.encoder = Encoder.create(&self.vc, "main") catch return null;
         errdefer self.encoder.destroy(&self.vc);
 
-        self.vk_allocator = VkAllocator.create(&self.vc, self.allocator.allocator()) catch return null;
+        self.vk_allocator = VkAllocator.create(&self.vc);
         errdefer self.vk_allocator.destroy(&self.vc, self.allocator.allocator());
 
         self.world = World.createEmpty(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder) catch return null;

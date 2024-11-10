@@ -10,16 +10,15 @@ const Self = @This();
 
 const MemoryStorage = std.ArrayListUnmanaged(vk.DeviceMemory);
 
-memory_type_properties: []vk.MemoryPropertyFlags,
+memory_type_properties: std.BoundedArray(vk.MemoryPropertyFlags, vk.MAX_MEMORY_TYPES),
 memory: MemoryStorage,
 
-pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator) !Self {
+pub fn create(vc: *const VulkanContext) Self {
     const properties = vc.instance.getPhysicalDeviceMemoryProperties(vc.physical_device.handle);
 
-    const memory_type_properties = try allocator.alloc(vk.MemoryPropertyFlags, properties.memory_type_count);
-    errdefer allocator.free(memory_type_properties);
+    var memory_type_properties = std.BoundedArray(vk.MemoryPropertyFlags, vk.MAX_MEMORY_TYPES).init(properties.memory_type_count) catch unreachable;
 
-    for (properties.memory_types[0..properties.memory_type_count], memory_type_properties) |memory_type, *memory_type_property| {
+    for (properties.memory_types[0..properties.memory_type_count], memory_type_properties.slice()) |memory_type, *memory_type_property| {
         memory_type_property.* = memory_type.property_flags;
     }
 
@@ -34,13 +33,12 @@ pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocat
         vc.device.freeMemory(memory, null);
     }
     self.memory.deinit(allocator);
-    allocator.free(self.memory_type_properties);
 }
 
 
-pub fn findMemoryType(self: *const Self, type_filter: u32, properties: vk.MemoryPropertyFlags) !u5 {
-    return for (0..self.memory_type_properties.len) |i| {
-        if (type_filter & (@as(u32, 1) << @intCast(i)) != 0 and self.memory_type_properties[i].contains(properties)) {
+pub fn findMemoryType(self: *const Self, type_filter: u32, properties: vk.MemoryPropertyFlags) !std.meta.Int(.unsigned, vk.MAX_MEMORY_TYPES) {
+    return for (self.memory_type_properties.slice(), 0..) |memory_type_properties, i| {
+        if (type_filter & (@as(u32, 1) << @intCast(i)) != 0 and memory_type_properties.contains(properties)) {
             break @intCast(i);
         }
     } else error.UnavailbleMemoryType;

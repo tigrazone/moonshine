@@ -36,7 +36,7 @@ const TestingContext = struct {
         const vc = try VulkanContext.create(allocator, "engine-tests", &.{}, &engine.hrtsystem.required_device_extensions, &engine.hrtsystem.required_device_features, null);
         errdefer vc.destroy(allocator);
 
-        var vk_allocator = try VkAllocator.create(&vc, allocator);
+        var vk_allocator = VkAllocator.create(&vc);
         errdefer vk_allocator.destroy(&vc, allocator);
 
         var encoder = try Encoder.create(&vc, "main");
