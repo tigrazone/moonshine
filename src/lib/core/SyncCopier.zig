@@ -21,7 +21,7 @@ const Self = @This();
 
 pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, max_bytes: u32) !Self {
     const buffer = try vk_allocator.createHostBuffer(vc, u8, max_bytes, .{ .transfer_dst_bit = true });
-    try vk_helpers.setDebugName(vc, buffer.handle, "sync copier");
+    try vk_helpers.setDebugName(vc.device, buffer.handle, "sync copier");
 
     var encoder = try Encoder.create(vc, "sync copier");
     errdefer encoder.destroy(vc);

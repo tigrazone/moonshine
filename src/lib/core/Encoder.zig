@@ -32,7 +32,7 @@ pub fn create(vc: *const VulkanContext, name: [*:0]const u8) !Self {
         .command_buffer_count = 1,
     }, @ptrCast(&buffer));
 
-    try vk_helpers.setDebugName(vc, buffer, name);
+    try vk_helpers.setDebugName(vc.device, buffer, name);
 
     return Self {
         .pool = pool,

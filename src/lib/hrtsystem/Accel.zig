@@ -260,7 +260,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
                 .layer_count = vk.REMAINING_ARRAY_LAYERS,
             },
         }, null);
-        try vk_helpers.setDebugName(vc, view.*, std.fmt.comptimePrint("triangle powers view {}", .{ level_index }));
+        try vk_helpers.setDebugName(vc.device, view.*, std.fmt.comptimePrint("triangle powers view {}", .{ level_index }));
     }
 
     const geometries = try vk_allocator.createDeviceBuffer(vc, allocator, Geometry, max_geometries, .{ .storage_buffer_bit = true, .transfer_dst_bit = true }, "geometries");

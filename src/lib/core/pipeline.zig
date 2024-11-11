@@ -56,7 +56,7 @@ pub fn createShaderModule(vc: *const VulkanContext, comptime shader_path: [:0]co
         .code_size = shader_code.len,
         .p_code = @as([*]const u32, @ptrCast(@alignCast(if (!supports_hot_reload) &shader_code else shader_code.ptr))),
     }, null);
-    try core.vk_helpers.setDebugName(vc, module, shader_path);
+    try core.vk_helpers.setDebugName(vc.device, module, shader_path);
     return module;
 }
 
@@ -224,7 +224,7 @@ pub fn PipelineBindings(
                 .p_push_constant_ranges = &push_constants,
             }, null);
             errdefer vc.device.destroyPipelineLayout(layout, null);
-            try core.vk_helpers.setDebugName(vc, layout, name);
+            try core.vk_helpers.setDebugName(vc.device, layout, name);
 
             return Self {
                 .push_set_layout = push_set_layout,
@@ -311,7 +311,7 @@ pub fn Pipeline(comptime options: struct {
             const old_handle = self.handle;
             _ = try vc.device.createComputePipelines(.null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&self.handle));
             errdefer vc.device.destroyPipeline(self.handle, null);
-            try core.vk_helpers.setDebugName(vc, self.handle, options.shader_path);
+            try core.vk_helpers.setDebugName(vc.device, self.handle, options.shader_path);
 
             return old_handle;
         }

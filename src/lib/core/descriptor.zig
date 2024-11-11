@@ -62,7 +62,7 @@ pub fn DescriptorLayout(comptime bindings: []const Binding, comptime layout_flag
             const handle = try vc.device.createDescriptorSetLayout(&create_info, null);
             errdefer vc.device.destroyDescriptorSetLayout(handle, null);
 
-            try vk_helpers.setDebugName(vc, handle, debug_name);
+            try vk_helpers.setDebugName(vc.device, handle, debug_name);
 
             const pool_sizes = blk: {
                 comptime var pool_sizes: [bindings.len]vk.DescriptorPoolSize = undefined;

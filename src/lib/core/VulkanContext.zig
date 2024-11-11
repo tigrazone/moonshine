@@ -100,6 +100,7 @@ const core_vulkan_functions = vk.ApiInfo {
         .createComputePipelines = true,
         .cmdDispatch = true,
         .cmdPushDescriptorSetKHR = true,
+        .getDeviceBufferMemoryRequirements = true,
     }
 };
 

@@ -129,7 +129,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, encoder: *En
         .descriptor_set_count = 1,
         .p_set_layouts = @ptrCast(&descriptor_layout.handle),
     }, @ptrCast(&descriptor_set));
-    try vk_helpers.setDebugName(vc, descriptor_set, "Constant Spectra");
+    try vk_helpers.setDebugName(vc.device, descriptor_set, "Constant Spectra");
 
     try encoder.begin();
     const cie_x_staging_buffer, const cie_x = try createSpectrumImage(vc, vk_allocator, encoder, descriptor_set, 1, &[_]f32 {

@@ -284,7 +284,7 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
                 .layer_count = 1,
             },
         }, null);
-        try vk_helpers.setDebugName(vc, view.*, std.fmt.comptimePrint("swapchain image view {}", .{ i }));
+        try vk_helpers.setDebugName(vc.device, view.*, std.fmt.comptimePrint("swapchain image view {}", .{ i }));
     }
 
     return Self{

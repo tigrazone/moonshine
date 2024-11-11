@@ -8,7 +8,7 @@ const VulkanContext = core.VulkanContext;
 const VkAllocator = core.Allocator;
 
 const Self = @This();
- 
+
 handle: vk.Image,
 view: vk.ImageView,
 memory: vk.DeviceMemory,
@@ -37,7 +37,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, size: vk.Ext
 
     const handle = try vc.device.createImage(&image_create_info, null);
     errdefer vc.device.destroyImage(handle, null);
-    if (name.len != 0) try vk_helpers.setDebugName(vc, handle, name);
+    if (name.len != 0) try vk_helpers.setDebugName(vc.device, handle, name);
 
     const mem_requirements = vc.device.getImageMemoryRequirements(handle);
 

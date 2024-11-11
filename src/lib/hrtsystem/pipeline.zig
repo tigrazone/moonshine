@@ -138,7 +138,7 @@ pub fn Pipeline(comptime options: struct {
             var handle: vk.Pipeline = undefined;
             _ = try vc.device.createRayTracingPipelinesKHR(.null_handle, .null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&handle));
             errdefer vc.device.destroyPipeline(handle, null);
-            try core.vk_helpers.setDebugName(vc, handle, options.shader_path);
+            try core.vk_helpers.setDebugName(vc.device, handle, options.shader_path);
 
             const shader_info = comptime ShaderInfo.find(options.stages);
             const sbt = try ShaderBindingTable.create(vc, vk_allocator, allocator, handle, encoder, shader_info.raygen_count, shader_info.miss_count, shader_info.hit_count, shader_info.callable_count);
@@ -212,7 +212,7 @@ pub fn Pipeline(comptime options: struct {
             const old_handle = self.handle;
             _ = try vc.device.createRayTracingPipelinesKHR(.null_handle, .null_handle, 1, @ptrCast(&create_info), null, @ptrCast(&self.handle));
             errdefer vc.device.destroyPipeline(self.handle, null);
-            try core.vk_helpers.setDebugName(vc, self.handle, options.shader_path);
+            try core.vk_helpers.setDebugName(vc.device, self.handle, options.shader_path);
 
             try self.sbt.recreate(vc, vk_allocator, self.handle, encoder);
 

@@ -263,7 +263,7 @@ pub const TextureManager = struct {
             .descriptor_set_count = 1,
             .p_set_layouts = @ptrCast(&descriptor_layout.handle),
         }, @ptrCast(&descriptor_set));
-        try vk_helpers.setDebugName(vc, descriptor_set, "textures");
+        try vk_helpers.setDebugName(vc.device, descriptor_set, "textures");
 
         return TextureManager {
             .data = .{},
