@@ -3,7 +3,7 @@ const std = @import("std");
 const VulkanContext = @import("./VulkanContext.zig");
 const build_options = @import("build_options");
 
-fn typeToObjectType(comptime in: type) vk.ObjectType {
+pub fn typeToObjectType(comptime in: type) vk.ObjectType {
     return switch(in) {
         vk.DescriptorSetLayout => .descriptor_set_layout,
         vk.DescriptorSet => .descriptor_set,
@@ -13,7 +13,10 @@ fn typeToObjectType(comptime in: type) vk.ObjectType {
         vk.Pipeline => .pipeline,
         vk.PipelineLayout => .pipeline_layout,
         vk.ShaderModule => .shader_module,
-        else => unreachable, // TODO: add more
+        vk.DeviceMemory => .device_memory,
+        vk.SwapchainKHR => .swapchain_khr,
+        vk.ImageView => .image_view,
+        else => @compileError("unknown type " ++ @typeName(in)), // TODO: add more
     };
 }
 
@@ -25,16 +28,6 @@ pub fn setDebugName(vc: *const VulkanContext, object: anytype, name: [*:0]const 
            .p_object_name = name,
        });
    }
-}
-
-pub fn imageSizeInBytes(format: vk.Format, extent: vk.Extent2D) u32 {
-    return switch (format) {
-        .r32_sfloat => 1 * @sizeOf(f32) * extent.width * extent.height,
-        .r32g32_sfloat => 2 * @sizeOf(f32) * extent.width * extent.height,
-        .r32g32b32_sfloat => 3 * @sizeOf(f32) * extent.width * extent.height,
-        .r32g32b32a32_sfloat => 4 * @sizeOf(f32) * extent.width * extent.height,
-        else => unreachable, // TODO
-    };
 }
 
 fn GetVkSliceInternal(comptime func: anytype) type {

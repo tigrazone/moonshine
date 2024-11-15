@@ -53,7 +53,7 @@ index_buffers: [frames_in_flight]VkAllocator.HostBuffer(imgui.DrawIdx),
 
 views: std.BoundedArray(vk.ImageView, Swapchain.max_image_count),
 
-pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, extent: vk.Extent2D, vk_allocator: *VkAllocator, encoder: Encoder) !Self {
+pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, extent: vk.Extent2D, vk_allocator: *VkAllocator, encoder: *Encoder) !Self {
     if (imgui.getCurrentContext()) |_| @panic("cannot create more than one Gui");
 
     imgui.createContext();

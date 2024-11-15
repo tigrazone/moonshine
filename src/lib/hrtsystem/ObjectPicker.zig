@@ -50,14 +50,14 @@ pipeline: Pipeline,
 encoder: Encoder,
 ready_fence: vk.Fence,
 
-pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, transfer_encoder: Encoder) !Self {
+pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, transfer_encoder: *Encoder) !Self {
     const buffer = try vk_allocator.createHostBuffer(vc, ClickDataShader, 1, .{ .storage_buffer_bit = true });
     errdefer buffer.destroy(vc);
 
     var pipeline = try Pipeline.create(vc, vk_allocator, allocator, transfer_encoder, .{}, .{}, .{});
     errdefer pipeline.destroy(vc);
 
-    const encoder = try Encoder.create(vc, "object picker");
+    var encoder = try Encoder.create(vc, "object picker");
     errdefer encoder.destroy(vc);
 
     const ready_fence = try vc.device.createFence(&.{

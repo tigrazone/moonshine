@@ -70,7 +70,7 @@ linear_srgb_g: Image,
 linear_srgb_b: Image,
 d65: Image,
 
-fn createSpectrumImage(vc: *const VulkanContext, vk_allocator: *VkAllocator, encoder: Encoder, descriptor_set: vk.DescriptorSet, dst_binding: u32, data: []const f32, name: [:0]const u8) !std.meta.Tuple(&.{ VkAllocator.HostBuffer(f32), Image }) {
+fn createSpectrumImage(vc: *const VulkanContext, vk_allocator: *VkAllocator, encoder: *Encoder, descriptor_set: vk.DescriptorSet, dst_binding: u32, data: []const f32, name: [:0]const u8) !std.meta.Tuple(&.{ VkAllocator.HostBuffer(f32), Image }) {
     const extent = vk.Extent2D {
         .width = @intCast(data.len),
         .height = 1,
@@ -101,7 +101,7 @@ fn createSpectrumImage(vc: *const VulkanContext, vk_allocator: *VkAllocator, enc
     return .{ staging_buffer, image };
 }
 
-pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, encoder: Encoder) !Self {
+pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, encoder: *Encoder) !Self {
     const sampler = try vc.device.createSampler(&.{
         .flags = .{},
         .mag_filter = .linear,

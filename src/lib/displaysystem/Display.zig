@@ -78,8 +78,8 @@ pub fn destroy(self: *Self, vc: *const VulkanContext) void {
     }
 }
 
-pub fn startFrame(self: *Self, vc: *const VulkanContext) !Encoder {
-    const frame = self.frames[self.frame_index];
+pub fn startFrame(self: *Self, vc: *const VulkanContext) !*Encoder {
+    const frame = &self.frames[self.frame_index];
 
     _ = try self.swapchain.acquireNextImage(vc, frame.image_acquired);
     if (metrics) {
@@ -90,16 +90,16 @@ pub fn startFrame(self: *Self, vc: *const VulkanContext) !Encoder {
     }
 
     try vc.device.resetCommandPool(frame.encoder.pool, .{});
+    frame.encoder.clearResources(vc); // clear resources used last frame as they are now no longer in use
     try frame.encoder.begin();
 
     if (metrics) frame.encoder.buffer.writeTimestamp2(.{ .top_of_pipe_bit = true }, frame.query_pool, 0);
 
-    return frame.encoder;
+    return &frame.encoder;
 }
 
-pub fn recreate(self: *Self, vc: *const VulkanContext, new_extent: vk.Extent2D, destruction_queue: *DestructionQueue, allocator: std.mem.Allocator) !void {
-    try destruction_queue.add(allocator, self.swapchain.handle);
-    try self.swapchain.recreate(vc, new_extent);
+pub fn recreate(self: *Self, vc: *const VulkanContext, new_extent: vk.Extent2D) !vk.SwapchainKHR {
+    return try self.swapchain.recreate(vc, new_extent);
 }
 
 pub fn endFrame(self: *Self, vc: *const VulkanContext) !vk.Result {
@@ -165,7 +165,7 @@ const Frame = struct {
             .flags = .{ .signaled_bit = true },
         }, null);
 
-        const encoder = try Encoder.create(vc, name);
+        var encoder = try Encoder.create(vc, name);
         errdefer encoder.destroy(vc);
 
         const query_pool = if (metrics) try vc.device.createQueryPool(&.{

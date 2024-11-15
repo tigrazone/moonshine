@@ -5,49 +5,52 @@ const core = @import("./core.zig");
 const VulkanContext = core.VulkanContext;
 const DeviceBuffer = core.Allocator.DeviceBuffer;
 
-// TODO: how to make this use some sort of duck typing and take in any 
-// type with a `destroy` function
-const Item = union(enum) {
-    swapchain: vk.SwapchainKHR,
-    pipeline_layout: vk.PipelineLayout,
-    pipeline: vk.Pipeline,
-    buffer: vk.Buffer,
+// type erased Vulkan object
+const Destruction = struct {
+    object_type: vk.ObjectType,
+    destroyee: u64,
 
-    fn destroy(self: *Item, vc: *const VulkanContext) void {
-        switch (self.*) {
-            .swapchain => |swapchain| vc.device.destroySwapchainKHR(swapchain, null),
-            .pipeline_layout => |pipeline_layout| vc.device.destroyPipelineLayout(pipeline_layout, null),
-            .pipeline => |pipeline| vc.device.destroyPipeline(pipeline, null),
-            .buffer => |buffer| vc.device.destroyBuffer(buffer, null),
+    fn destroy(self: Destruction, vc: *const VulkanContext) void {
+        switch (self.object_type) {
+            .swapchain_khr => if (comptime @hasField(VulkanContext.Device.Wrapper.Dispatch, "vkDestroySwapchainKHR")) vc.device.destroySwapchainKHR(@enumFromInt(self.destroyee), null) else unreachable,
+            .pipeline_layout => vc.device.destroyPipelineLayout(@enumFromInt(self.destroyee), null),
+            .pipeline => vc.device.destroyPipeline(@enumFromInt(self.destroyee), null),
+            .buffer => vc.device.destroyBuffer(@enumFromInt(self.destroyee), null),
+            .image_view => vc.device.destroyImageView(@enumFromInt(self.destroyee), null),
+            .image => vc.device.destroyImage(@enumFromInt(self.destroyee), null),
+            .device_memory => vc.device.freeMemory(@enumFromInt(self.destroyee), null),
+            else => unreachable, // TODO
         }
     }
 };
 
-const Queue = std.ArrayListUnmanaged(Item);
-
-queue: Queue,
+// TODO: this should be an SoA type of thing like list((tag, list(union)))
+queue: std.ArrayListUnmanaged(Destruction) = .{},
 
 const Self = @This();
 
-pub fn create() Self {
-    return Self {
-        .queue = Queue {},
-    };
+// works on any type exclusively made up of Vulkan objects
+pub fn append(self: *Self, allocator: std.mem.Allocator, item: anytype) !void {
+    const T = @TypeOf(item);
+
+    if (comptime @typeInfo(T) == .@"struct") {
+        inline for (@typeInfo(T).@"struct".fields) |field| {
+            try self.append(allocator, @field(item, field.name));
+        }
+    } else {
+        try self.queue.append(allocator, Destruction {
+            .object_type = comptime core.vk_helpers.typeToObjectType(T),
+            .destroyee = @intFromEnum(item),
+        });
+    }
 }
 
-pub fn add(self: *Self, allocator: std.mem.Allocator, item: anytype) !void {
-    if (@TypeOf(item) == vk.SwapchainKHR) {
-        try self.queue.append(allocator, .{ .swapchain = item });
-    } else if (@TypeOf(item) == vk.PipelineLayout) {
-        try self.queue.append(allocator, .{ .pipeline_layout = item });
-    } else if (@TypeOf(item) == vk.Pipeline) {
-        try self.queue.append(allocator, .{ .pipeline = item });
-    } else if (@TypeOf(item) == vk.Buffer) {
-        try self.queue.append(allocator, .{ .buffer = item });
-    } else @compileError("Unknown destruction type: " ++ @typeName(@TypeOf(item)));
+pub fn clear(self: *Self, vc: *const VulkanContext) void {
+    for (self.queue.items) |*item| item.destroy(vc);
+    self.queue.clearRetainingCapacity();
 }
 
 pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator) void {
-    for (self.queue.items) |*item| item.destroy(vc);
+    self.clear(vc);
     self.queue.deinit(allocator);
 }

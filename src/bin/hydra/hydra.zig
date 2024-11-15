@@ -133,7 +133,7 @@ pub const HdMoonshine = struct {
         self.vk_allocator = VkAllocator.create(&self.vc);
         errdefer self.vk_allocator.destroy(&self.vc, self.allocator.allocator());
 
-        self.world = World.createEmpty(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder) catch return null;
+        self.world = World.createEmpty(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder) catch return null;
         errdefer self.world.destroy(&self.vc, self.allocator.allocator());
 
         self.camera = Camera {};
@@ -141,9 +141,9 @@ pub const HdMoonshine = struct {
 
         self.background = Background.create(&self.vc, self.allocator.allocator()) catch return null;
         errdefer self.background.destroy(&self.vc, self.allocator.allocator());
-        self.background.addDefaultBackground(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder) catch return null;
+        self.background.addDefaultBackground(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder) catch return null;
 
-        self.pipeline = Pipeline.create(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, .{ self.world.materials.textures.descriptor_layout.handle, self.world.constant_specta.descriptor_layout.handle }, pipeline_settings, .{ self.background.sampler }) catch return null;
+        self.pipeline = Pipeline.create(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, .{ self.world.materials.textures.descriptor_layout.handle, self.world.constant_specta.descriptor_layout.handle }, pipeline_settings, .{ self.background.sampler }) catch return null;
         errdefer self.pipeline.destroy(&self.vc);
 
         self.output_buffers = .{};
@@ -327,7 +327,7 @@ pub const HdMoonshine = struct {
 
         while (self.power_updates.items.len != 0) {
             const update = self.power_updates.pop();
-            self.world.accel.recordUpdatePower(self.encoder, self.world.meshes, self.world.materials, update.instance, 0, update.mesh);
+            self.world.accel.recordUpdatePower(&self.encoder, self.world.meshes, self.world.materials, update.instance, 0, update.mesh);
         }
 
         // TODO: this memory barrier is a little more extreme than neccessary
@@ -373,7 +373,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineRebuildPipeline(self: *HdMoonshine) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        const old_pipeline = self.pipeline.recreate(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, pipeline_settings) catch return false;
+        const old_pipeline = self.pipeline.recreate(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, pipeline_settings) catch return false;
         self.vc.device.destroyPipeline(old_pipeline, null);
         self.camera.clearAllSensors();
         return true;
@@ -388,13 +388,13 @@ pub const HdMoonshine = struct {
             .texcoords = if (maybe_texcoords) |texcoords| texcoords[0..attribute_count] else null,
             .indices = null,
         };
-        return self.world.meshes.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, mesh) catch unreachable; // TODO: error handling
+        return self.world.meshes.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, mesh) catch unreachable; // TODO: error handling
     }
 
     pub export fn HdMoonshineCreateSolidTexture1(self: *HdMoonshine, source: f32, name: [*:0]const u8) TextureManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, TextureManager.Source {
+        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
             .f32x1 = source,
         }, std.mem.span(name)) catch unreachable; // TODO: error handling
     }
@@ -402,7 +402,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineCreateSolidTexture2(self: *HdMoonshine, source: F32x2, name: [*:0]const u8) TextureManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, TextureManager.Source {
+        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
             .f32x2 = source,
         }, std.mem.span(name)) catch unreachable; // TODO: error handling
     }
@@ -410,7 +410,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineCreateSolidTexture3(self: *HdMoonshine, source: F32x3, name: [*:0]const u8) TextureManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, TextureManager.Source {
+        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
             .f32x3 = source,
         }, std.mem.span(name)) catch unreachable; // TODO: error handling
     }
@@ -419,7 +419,7 @@ pub const HdMoonshine = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         const bytes = std.mem.sliceAsBytes(data[0..extent.width * extent.height * format.pixelSizeInBytes()]);
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, TextureManager.Source {
+        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
             .raw = TextureManager.Source.Raw {
                 .bytes = bytes,
                 .extent = extent,
@@ -431,7 +431,7 @@ pub const HdMoonshine = struct {
     pub export fn HdMoonshineCreateMaterial(self: *HdMoonshine, material: Material) MaterialManager.Handle {
         self.mutex.lock();
         defer self.mutex.unlock();
-        return self.world.materials.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, MaterialManager.Material {
+        return self.world.materials.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, MaterialManager.Material {
             .normal = material.normal,
             .emissive = material.emissive,
             .bsdf = MaterialManager.PolymorphicBSDF {
@@ -507,7 +507,7 @@ pub const HdMoonshine = struct {
             .mesh = mesh,
         }) catch unreachable;
         self.instance_to_mesh.append(self.allocator.allocator(), mesh) catch unreachable;
-        return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), self.encoder, self.world.meshes, self.world.materials, instance) catch unreachable; // TODO: error handling
+        return self.world.accel.uploadInstance(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, self.world.meshes, self.world.materials, instance) catch unreachable; // TODO: error handling
     }
 
     pub export fn HdMoonshineDestroyInstance(self: *HdMoonshine, handle: Accel.Handle) void {

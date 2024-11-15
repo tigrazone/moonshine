@@ -289,22 +289,22 @@ test "white sphere on white background is white" {
     var tc = try TestingContext.create(allocator, extent);
     defer tc.destroy(allocator);
 
-    var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, tc.encoder);
+    var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder);
 
     // add sphere to world
     {
-        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, try icosphere(5, allocator, false));
+        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, try icosphere(5, allocator, false));
 
-        const normal_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
+        const normal_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
             .f32x2 = MaterialManager.Material.default_normal,
         }, "");
-        const albedo_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
+        const albedo_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
             .f32x3 = F32x3.new(1, 1, 1),
         }, "");
-        const emissive_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
+        const emissive_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
             .f32x3 = F32x3.new(0, 0, 0),
         }, "");
-        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, MaterialManager.Material {
+        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, MaterialManager.Material {
             .normal = normal_texture,
             .emissive = emissive_texture,
             .bsdf = MaterialManager.PolymorphicBSDF {
@@ -314,7 +314,7 @@ test "white sphere on white background is white" {
             }
         });
 
-        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, world.meshes, world.materials, Accel.Instance {
+        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, world.meshes, world.materials, Accel.Instance {
             .visible = true,
             .transform = Mat3x4.identity,
             .geometries = &[1]Accel.Geometry {
@@ -346,7 +346,7 @@ test "white sphere on white background is white" {
             .height = 1,
         }
     };
-    try background.addBackground(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, image, "white");
+    try background.addBackground(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, image, "white");
 
     var scene = Scene {
         .world = world,
@@ -355,7 +355,7 @@ test "white sphere on white background is white" {
     };
     defer scene.destroy(&tc.vc, allocator);
 
-    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 0,
@@ -366,7 +366,7 @@ test "white sphere on white background is white" {
     try assertWhiteFurnaceImage(tc.output_buffer.data);
 
     // do that again but with env sampling
-    const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{
+    const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 1,
         .mesh_samples_per_bounce = 0,
@@ -384,22 +384,22 @@ test "inside illuminating sphere is white" {
     var tc = try TestingContext.create(allocator, extent);
     defer tc.destroy(allocator);
 
-    var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, tc.encoder);
+    var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder);
 
     // add sphere to world
     {
-        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, try icosphere(5, allocator, true));
+        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, try icosphere(5, allocator, true));
 
-        const normal_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
+        const normal_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
             .f32x2 = MaterialManager.Material.default_normal,
         }, "");
-        const albedo_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
+        const albedo_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
             .f32x3 = F32x3.new(0.5, 0.5, 0.5),
         }, "");
-        const emissive_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, TextureManager.Source {
+        const emissive_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
             .f32x3 = F32x3.new(0.5, 0.5, 0.5),
         }, "");
-        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, MaterialManager.Material {
+        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, MaterialManager.Material {
             .normal = normal_texture,
             .emissive = emissive_texture,
             .bsdf = MaterialManager.PolymorphicBSDF {
@@ -409,7 +409,7 @@ test "inside illuminating sphere is white" {
             }
         });
 
-        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, world.meshes, world.materials, Accel.Instance {
+        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, world.meshes, world.materials, Accel.Instance {
             .visible = true,
             .transform = Mat3x4.identity,
             .geometries = &[1]Accel.Geometry {
@@ -441,7 +441,7 @@ test "inside illuminating sphere is white" {
             .height = 1,
         }
     };
-    try background.addBackground(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, image, "black");
+    try background.addBackground(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, image, "black");
 
     var scene = Scene {
         .world = world,
@@ -450,7 +450,7 @@ test "inside illuminating sphere is white" {
     };
     defer scene.destroy(&tc.vc, allocator);
 
-    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 0,
@@ -461,7 +461,7 @@ test "inside illuminating sphere is white" {
     try assertWhiteFurnaceImage(tc.output_buffer.data);
 
     // do that again but with mesh sampling
-    const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, tc.encoder, .{
+    const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 1,

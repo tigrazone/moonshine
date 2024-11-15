@@ -65,9 +65,11 @@ pub fn currentImage(self: *const Self) vk.Image {
     return self.images.get(self.image_index);
 }
 
-// assumes old handle destruction is handled
-pub fn recreate(self: *Self, vc: *const VulkanContext, extent: vk.Extent2D) !void {
+// returns old handle
+pub fn recreate(self: *Self, vc: *const VulkanContext, extent: vk.Extent2D) !vk.SwapchainKHR {
+    const old = self.handle;
     self.* = try createFromOld(vc, extent, self.surface, self.handle);
+    return old;
 }
 
 pub fn acquireNextImage(self: *Self, vc: *const VulkanContext, semaphore: vk.Semaphore) !vk.Result {

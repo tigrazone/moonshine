@@ -131,7 +131,7 @@ const max_emissive_triangles = std.math.powi(u32, 2, 15) catch unreachable;
 // lots of temp memory allocations here
 // encoder must be in recording state
 // returns scratch buffers that must be kept alive until command is completed
-fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, mesh_manager: MeshManager, geometries: []const []const Geometry, blases: *BottomLevelAccels) ![]const VkAllocator.OwnedDeviceBuffer {
+fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, mesh_manager: MeshManager, geometries: []const []const Geometry, blases: *BottomLevelAccels) ![]const VkAllocator.OwnedDeviceBuffer {
     const build_geometry_infos = try allocator.alloc(vk.AccelerationStructureBuildGeometryInfoKHR, geometries.len);
     defer allocator.free(build_geometry_infos);
     defer for (build_geometry_infos) |build_geometry_info| allocator.free(build_geometry_info.p_geometries.?[0..build_geometry_info.geometry_count]);
@@ -223,7 +223,7 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     return scratch_buffers;
 }
 
-pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, texture_descriptor_layout: MaterialManager.TextureManager.DescriptorLayout, encoder: Encoder) !Self {
+pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, texture_descriptor_layout: MaterialManager.TextureManager.DescriptorLayout, encoder: *Encoder) !Self {
     var triangle_power_pipeline = try TrianglePowerPipeline.create(vc, allocator, .{}, .{}, .{ texture_descriptor_layout.handle });
     errdefer triangle_power_pipeline.destroy(vc);
 
@@ -349,7 +349,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
 
 // accel must not be in use
 pub const Handle = u32;
-pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, mesh_manager: MeshManager, material_manager: MaterialManager, instance: Instance) !Handle {
+pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, mesh_manager: MeshManager, material_manager: MaterialManager, instance: Instance) !Handle {
     std.debug.assert(self.geometry_count + instance.geometries.len <= max_geometries);
     std.debug.assert(self.instance_count < max_instances);
 
@@ -456,7 +456,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     return @intCast(self.instance_count - 1);
 }
 
-pub fn recordUpdatePower(self: *Self, encoder: Encoder, mesh_manager: MeshManager, material_manager: MaterialManager, instance_index: u32, geometry_index: u32, mesh_index: u32) void {
+pub fn recordUpdatePower(self: *Self, encoder: *Encoder, mesh_manager: MeshManager, material_manager: MaterialManager, instance_index: u32, geometry_index: u32, mesh_index: u32) void {
     const mesh = mesh_manager.meshes.get(mesh_index);
     const primitive_count = if (mesh.index_count != 0) mesh.index_count else @divExact(mesh.vertex_count, 3);
 

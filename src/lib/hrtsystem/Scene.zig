@@ -24,7 +24,7 @@ camera: Camera,
 // glTF doesn't correspond very well to the internal data structures here so this is very inefficient
 // also very inefficient because it's written very inefficiently, can remove a lot of copying, but that's a problem for another time
 // inspection bool specifies whether some buffers should be created with the `transfer_src_flag` for inspection
-pub fn fromGltfExr(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, gltf_filepath: []const u8, skybox_filepath: []const u8, extent: vk.Extent2D) !Self {
+pub fn fromGltfExr(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, gltf_filepath: []const u8, skybox_filepath: []const u8, extent: vk.Extent2D) !Self {
     var gltf = Gltf.init(allocator);
     defer gltf.deinit();
 

@@ -106,7 +106,7 @@ const Integrator = struct {
     variants: Variants,
     active: Type,
 
-    pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, scene: Scene) !Integrator {
+    pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, scene: Scene) !Integrator {
         var integrator: Integrator = undefined;
         integrator.active = .path_tracing;
 
@@ -119,7 +119,7 @@ const Integrator = struct {
     }
 
     // recreates all so that a change in a shader doesn't get missed
-    pub fn recreate(self: *Integrator, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder) std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).@"struct".fields.len) {
+    pub fn recreate(self: *Integrator, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).@"struct".fields.len) {
         var out = std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).@"struct".fields.len) {};
         inline for (@typeInfo(Variants).@"struct".fields) |field| {
             out.append(@field(self.variants, field.name).pipeline.recreate(vc, vk_allocator, allocator, encoder, @field(self.variants, field.name).options)) catch unreachable;
@@ -127,7 +127,7 @@ const Integrator = struct {
         return out;
     }
 
-    pub fn integrate(self: Integrator, scene: Scene, encoder: Encoder, active_sensor: u32) void {
+    pub fn integrate(self: Integrator, scene: Scene, encoder: *Encoder, active_sensor: u32) void {
         inline for (@typeInfo(Variants).@"struct".fields) |field| {
             if (std.mem.eql(u8, field.name, @tagName(self.active))) {
                 const integrator = @field(self.variants, field.name).pipeline;
@@ -193,27 +193,24 @@ pub fn main() !void {
     var encoder = try Encoder.create(&context, "main");
     defer encoder.destroy(&context);
 
-    var gui = try Platform.create(&context, display.swapchain, window, window_extent, &vk_allocator, encoder);
+    var gui = try Platform.create(&context, display.swapchain, window, window_extent, &vk_allocator, &encoder);
     defer gui.destroy(&context);
-
-    var destruction_queue = DestructionQueue.create(); // TODO: need to clean this every once in a while since we're only allowed a limited amount of most types of handles
-    defer destruction_queue.destroy(&context, allocator);
 
     var sync_copier = try SyncCopier.create(&context, &vk_allocator, @sizeOf(vk.AccelerationStructureInstanceKHR));
     defer sync_copier.destroy(&context);
 
     std.log.info("Set up initial state!", .{});
 
-    var scene = try Scene.fromGltfExr(&context, &vk_allocator, allocator, encoder, config.in_filepath, config.skybox_filepath, config.extent);
+    var scene = try Scene.fromGltfExr(&context, &vk_allocator, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
 
     defer scene.destroy(&context, allocator);
 
     std.log.info("Loaded scene!", .{});
 
-    var object_picker = try ObjectPicker.create(&context, &vk_allocator, allocator, encoder);
+    var object_picker = try ObjectPicker.create(&context, &vk_allocator, allocator, &encoder);
     defer object_picker.destroy(&context);
 
-    var integrator = try Integrator.create(&context, &vk_allocator, allocator, encoder, scene);
+    var integrator = try Integrator.create(&context, &vk_allocator, allocator, &encoder, scene);
     defer integrator.destroy(&context);
 
     std.log.info("Created pipelines!", .{});
@@ -229,11 +226,13 @@ pub fn main() !void {
     var current_clicked_color = F32x3.new(0.0, 0.0, 0.0);
 
     while (!window.shouldClose()) {
-        const frame_encoder = if (display.startFrame(&context)) |buffer| buffer else |err| switch (err) {
+        var frame_encoder = if (display.startFrame(&context)) |buffer| buffer else |err| switch (err) {
             error.OutOfDateKHR => blk: {
                 const new_extent = window.getExtent();
-                try display.recreate(&context, new_extent, &destruction_queue, allocator);
+                context.device.destroySwapchainKHR(try display.recreate(&context, new_extent), null);
                 try gui.resize(&context, display.swapchain);
+                scene.camera.sensors.items[active_sensor].destroy(&context);
+                scene.camera.sensors.items.len -= 1;
                 active_sensor = try scene.camera.appendSensor(&context, &vk_allocator, allocator, new_extent);
                 break :blk try display.startFrame(&context); // don't recreate on second failure
             },
@@ -284,9 +283,9 @@ pub fn main() !void {
             if (imgui.button(rebuild_label, imgui.Vec2{ .x = imgui.getContentRegionAvail().x, .y = 0.0 })) {
                 const start = try std.time.Instant.now();
                 rebuild_error = false;
-                for (integrator.recreate(&context, &vk_allocator, allocator, encoder).slice()) |result| {
+                for (integrator.recreate(&context, &vk_allocator, allocator, &encoder).slice()) |result| {
                     if (result) |old_pipeline| {
-                        try destruction_queue.add(allocator, old_pipeline);
+                        try frame_encoder.attachResource(old_pipeline);
                         scene.camera.sensors.items[active_sensor].clear();
                     } else |err| if (err == error.ShaderCompileFail) {
                         rebuild_error = true;
@@ -532,14 +531,18 @@ pub fn main() !void {
             if (max_sample_count != 0) scene.camera.sensors.items[active_sensor].sample_count = @min(scene.camera.sensors.items[active_sensor].sample_count, max_sample_count);
             if (ok == vk.Result.suboptimal_khr) {
                 const new_extent = window.getExtent();
-                try display.recreate(&context, new_extent, &destruction_queue, allocator);
+                try frame_encoder.attachResource(try display.recreate(&context, new_extent));
                 try gui.resize(&context, display.swapchain);
+                try frame_encoder.attachResource(scene.camera.sensors.items[active_sensor].image);
+                scene.camera.sensors.items.len -= 1;
                 active_sensor = try scene.camera.appendSensor(&context, &vk_allocator, allocator, new_extent);
             }
         } else |err| if (err == error.OutOfDateKHR) {
             const new_extent = window.getExtent();
-            try display.recreate(&context, new_extent, &destruction_queue, allocator);
+            try frame_encoder.attachResource(try display.recreate(&context, new_extent));
             try gui.resize(&context, display.swapchain);
+            try frame_encoder.attachResource(scene.camera.sensors.items[active_sensor].image);
+            scene.camera.sensors.items.len -= 1;
             active_sensor = try scene.camera.appendSensor(&context, &vk_allocator, allocator, new_extent);
         } else return err;
 

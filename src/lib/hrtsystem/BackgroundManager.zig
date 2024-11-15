@@ -78,7 +78,7 @@ pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator) !Self {
     };
 }
 
-pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder) !void {
+pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) !void {
     var color = [4]f32 { 1.0, 1.0, 1.0, 1.0 };
     const rgba = Rgba2D {
         .ptr = @ptrCast(&color),
@@ -104,7 +104,7 @@ const shader_local_size = 8; // must be kept in sync with shader -- looks like H
 // only using equal area for importance sampling.
 // I tried that here but it seems to produce noisier results for e.g., sunny skies
 // compared to just keeping everything in the same parameterization.
-pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: Encoder, color_image: Rgba2D, name: []const u8) !void {
+pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, color_image: Rgba2D, name: []const u8) !void {
     const texture_name = try std.fmt.allocPrintZ(allocator, "background {s}", .{ name });
     defer allocator.free(texture_name);
 

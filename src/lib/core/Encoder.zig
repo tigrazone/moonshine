@@ -12,6 +12,7 @@ const vk_helpers = core.vk_helpers;
 
 pool: vk.CommandPool,
 buffer: VulkanContext.CommandBuffer,
+destruction_queue: core.DestructionQueue, // use the page allocator for this for now -- the idea that you probably will either want to destroy zero or many
 
 const Self = @This();
 
@@ -36,11 +37,24 @@ pub fn create(vc: *const VulkanContext, name: [*:0]const u8) !Self {
     return Self {
         .pool = pool,
         .buffer = VulkanContext.CommandBuffer.init(buffer, vc.device_dispatch),
+        .destruction_queue = .{},
     };
 }
 
-pub fn destroy(self: Self, vc: *const VulkanContext) void {
+// command buffer must not be pending
+pub fn destroy(self: *Self, vc: *const VulkanContext) void {
     vc.device.destroyCommandPool(self.pool, null);
+    self.destruction_queue.destroy(vc, std.heap.page_allocator);
+}
+
+// attach resource to the lifetime of this encoder, to be destroyed
+// when the encoder is no longer active
+pub fn attachResource(self: *Self, resource: anytype) !void {
+    try self.destruction_queue.append(std.heap.page_allocator, resource);
+}
+
+pub fn clearResources(self: *Self, vc: *const VulkanContext) void {
+    self.destruction_queue.clear(vc);
 }
 
 // start recording work
@@ -75,15 +89,11 @@ pub fn submit(self: Self, queue: VulkanContext.Queue, sync: struct {
     try queue.submit2(1, @ptrCast(&submit_info), sync.fence);
 }
 
-pub fn submitAndIdleUntilDone(self: Self, vc: *const VulkanContext) !void {
+pub fn submitAndIdleUntilDone(self: *Self, vc: *const VulkanContext) !void {
     try self.submit(vc.queue, .{});
-    try self.idleUntilDone(vc);
-}
-
-// must be called at some point if you want a guarantee your work is actually done
-pub fn idleUntilDone(self: Self, vc: *const VulkanContext) !void {
     try vc.queue.waitIdle();
     try vc.device.resetCommandPool(self.pool, .{});
+    self.clearResources(vc);
 }
 
 pub fn uploadDataToImage(self: Self, T: type, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(T), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
