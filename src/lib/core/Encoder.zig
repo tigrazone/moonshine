@@ -232,3 +232,56 @@ pub fn copyBufferToImage(self: Self, src: vk.Buffer, dst: vk.Image, layout: vk.I
     };
     self.buffer.copyBufferToImage(src, dst, layout, 1, @ptrCast(&copy));
 }
+
+// meant to be same as vk.ImageMemoryBarrier2 but sane defaults
+pub const ImageBarrier = extern struct {
+    s_type: vk.StructureType = .image_memory_barrier_2,
+    p_next: ?*const anyopaque = null,
+    src_stage_mask: vk.PipelineStageFlags2 = .{},
+    src_access_mask: vk.AccessFlags2 = .{},
+    dst_stage_mask: vk.PipelineStageFlags2 = .{},
+    dst_access_mask: vk.AccessFlags2 = .{},
+    // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageMemoryBarrier2.html
+    // > When the old and new layout are equal, the layout values are ignored - data is preserved
+    // > no matter what values are specified, or what layout the image is currently in.
+    old_layout: vk.ImageLayout = .general,
+    new_layout: vk.ImageLayout = .general,
+    src_queue_family_index: u32 = vk.QUEUE_FAMILY_IGNORED,
+    dst_queue_family_index: u32 = vk.QUEUE_FAMILY_IGNORED,
+    image: vk.Image,
+
+    aspect_mask: vk.ImageAspectFlags = .{ .color_bit = true },
+    base_mip_level: u32 = 0,
+    level_count: u32 = vk.REMAINING_MIP_LEVELS,
+    base_array_layer: u32 = 0,
+    layer_count: u32 = vk.REMAINING_ARRAY_LAYERS,
+};
+
+// meant to be same as vk.BufferMemoryBarrier2 but sane defaults
+pub const BufferBarrier = extern struct {
+    s_type: vk.StructureType = .buffer_memory_barrier_2,
+    p_next: ?*const anyopaque = null,
+    src_stage_mask: vk.PipelineStageFlags2 = .{},
+    src_access_mask: vk.AccessFlags2 = .{},
+    dst_stage_mask: vk.PipelineStageFlags2 = .{},
+    dst_access_mask: vk.AccessFlags2 = .{},
+    src_queue_family_index: u32 = vk.QUEUE_FAMILY_IGNORED,
+    dst_queue_family_index: u32 = vk.QUEUE_FAMILY_IGNORED,
+    buffer: vk.Buffer,
+    offset: vk.DeviceSize = 0,
+    size: vk.DeviceSize = vk.WHOLE_SIZE,
+};
+
+comptime {
+    std.debug.assert(@sizeOf(ImageBarrier) == @sizeOf(vk.ImageMemoryBarrier2));
+    std.debug.assert(@sizeOf(BufferBarrier) == @sizeOf(vk.BufferMemoryBarrier2));
+}
+
+pub fn barrier(self: Self, images: []const ImageBarrier, buffers: []const BufferBarrier) void {
+    self.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        .image_memory_barrier_count = @intCast(images.len),
+        .p_image_memory_barriers = @ptrCast(images.ptr),
+        .buffer_memory_barrier_count = @intCast(buffers.len),
+        .p_buffer_memory_barriers = @ptrCast(buffers.ptr),
+    });
+}
