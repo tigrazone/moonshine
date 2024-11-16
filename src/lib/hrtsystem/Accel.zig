@@ -240,7 +240,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
     errdefer triangle_powers.destroy(vc);
 
     var triangle_powers_mips: [std.math.log2(max_emissive_triangles) + 1]vk.ImageView = undefined;
-    for (&triangle_powers_mips, 0..) |*view, level_index| {
+    inline for (&triangle_powers_mips, 0..) |*view, level_index| {
         view.* = try vc.device.createImageView(&vk.ImageViewCreateInfo {
             .flags = .{},
             .image = triangle_powers.handle,
@@ -260,6 +260,7 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
                 .layer_count = vk.REMAINING_ARRAY_LAYERS,
             },
         }, null);
+        try vk_helpers.setDebugName(vc, view.*, std.fmt.comptimePrint("triangle powers view {}", .{ level_index }));
     }
 
     const geometries = try vk_allocator.createDeviceBuffer(vc, allocator, Geometry, max_geometries, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
@@ -445,6 +446,22 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
         .transform_offset = 0,
     })});
 
+    encoder.barrier(&.{}, &[_]Encoder.BufferBarrier{
+        Encoder.BufferBarrier {
+            .src_stage_mask = .{ .all_commands_bit = true },
+            .src_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
+            .dst_stage_mask = .{ .all_commands_bit = true },
+            .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
+            .buffer = self.instances_device.handle,
+        },
+        Encoder.BufferBarrier {
+            .src_stage_mask = .{ .all_commands_bit = true },
+            .src_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
+            .dst_stage_mask = .{ .all_commands_bit = true },
+            .dst_access_mask = .{ .memory_write_bit = true, .memory_read_bit = true },
+            .buffer = self.geometries.handle,
+        },
+    });
     for (instance.geometries, 0..) |geometry, i| {
         self.recordUpdatePower(encoder, mesh_manager, material_manager, @intCast(self.instance_count - 1), @intCast(i), geometry.mesh);
     }
@@ -468,27 +485,19 @@ pub fn recordUpdatePower(self: *Self, encoder: *Encoder, mesh_manager: MeshManag
     // probably we will just get a GPU crash instead :(
     if (primitive_count > max_emissive_triangles) return;
 
-    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
-        .image_memory_barrier_count = 1,
-        .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
-            .{
-                .dst_stage_mask = .{ .compute_shader_bit = true },
-                .dst_access_mask = .{ .shader_write_bit = true },
-                .old_layout = .shader_read_only_optimal,
-                .new_layout = .general,
-                .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                .image = self.triangle_powers.handle,
-                .subresource_range = .{
-                    .aspect_mask = .{ .color_bit = true },
-                    .base_mip_level = 0,
-                    .level_count = 1,
-                    .base_array_layer = 0,
-                    .layer_count = vk.REMAINING_ARRAY_LAYERS,
-                },
-            }
-        },
-    });
+    encoder.barrier(&[_]Encoder.ImageBarrier {
+        Encoder.ImageBarrier {
+            .src_stage_mask = .{ .compute_shader_bit = true },
+            .src_access_mask = .{ .shader_read_bit = true },
+            .dst_stage_mask = .{ .compute_shader_bit = true },
+            .dst_access_mask = .{ .shader_write_bit = true },
+            .old_layout = .shader_read_only_optimal,
+            .new_layout = .general,
+            .image = self.triangle_powers.handle,
+            .base_mip_level = 0,
+            .level_count = 1,
+        }
+    }, &.{});
 
     self.triangle_power_pipeline.recordBindPipeline(encoder.buffer);
     self.triangle_power_pipeline.recordBindAdditionalDescriptorSets(encoder.buffer, .{ material_manager.textures.descriptor_set });
@@ -513,45 +522,28 @@ pub fn recordUpdatePower(self: *Self, encoder: *Encoder, mesh_manager: MeshManag
     self.triangle_power_fold_pipeline.recordBindPipeline(encoder.buffer);
 
     for (1..self.triangle_powers_mips.len) |dst_mip_level| {
-        encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
-            .image_memory_barrier_count = 2,
-            .p_image_memory_barriers = &[2]vk.ImageMemoryBarrier2 {
-                .{
-                    .src_stage_mask = .{ .compute_shader_bit = true },
-                    .src_access_mask = .{ .shader_write_bit = true },
-                    .dst_stage_mask = .{ .compute_shader_bit = true },
-                    .dst_access_mask = .{ .shader_read_bit = true },
-                    .old_layout = .general,
-                    .new_layout = .shader_read_only_optimal,
-                    .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                    .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                    .image = self.triangle_powers.handle,
-                    .subresource_range = .{
-                        .aspect_mask = .{ .color_bit = true },
-                        .base_mip_level = @intCast(dst_mip_level - 1),
-                        .level_count = 1,
-                        .base_array_layer = 0,
-                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
-                    },
-                },
-                .{
-                    .dst_stage_mask = .{ .compute_shader_bit = true },
-                    .dst_access_mask = .{ .shader_read_bit = true },
-                    .old_layout = .shader_read_only_optimal,
-                    .new_layout = .general,
-                    .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                    .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                    .image = self.triangle_powers.handle,
-                    .subresource_range = .{
-                        .aspect_mask = .{ .color_bit = true },
-                        .base_mip_level = @intCast(dst_mip_level),
-                        .level_count = 1,
-                        .base_array_layer = 0,
-                        .layer_count = vk.REMAINING_ARRAY_LAYERS,
-                    },
-                }
+        encoder.barrier(&[_]Encoder.ImageBarrier {
+            Encoder.ImageBarrier {
+                .src_stage_mask = .{ .compute_shader_bit = true },
+                .src_access_mask = .{ .shader_write_bit = true },
+                .dst_stage_mask = .{ .compute_shader_bit = true },
+                .dst_access_mask = .{ .shader_read_bit = true },
+                .old_layout = .general,
+                .new_layout = .shader_read_only_optimal,
+                .image = self.triangle_powers.handle,
+                .base_mip_level = @intCast(dst_mip_level - 1),
+                .level_count = 1,
             },
-        });
+            Encoder.ImageBarrier {
+                .dst_stage_mask = .{ .compute_shader_bit = true },
+                .dst_access_mask = .{ .shader_write_bit = true },
+                .old_layout = .shader_read_only_optimal,
+                .new_layout = .general,
+                .image = self.triangle_powers.handle,
+                .base_mip_level = @intCast(dst_mip_level),
+                .level_count = 1,
+            }
+        }, &.{});
         self.triangle_power_fold_pipeline.recordPushDescriptors(encoder.buffer, .{
             .src_mip = .{ .view = self.triangle_powers_mips[dst_mip_level - 1] },
             .dst_mip = .{ .view = self.triangle_powers_mips[dst_mip_level] },
@@ -569,29 +561,19 @@ pub fn recordUpdatePower(self: *Self, encoder: *Encoder, mesh_manager: MeshManag
         self.triangle_power_fold_pipeline.recordDispatch(encoder.buffer, .{ .width = mip_dispatch_size, .height = 1, .depth = 1 });
     }
 
-    encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
-        .image_memory_barrier_count = 1,
-        .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
-            .{
-                .src_stage_mask = .{ .compute_shader_bit = true },
-                .src_access_mask = .{ .shader_write_bit = true },
-                .dst_stage_mask = .{ .compute_shader_bit = true },
-                .dst_access_mask = .{ .shader_read_bit = true },
-                .old_layout = .general,
-                .new_layout = .shader_read_only_optimal,
-                .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                .image = self.triangle_powers.handle,
-                .subresource_range = .{
-                    .aspect_mask = .{ .color_bit = true },
-                    .base_mip_level = self.triangle_powers_mips.len - 1,
-                    .level_count = 1,
-                    .base_array_layer = 0,
-                    .layer_count = vk.REMAINING_ARRAY_LAYERS,
-                },
-            }
-        },
-    });
+    encoder.barrier(&[_]Encoder.ImageBarrier {
+        Encoder.ImageBarrier {
+            .src_stage_mask = .{ .compute_shader_bit = true },
+            .src_access_mask = .{ .shader_write_bit = true },
+            .dst_stage_mask = .{ .compute_shader_bit = true },
+            .dst_access_mask = .{ .shader_read_bit = true },
+            .old_layout = .general,
+            .new_layout = .shader_read_only_optimal,
+            .image = self.triangle_powers.handle,
+            .base_mip_level = self.triangle_powers_mips.len - 1,
+            .level_count = 1,
+        }
+    }, &.{});
 }
 
 // probably bad idea if you're changing many
