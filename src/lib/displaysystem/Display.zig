@@ -82,15 +82,7 @@ pub fn startFrame(self: *Self, vc: *const VulkanContext) !*Encoder {
     const frame = &self.frames[self.frame_index];
 
     _ = try self.swapchain.acquireNextImage(vc, frame.image_acquired);
-    if (metrics) {
-        var timestamps: [2]u64 = undefined;
-        const result = try vc.device.getQueryPoolResults(frame.query_pool, 0, 2, 2 * @sizeOf(u64), &timestamps, @sizeOf(u64), .{.@"64_bit" = true });
-        self.last_frame_time_ns = if (result == .success) @as(f64, @floatFromInt(timestamps[1] - timestamps[0])) * self.timestamp_period else std.math.nan(f64);
-        vc.device.resetQueryPool(frame.query_pool, 0, 2);
-    }
 
-    try vc.device.resetCommandPool(frame.encoder.pool, .{});
-    frame.encoder.clearResources(vc); // clear resources used last frame as they are now no longer in use
     try frame.encoder.begin();
 
     if (metrics) frame.encoder.buffer.writeTimestamp2(.{ .top_of_pipe_bit = true }, frame.query_pool, 0);
@@ -103,46 +95,51 @@ pub fn recreate(self: *Self, vc: *const VulkanContext, new_extent: vk.Extent2D) 
 }
 
 pub fn endFrame(self: *Self, vc: *const VulkanContext) !vk.Result {
-    const frame = self.frames[self.frame_index];
+    const result = blk: {
+        const frame = self.frames[self.frame_index];
 
-    if (metrics) frame.encoder.buffer.writeTimestamp2(.{ .bottom_of_pipe_bit = true }, frame.query_pool, 1);
+        if (metrics) frame.encoder.buffer.writeTimestamp2(.{ .bottom_of_pipe_bit = true }, frame.query_pool, 1);
 
-    try frame.encoder.submit(vc.queue, .{
-        .wait_semaphore_infos = &[_]vk.SemaphoreSubmitInfoKHR {
-            .{
-                .semaphore = frame.image_acquired,
-                .value = 0,
-                .stage_mask = .{ .color_attachment_output_bit = true },
-                .device_index = 0,
-            }
-        },
-        .signal_semaphore_infos = &[_]vk.SemaphoreSubmitInfoKHR {
-            .{
-                .semaphore = frame.command_completed,
-                .value = 0,
-                .stage_mask =  .{ .color_attachment_output_bit = true },
-                .device_index = 0,
-            }
-        },
-        .fence = frame.fence,
-    });
+        try frame.encoder.submit(vc.queue, .{
+            .wait_semaphore_infos = &[_]vk.SemaphoreSubmitInfoKHR {
+                .{
+                    .semaphore = frame.image_acquired,
+                    .value = 0,
+                    .stage_mask = .{ .color_attachment_output_bit = true },
+                    .device_index = 0,
+                }
+            },
+            .signal_semaphore_infos = &[_]vk.SemaphoreSubmitInfoKHR {
+                .{
+                    .semaphore = frame.command_completed,
+                    .value = 0,
+                    .stage_mask =  .{ .color_attachment_output_bit = true },
+                    .device_index = 0,
+                }
+            },
+            .fence = frame.fence,
+        });
 
-    if (self.swapchain.present(vc, frame.command_completed)) |ok| {
-        // if ok, frame presented successfully and we should wait for previous frame
-        self.frame_index = (self.frame_index + 1) % frames_in_flight;
+        break :blk self.swapchain.present(vc, frame.command_completed);
+    };
 
-        const new_frame = self.frames[self.frame_index];
+    self.frame_index = (self.frame_index + 1) % frames_in_flight;
 
-        _ = try vc.device.waitForFences(1, @ptrCast(&new_frame.fence), vk.TRUE, std.math.maxInt(u64));
-        try vc.device.resetFences(1, @ptrCast(&new_frame.fence));
+    // wait for next frame to ensure CPU is not too far ahead of GPU
+    var next_frame = &self.frames[self.frame_index];
+    _ = try vc.device.waitForFences(1, @ptrCast(&next_frame.fence), vk.TRUE, std.math.maxInt(u64));
 
-        return ok;
-    } else |err| {
-        // if not ok, presentation failure and we should wait for this frame
-        _ = try vc.device.waitForFences(1, @ptrCast(&frame.fence), vk.TRUE, std.math.maxInt(u64));
-        try vc.device.resetFences(1, @ptrCast(&frame.fence));
-        return err;
+    // collect metrics if enabled
+    if (metrics) {
+        var timestamps: [2]u64 = undefined;
+        const query_result = try vc.device.getQueryPoolResults(next_frame.query_pool, 0, 2, 2 * @sizeOf(u64), &timestamps, @sizeOf(u64), .{.@"64_bit" = true });
+        self.last_frame_time_ns = if (query_result == .success) @as(f64, @floatFromInt(timestamps[1] - timestamps[0])) * self.timestamp_period else std.math.nan(f64);
     }
+
+    // reset resources associated with next frame so it is ready for use on next startFrame
+    try next_frame.reset(vc);
+
+    return result;
 }
 
 const Frame = struct {
@@ -184,6 +181,17 @@ const Frame = struct {
 
             .query_pool = query_pool,
         };
+    }
+
+    // frame must not be in use
+    fn reset(self: *Frame, vc: *const VulkanContext) !void {
+        try vc.device.resetFences(1, @ptrCast(&self.fence));
+
+        if (metrics) {
+            vc.device.resetQueryPool(self.query_pool, 0, 2);
+        }
+        try vc.device.resetCommandPool(self.encoder.pool, .{});
+        self.encoder.clearResources(vc);
     }
 
     fn destroy(self: *Frame, vc: *const VulkanContext) void {
