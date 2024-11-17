@@ -7,6 +7,7 @@ const engine = @import("../engine.zig");
 const VulkanContext = engine.core.VulkanContext;
 const Encoder = engine.core.Encoder;
 const VkAllocator = engine.core.Allocator;
+const vk_helpers = engine.core.vk_helpers;
 
 const Image = engine.core.Image;
 const DescriptorLayout = engine.core.descriptor.DescriptorLayout;
@@ -261,7 +262,10 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
         .buffer = undefined,
         .len = swapchain.images.len,
     };
-    for (views.slice(), 0..) |*view, i| {
+    inline for (&views.buffer, 0..) |*view, i| {
+        if (i > views.len) {
+            break;
+        }
         view.* = try vc.device.createImageView(&vk.ImageViewCreateInfo{
             .image = swapchain.images.slice()[i],
             .view_type = .@"2d",
@@ -280,6 +284,7 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
                 .layer_count = 1,
             },
         }, null);
+        try vk_helpers.setDebugName(vc, view.*, std.fmt.comptimePrint("swapchain image view {}", .{ i }));
     }
 
     return Self{
