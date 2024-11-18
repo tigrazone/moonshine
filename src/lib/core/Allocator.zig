@@ -5,6 +5,7 @@
 const vk = @import("vulkan");
 const std = @import("std");
 const VulkanContext = @import("../engine.zig").core.VulkanContext;
+const vk_helpers = @import("../engine.zig").core.vk_helpers;
 
 const Self = @This();
 
@@ -98,12 +99,15 @@ pub fn DeviceBuffer(comptime T: type) type {
     };
 }
 
-pub fn createDeviceBuffer(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator, comptime T: type, count: vk.DeviceSize, usage: vk.BufferUsageFlags) !DeviceBuffer(T) {
+pub fn createDeviceBuffer(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator, comptime T: type, count: vk.DeviceSize, usage: vk.BufferUsageFlags, name: [:0]const u8) !DeviceBuffer(T) {
     if (count == 0) return DeviceBuffer(T) {};
 
     var buffer: vk.Buffer = undefined;
     var memory: vk.DeviceMemory = undefined;
     try self.createRawBuffer(vc, @sizeOf(T) * count, usage, .{ .device_local_bit = true }, &buffer, &memory);
+
+    try vk_helpers.setDebugName(vc, buffer, name);
+    try vk_helpers.setDebugName(vc, memory, name);
 
     try self.memory.append(allocator, memory);
 
@@ -130,10 +134,13 @@ pub const OwnedDeviceBuffer = struct {
     }
 };
 
-pub fn createOwnedDeviceBuffer(self: *Self, vc: *const VulkanContext, size: vk.DeviceSize, usage: vk.BufferUsageFlags) !OwnedDeviceBuffer {
+pub fn createOwnedDeviceBuffer(self: *Self, vc: *const VulkanContext, size: vk.DeviceSize, usage: vk.BufferUsageFlags, name: [:0]const u8) !OwnedDeviceBuffer {
     var buffer: vk.Buffer = undefined;
     var memory: vk.DeviceMemory = undefined;
     try self.createRawBuffer(vc, size, usage, .{ .device_local_bit = true }, &buffer, &memory);
+
+    try vk_helpers.setDebugName(vc, buffer, name);
+    try vk_helpers.setDebugName(vc, memory, name);
 
     return OwnedDeviceBuffer {
         .handle = buffer,

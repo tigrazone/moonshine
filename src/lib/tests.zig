@@ -247,6 +247,7 @@ fn icosphere(order: usize, allocator: std.mem.Allocator, reverse_winding_order: 
     }
 
     const mesh = MeshManager.Mesh {
+        .name = "icosphere",
         .positions = positions,
         .normals = null, // TODO: add normals here when normals are robust enough
         .texcoords = null,
@@ -312,7 +313,7 @@ test "white sphere on white background is white" {
                     .color = albedo_texture,
                 }
             }
-        });
+        }, "white");
 
         _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, world.meshes, world.materials, Accel.Instance {
             .visible = true,
@@ -407,7 +408,7 @@ test "inside illuminating sphere is white" {
                     .color = albedo_texture,
                 }
             }
-        });
+        }, "white");
 
         _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, world.meshes, world.materials, Accel.Instance {
             .visible = true,

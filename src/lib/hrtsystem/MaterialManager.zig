@@ -140,7 +140,7 @@ pub fn createEmpty(vc: *const VulkanContext) !Self {
 
 // you can either do this or create below, but not both
 // texture handles must've been already added to the MaterialManager's textures
-pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, info: Material) !Handle {
+pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, info: Material, name: [:0]const u8) !Handle {
     std.debug.assert(self.material_count < max_materials);
 
     try encoder.begin();
@@ -149,7 +149,9 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
             if (@sizeOf(field.type) != 0) {
                 const variant_buffer = &@field(self.variant_buffers, field.name);
                 if (variant_buffer.buffer.is_null()) {
-                    variant_buffer.buffer = try vk_allocator.createDeviceBuffer(vc, allocator, field.type, max_materials, .{ .shader_device_address_bit = true, .transfer_dst_bit = true });
+                    const buffer_name = try std.fmt.allocPrintZ(allocator, "material {s} {s}", .{ name, field.name });
+                    defer allocator.free(buffer_name);
+                    variant_buffer.buffer = try vk_allocator.createDeviceBuffer(vc, allocator, field.type, max_materials, .{ .shader_device_address_bit = true, .transfer_dst_bit = true }, buffer_name);
                     variant_buffer.addr = variant_buffer.buffer.getAddress(vc);
                 }
                 encoder.updateBuffer(field.type, variant_buffer.buffer, &.{ @field(info.bsdf, field.name) }, variant_buffer.len);
@@ -162,7 +164,7 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
                 .type = std.meta.activeTag(info.bsdf),
                 .addr = if (@sizeOf(field.type) != 0) @field(self.variant_buffers, field.name).addr + (@field(self.variant_buffers, field.name).len - 1) * @sizeOf(field.type) else 0,
             };
-            if (self.materials.is_null()) self.materials = try vk_allocator.createDeviceBuffer(vc, allocator, GpuMaterial, max_materials, .{ .storage_buffer_bit = true, .transfer_dst_bit = true });
+            if (self.materials.is_null()) self.materials = try vk_allocator.createDeviceBuffer(vc, allocator, GpuMaterial, max_materials, .{ .storage_buffer_bit = true, .transfer_dst_bit = true }, "materials");
             encoder.updateBuffer(GpuMaterial, self.materials, &.{ gpu_material }, self.material_count);
         }
     }

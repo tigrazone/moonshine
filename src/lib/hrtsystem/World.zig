@@ -273,13 +273,15 @@ pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator:
 
         for (gltf.data.materials.items) |material| {
             const mat = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, gltf_directory, material, &materials.textures);
-            _ = try materials.upload(vc, vk_allocator, allocator, encoder, mat);
+            const namez = try allocator.dupeZ(u8, material.name);
+            defer allocator.free(namez);
+            _ = try materials.upload(vc, vk_allocator, allocator, encoder, mat, namez);
         }
 
         const default_material = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, gltf_directory, Gltf.Material {
             .name = "default",
         }, &materials.textures);
-        _ = try materials.upload(vc, vk_allocator, allocator, encoder, default_material);
+        _ = try materials.upload(vc, vk_allocator, allocator, encoder, default_material, "default");
 
         break :blk materials;
     };
@@ -392,6 +394,7 @@ pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator:
 
                 // get vertices
                 try objects.append(MeshManager.Mesh {
+                    .name = mesh.name,
                     .positions = vertices.positions,
                     .texcoords = if (vertices.texcoords.len != 0) vertices.texcoords else null,
                     .normals = if (vertices.normals.len != 0) vertices.normals else null,

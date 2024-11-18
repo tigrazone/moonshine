@@ -383,6 +383,7 @@ pub const HdMoonshine = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
         const mesh = MeshManager.Mesh {
+            .name = "hydra",
             .positions = positions[0..attribute_count],
             .normals = if (maybe_normals) |normals| normals[0..attribute_count] else null,
             .texcoords = if (maybe_texcoords) |texcoords| texcoords[0..attribute_count] else null,
@@ -437,7 +438,7 @@ pub const HdMoonshine = struct {
             .bsdf = MaterialManager.PolymorphicBSDF {
                 .standard_pbr = material.standard_pbr,
             },
-        }) catch unreachable; // TODO: error handling
+        }, "hydra") catch unreachable; // TODO: error handling
     }
 
     pub export fn HdMoonshineSetMaterialNormal(self: *HdMoonshine, material: MaterialManager.Handle, image: TextureManager.Handle) void {
