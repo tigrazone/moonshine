@@ -12,7 +12,7 @@ const vk_helpers = core.vk_helpers;
 const std = @import("std");
 const vk = @import("vulkan");
 
-buffer: VkAllocator.HostBuffer(u8),
+buffer: VkAllocator.OwnedHostBuffer(u8),
 
 encoder: Encoder,
 ready_fence: vk.Fence,

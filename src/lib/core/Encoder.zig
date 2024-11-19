@@ -1,4 +1,5 @@
-// abstraction for GPU commands
+// abstraction for GPU commands.
+// the intent is that you only create a couple of these as they're not super lightweight and have a lot of conveniences
 // TODO: this could be made a little more type-safe by splitting encoder states into their own types,
 // e.g., PendingEncoder, ActiveEncoder, etc
 
@@ -13,6 +14,8 @@ const vk_helpers = core.vk_helpers;
 pool: vk.CommandPool,
 buffer: VulkanContext.CommandBuffer,
 destruction_queue: core.DestructionQueue, // use the page allocator for this for now -- the idea that you probably will either want to destroy zero or many
+upload_allocator: VkAllocator.UploadPageAllocator,
+upload_arena: std.heap.ArenaAllocator, // can't use State as we want to return the allocator but maintain a reference to it
 
 const Self = @This();
 
@@ -38,7 +41,17 @@ pub fn create(vc: *const VulkanContext, name: [*:0]const u8) !Self {
         .pool = pool,
         .buffer = VulkanContext.CommandBuffer.init(buffer, vc.device_dispatch),
         .destruction_queue = .{},
+        .upload_allocator = VkAllocator.UploadPageAllocator.init(vc),
+        .upload_arena = std.heap.ArenaAllocator {
+            .child_allocator = undefined,
+            .state = .{},
+        },
     };
+}
+
+pub fn uploadAllocator(self: *Self) std.mem.Allocator {
+    self.upload_arena.child_allocator = self.upload_allocator.allocator();
+    return self.upload_arena.allocator();
 }
 
 // command buffer must not be pending
@@ -55,6 +68,9 @@ pub fn attachResource(self: *Self, resource: anytype) !void {
 
 pub fn clearResources(self: *Self, vc: *const VulkanContext) void {
     self.destruction_queue.clear(vc);
+
+    self.upload_arena.child_allocator = self.upload_allocator.allocator();
+    std.debug.assert(self.upload_arena.reset(.free_all));
 }
 
 // start recording work
@@ -96,7 +112,7 @@ pub fn submitAndIdleUntilDone(self: *Self, vc: *const VulkanContext) !void {
     self.clearResources(vc);
 }
 
-pub fn uploadDataToImage(self: Self, T: type, dst_image: vk.Image, src_data: VkAllocator.HostBuffer(T), extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
+pub fn uploadDataToImage(self: Self, comptime T: type, src_data: VkAllocator.BufferSlice(T), dst_image: vk.Image, dst_image_extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
     self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
@@ -116,7 +132,7 @@ pub fn uploadDataToImage(self: Self, T: type, dst_image: vk.Image, src_data: VkA
             },
         }),
     });
-    self.copyBufferToImage(src_data.handle, dst_image, .transfer_dst_optimal, extent);
+    self.copyBufferToImage(src_data.handle, src_data.offset, dst_image, .transfer_dst_optimal, dst_image_extent);
     self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
@@ -144,12 +160,11 @@ pub fn copyBuffer(self: Self, src: vk.Buffer, dst: vk.Buffer, regions: []const v
 }
 
 // buffers must have appropriate flags
-// uploads whole host buffer to gpu buffer
-pub fn uploadBuffer(self: Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: VkAllocator.HostBuffer(T)) void {
+pub fn uploadBuffer(self: Self, comptime T: type, src: VkAllocator.BufferSlice(T), dst: VkAllocator.DeviceBuffer(T)) void {
     const region = vk.BufferCopy {
-        .src_offset = 0,
+        .src_offset = src.offset,
         .dst_offset = 0,
-        .size = src.sizeInBytes(),
+        .size = src.asBytes().len,
     };
 
     self.buffer.copyBuffer(src.handle, dst.handle, 1, @ptrCast(&region));
@@ -208,9 +223,9 @@ pub fn copyImageToBuffer(self: Self, src: vk.Image, layout: vk.ImageLayout, exte
     self.buffer.copyImageToBuffer(src, layout, dst, 1, @ptrCast(&copy));
 }
 
-pub fn copyBufferToImage(self: Self, src: vk.Buffer, dst: vk.Image, layout: vk.ImageLayout, extent: vk.Extent2D) void {
+pub fn copyBufferToImage(self: Self, src: vk.Buffer, src_offset: vk.DeviceSize, dst: vk.Image, layout: vk.ImageLayout, extent: vk.Extent2D) void {
     const copy = vk.BufferImageCopy {
-        .buffer_offset = 0,
+        .buffer_offset = src_offset,
         .buffer_row_length = 0,
         .buffer_image_height = 0,
         .image_subresource = .{

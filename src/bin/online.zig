@@ -119,10 +119,10 @@ const Integrator = struct {
     }
 
     // recreates all so that a change in a shader doesn't get missed
-    pub fn recreate(self: *Integrator, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).@"struct".fields.len) {
+    pub fn recreate(self: *Integrator, vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder) std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).@"struct".fields.len) {
         var out = std.BoundedArray(anyerror!vk.Pipeline, @typeInfo(Variants).@"struct".fields.len) {};
         inline for (@typeInfo(Variants).@"struct".fields) |field| {
-            out.append(@field(self.variants, field.name).pipeline.recreate(vc, vk_allocator, allocator, encoder, @field(self.variants, field.name).options)) catch unreachable;
+            out.append(@field(self.variants, field.name).pipeline.recreate(vc, allocator, encoder, @field(self.variants, field.name).options)) catch unreachable;
         }
         return out;
     }
@@ -193,25 +193,30 @@ pub fn main() !void {
     var encoder = try Encoder.create(&context, "main");
     defer encoder.destroy(&context);
 
-    var gui = try Platform.create(&context, display.swapchain, window, window_extent, &vk_allocator, &encoder);
-    defer gui.destroy(&context);
-
     var sync_copier = try SyncCopier.create(&context, &vk_allocator, @sizeOf(vk.AccelerationStructureInstanceKHR));
     defer sync_copier.destroy(&context);
 
     std.log.info("Set up initial state!", .{});
 
+    try encoder.begin();
     var scene = try Scene.fromGltfExr(&context, &vk_allocator, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
-
     defer scene.destroy(&context, allocator);
+    try encoder.submitAndIdleUntilDone(&context);
 
     std.log.info("Loaded scene!", .{});
+
+    try encoder.begin();
 
     var object_picker = try ObjectPicker.create(&context, &vk_allocator, allocator, &encoder);
     defer object_picker.destroy(&context);
 
     var integrator = try Integrator.create(&context, &vk_allocator, allocator, &encoder, scene);
     defer integrator.destroy(&context);
+
+    var gui = try Platform.create(&context, display.swapchain, window, window_extent, &vk_allocator, &encoder);
+    defer gui.destroy(&context);
+
+    try encoder.submitAndIdleUntilDone(&context);
 
     std.log.info("Created pipelines!", .{});
 
@@ -283,7 +288,8 @@ pub fn main() !void {
             if (imgui.button(rebuild_label, imgui.Vec2{ .x = imgui.getContentRegionAvail().x, .y = 0.0 })) {
                 const start = try std.time.Instant.now();
                 rebuild_error = false;
-                for (integrator.recreate(&context, &vk_allocator, allocator, &encoder).slice()) |result| {
+                try encoder.begin();
+                for (integrator.recreate(&context, allocator, &encoder).slice()) |result| {
                     if (result) |old_pipeline| {
                         try frame_encoder.attachResource(old_pipeline);
                         scene.camera.sensors.items[active_sensor].clear();
@@ -291,6 +297,7 @@ pub fn main() !void {
                         rebuild_error = true;
                     } else return err;
                 }
+                try encoder.submitAndIdleUntilDone(&context);
                 if (!rebuild_error) {
                     const elapsed = (try std.time.Instant.now()).since(start) / std.time.ns_per_ms;
                     rebuild_label = try std.fmt.bufPrintZ(&rebuild_label_buffer, "Rebuild ({d}ms)", .{elapsed});

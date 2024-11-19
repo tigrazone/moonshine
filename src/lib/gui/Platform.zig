@@ -49,8 +49,8 @@ font_sampler: vk.Sampler,
 font_image: Image,
 font_image_set: vk.DescriptorSet,
 
-vertex_buffers: [frames_in_flight]VkAllocator.HostBuffer(imgui.DrawVert),
-index_buffers: [frames_in_flight]VkAllocator.HostBuffer(imgui.DrawIdx),
+vertex_buffers: [frames_in_flight]VkAllocator.OwnedHostBuffer(imgui.DrawVert),
+index_buffers: [frames_in_flight]VkAllocator.OwnedHostBuffer(imgui.DrawIdx),
 
 views: std.BoundedArray(vk.ImageView, Swapchain.max_image_count),
 
@@ -219,14 +219,9 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
         errdefer image.destroy(vc);
 
         const img_data = tex_data[0][0 .. tex_data[1].width * tex_data[1].height * @sizeOf(u8)];
-        const staging_buffer = try vk_allocator.createHostBuffer(vc, u8, @intCast(img_data.len), .{ .transfer_src_bit = true });
-        defer staging_buffer.destroy(vc);
-        @memcpy(staging_buffer.data, img_data);
-        try encoder.begin();
-        encoder.uploadDataToImage(u8, image.handle, staging_buffer, tex_data[1], .shader_read_only_optimal);
-        try encoder.submitAndIdleUntilDone(vc);
+        const staging_data = try encoder.uploadAllocator().dupe(u8, img_data);
+        encoder.uploadDataToImage(u8, encoder.upload_allocator.getBufferSlice(staging_data), image.handle, tex_data[1], .shader_read_only_optimal);
         break :blk image;
-        //     io.Fonts->SetTexID((ImTextureID)bd->FontDescriptorSet); TODO required?
     };
 
     const font_image_set = try descriptor_set_layout.allocate_set(vc, [_]vk.WriteDescriptorSet{
@@ -249,11 +244,11 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
     // sort of a stupid allocation strategy right now
     // create a pretty big buffer that should be good enough for most things, and ensure dear imgui doesn't want to use more at each frame
     // TODO: change this when the rest of the system becomes smart enough that this looks stupid in comparison
-    var vertex_buffers: [frames_in_flight]VkAllocator.HostBuffer(imgui.DrawVert) = undefined;
+    var vertex_buffers: [frames_in_flight]VkAllocator.OwnedHostBuffer(imgui.DrawVert) = undefined;
     for (&vertex_buffers) |*buffer| {
         buffer.* = try vk_allocator.createHostBuffer(vc, imgui.DrawVert, std.math.maxInt(imgui.DrawIdx), .{ .vertex_buffer_bit = true });
     }
-    var index_buffers: [frames_in_flight]VkAllocator.HostBuffer(imgui.DrawIdx) = undefined;
+    var index_buffers: [frames_in_flight]VkAllocator.OwnedHostBuffer(imgui.DrawIdx) = undefined;
     for (&index_buffers) |*buffer| {
         buffer.* = try vk_allocator.createHostBuffer(vc, imgui.DrawIdx, std.math.maxInt(imgui.DrawIdx), .{ .index_buffer_bit = true });
     }

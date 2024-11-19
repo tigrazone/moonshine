@@ -80,7 +80,7 @@ pub const HdMoonshine = struct {
 
     pipeline: Pipeline,
 
-    output_buffers: std.ArrayListUnmanaged(VkAllocator.HostBuffer([4]f32)),
+    output_buffers: std.ArrayListUnmanaged(VkAllocator.OwnedHostBuffer([4]f32)),
 
     // as a temporary hack, while the resource system is not yet streamlined,
     // force it to all be singlethreaded
@@ -236,91 +236,91 @@ pub const HdMoonshine = struct {
                 self.material_updates.clearRetainingCapacity();
             }
 
-            if (self.need_instance_update) {
-                var actual_size_instances = self.world.accel.instances_host;
-                actual_size_instances.data.len = self.world.accel.instance_count;
-                var actual_size_world_to_instance = self.world.accel.world_to_instance_host;
-                actual_size_world_to_instance.data.len = self.world.accel.instance_count;
-                self.encoder.uploadBuffer(vk.AccelerationStructureInstanceKHR, self.world.accel.instances_device, actual_size_instances);
-                self.encoder.uploadBuffer(Mat3x4, self.world.accel.world_to_instance_device, actual_size_world_to_instance);
+        //     if (self.need_instance_update) {
+        //         var actual_size_instances = self.world.accel.instances_host;
+        //         actual_size_instances.data.len = self.world.accel.instance_count;
+        //         var actual_size_world_to_instance = self.world.accel.world_to_instance_host;
+        //         actual_size_world_to_instance.data.len = self.world.accel.instance_count;
+        //         self.encoder.uploadBuffer(vk.AccelerationStructureInstanceKHR, self.world.accel.instances_device, actual_size_instances);
+        //         self.encoder.uploadBuffer(Mat3x4, self.world.accel.world_to_instance_device, actual_size_world_to_instance);
 
-                const update_barriers = [_]vk.BufferMemoryBarrier2 {
-                    .{
-                        .src_stage_mask = .{ .copy_bit = true },
-                        .src_access_mask = .{ .transfer_write_bit = true },
-                        .dst_stage_mask = .{ .acceleration_structure_build_bit_khr = true },
-                        .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true, .shader_storage_read_bit = true },
-                        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                        .buffer = self.world.accel.instances_device.handle,
-                        .offset = 0,
-                        .size = vk.WHOLE_SIZE,
-                    },
-                    .{
-                        .src_stage_mask = .{ .copy_bit = true },
-                        .src_access_mask = .{ .transfer_write_bit = true },
-                        .dst_stage_mask = .{ .ray_tracing_shader_bit_khr = true },
-                        .dst_access_mask = .{ .shader_storage_read_bit = true },
-                        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-                        .buffer = self.world.accel.world_to_instance_device.handle,
-                        .offset = 0,
-                        .size = vk.WHOLE_SIZE,
-                    },
-                };
-                self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
-                    .buffer_memory_barrier_count = update_barriers.len,
-                    .p_buffer_memory_barriers = &update_barriers,
-                });
+        //         const update_barriers = [_]vk.BufferMemoryBarrier2 {
+        //             .{
+        //                 .src_stage_mask = .{ .copy_bit = true },
+        //                 .src_access_mask = .{ .transfer_write_bit = true },
+        //                 .dst_stage_mask = .{ .acceleration_structure_build_bit_khr = true },
+        //                 .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true, .shader_storage_read_bit = true },
+        //                 .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        //                 .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        //                 .buffer = self.world.accel.instances_device.handle,
+        //                 .offset = 0,
+        //                 .size = vk.WHOLE_SIZE,
+        //             },
+        //             .{
+        //                 .src_stage_mask = .{ .copy_bit = true },
+        //                 .src_access_mask = .{ .transfer_write_bit = true },
+        //                 .dst_stage_mask = .{ .ray_tracing_shader_bit_khr = true },
+        //                 .dst_access_mask = .{ .shader_storage_read_bit = true },
+        //                 .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        //                 .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        //                 .buffer = self.world.accel.world_to_instance_device.handle,
+        //                 .offset = 0,
+        //                 .size = vk.WHOLE_SIZE,
+        //             },
+        //         };
+        //         self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        //             .buffer_memory_barrier_count = update_barriers.len,
+        //             .p_buffer_memory_barriers = &update_barriers,
+        //         });
 
-                const geometry = vk.AccelerationStructureGeometryKHR {
-                    .geometry_type = .instances_khr,
-                    .flags = .{ .opaque_bit_khr = true },
-                    .geometry = .{
-                        .instances = .{
-                            .array_of_pointers = vk.FALSE,
-                            .data = .{
-                                .device_address = self.world.accel.instances_address,
-                            }
-                        }
-                    },
-                };
+        //         const geometry = vk.AccelerationStructureGeometryKHR {
+        //             .geometry_type = .instances_khr,
+        //             .flags = .{ .opaque_bit_khr = true },
+        //             .geometry = .{
+        //                 .instances = .{
+        //                     .array_of_pointers = vk.FALSE,
+        //                     .data = .{
+        //                         .device_address = self.world.accel.instances_address,
+        //                     }
+        //                 }
+        //             },
+        //         };
 
-                const geometry_info = vk.AccelerationStructureBuildGeometryInfoKHR {
-                    .type = .top_level_khr,
-                    .flags = .{ .prefer_fast_trace_bit_khr = true, .allow_update_bit_khr = true },
-                    .mode = .update_khr,
-                    .src_acceleration_structure = self.world.accel.tlas_handle,
-                    .dst_acceleration_structure = self.world.accel.tlas_handle,
-                    .geometry_count = 1,
-                    .p_geometries = @ptrCast(&geometry),
-                    .scratch_data = .{
-                        .device_address = self.world.accel.tlas_update_scratch_address,
-                    },
-                };
+        //         const geometry_info = vk.AccelerationStructureBuildGeometryInfoKHR {
+        //             .type = .top_level_khr,
+        //             .flags = .{ .prefer_fast_trace_bit_khr = true, .allow_update_bit_khr = true },
+        //             .mode = .update_khr,
+        //             .src_acceleration_structure = self.world.accel.tlas_handle,
+        //             .dst_acceleration_structure = self.world.accel.tlas_handle,
+        //             .geometry_count = 1,
+        //             .p_geometries = @ptrCast(&geometry),
+        //             .scratch_data = .{
+        //                 .device_address = self.world.accel.tlas_update_scratch_address,
+        //             },
+        //         };
 
-                const build_info = vk.AccelerationStructureBuildRangeInfoKHR {
-                    .primitive_count = self.world.accel.instance_count,
-                    .first_vertex = 0,
-                    .primitive_offset = 0,
-                    .transform_offset = 0,
-                };
+        //         const build_info = vk.AccelerationStructureBuildRangeInfoKHR {
+        //             .primitive_count = self.world.accel.instance_count,
+        //             .first_vertex = 0,
+        //             .primitive_offset = 0,
+        //             .transform_offset = 0,
+        //         };
 
-                self.encoder.buildAccelerationStructures(&.{ geometry_info }, &.{ @ptrCast(&build_info) });
+        //         self.encoder.buildAccelerationStructures(&.{ geometry_info }, &.{ @ptrCast(&build_info) });
 
-                const ray_trace_barriers = [_]vk.MemoryBarrier2 {
-                    .{
-                        .src_stage_mask = .{ .acceleration_structure_build_bit_khr = true },
-                        .src_access_mask = .{ .acceleration_structure_write_bit_khr = true },
-                        .dst_stage_mask = .{ .ray_tracing_shader_bit_khr = true },
-                        .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true },
-                    }
-                };
-                self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
-                    .memory_barrier_count = ray_trace_barriers.len,
-                    .p_memory_barriers = &ray_trace_barriers,
-                });
-            }
+        //         const ray_trace_barriers = [_]vk.MemoryBarrier2 {
+        //             .{
+        //                 .src_stage_mask = .{ .acceleration_structure_build_bit_khr = true },
+        //                 .src_access_mask = .{ .acceleration_structure_write_bit_khr = true },
+        //                 .dst_stage_mask = .{ .ray_tracing_shader_bit_khr = true },
+        //                 .dst_access_mask = .{ .acceleration_structure_read_bit_khr = true },
+        //             }
+        //         };
+        //         self.encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
+        //             .memory_barrier_count = ray_trace_barriers.len,
+        //             .p_memory_barriers = &ray_trace_barriers,
+        //         });
+        //     }
 
             self.need_instance_update = false;
         }
@@ -370,64 +370,64 @@ pub const HdMoonshine = struct {
         return true;
     }
 
-    pub export fn HdMoonshineRebuildPipeline(self: *HdMoonshine) bool {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        const old_pipeline = self.pipeline.recreate(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, pipeline_settings) catch return false;
-        self.vc.device.destroyPipeline(old_pipeline, null);
-        self.camera.clearAllSensors();
-        return true;
-    }
+    // pub export fn HdMoonshineRebuildPipeline(self: *HdMoonshine) bool {
+    //     self.mutex.lock();
+    //     defer self.mutex.unlock();
+    //     const old_pipeline = self.pipeline.recreate(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, pipeline_settings) catch return false;
+    //     self.vc.device.destroyPipeline(old_pipeline, null);
+    //     self.camera.clearAllSensors();
+    //     return true;
+    // }
 
-    pub export fn HdMoonshineCreateMesh(self: *HdMoonshine, positions: [*]const F32x3, maybe_normals: ?[*]const F32x3, maybe_texcoords: ?[*]const F32x2, attribute_count: usize) MeshManager.Handle {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        const mesh = MeshManager.Mesh {
-            .name = "hydra",
-            .positions = positions[0..attribute_count],
-            .normals = if (maybe_normals) |normals| normals[0..attribute_count] else null,
-            .texcoords = if (maybe_texcoords) |texcoords| texcoords[0..attribute_count] else null,
-            .indices = null,
-        };
-        return self.world.meshes.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, mesh) catch unreachable; // TODO: error handling
-    }
+    // pub export fn HdMoonshineCreateMesh(self: *HdMoonshine, positions: [*]const F32x3, maybe_normals: ?[*]const F32x3, maybe_texcoords: ?[*]const F32x2, attribute_count: usize) MeshManager.Handle {
+    //     self.mutex.lock();
+    //     defer self.mutex.unlock();
+    //     const mesh = MeshManager.Mesh {
+    //         .name = "hydra",
+    //         .positions = positions[0..attribute_count],
+    //         .normals = if (maybe_normals) |normals| normals[0..attribute_count] else null,
+    //         .texcoords = if (maybe_texcoords) |texcoords| texcoords[0..attribute_count] else null,
+    //         .indices = null,
+    //     };
+    //     return self.world.meshes.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, mesh) catch unreachable; // TODO: error handling
+    // }
 
-    pub export fn HdMoonshineCreateSolidTexture1(self: *HdMoonshine, source: f32, name: [*:0]const u8) TextureManager.Handle {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
-            .f32x1 = source,
-        }, std.mem.span(name)) catch unreachable; // TODO: error handling
-    }
+    // pub export fn HdMoonshineCreateSolidTexture1(self: *HdMoonshine, source: f32, name: [*:0]const u8) TextureManager.Handle {
+    //     self.mutex.lock();
+    //     defer self.mutex.unlock();
+    //     return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
+    //         .f32x1 = source,
+    //     }, std.mem.span(name)) catch unreachable; // TODO: error handling
+    // }
 
-    pub export fn HdMoonshineCreateSolidTexture2(self: *HdMoonshine, source: F32x2, name: [*:0]const u8) TextureManager.Handle {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
-            .f32x2 = source,
-        }, std.mem.span(name)) catch unreachable; // TODO: error handling
-    }
+    // pub export fn HdMoonshineCreateSolidTexture2(self: *HdMoonshine, source: F32x2, name: [*:0]const u8) TextureManager.Handle {
+    //     self.mutex.lock();
+    //     defer self.mutex.unlock();
+    //     return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
+    //         .f32x2 = source,
+    //     }, std.mem.span(name)) catch unreachable; // TODO: error handling
+    // }
 
-    pub export fn HdMoonshineCreateSolidTexture3(self: *HdMoonshine, source: F32x3, name: [*:0]const u8) TextureManager.Handle {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
-            .f32x3 = source,
-        }, std.mem.span(name)) catch unreachable; // TODO: error handling
-    }
+    // pub export fn HdMoonshineCreateSolidTexture3(self: *HdMoonshine, source: F32x3, name: [*:0]const u8) TextureManager.Handle {
+    //     self.mutex.lock();
+    //     defer self.mutex.unlock();
+    //     return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
+    //         .f32x3 = source,
+    //     }, std.mem.span(name)) catch unreachable; // TODO: error handling
+    // }
 
-    pub export fn HdMoonshineCreateRawTexture(self: *HdMoonshine, data: [*]u8, extent: vk.Extent2D, format: TextureFormat, name: [*:0]const u8) TextureManager.Handle {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        const bytes = std.mem.sliceAsBytes(data[0..extent.width * extent.height * format.pixelSizeInBytes()]);
-        return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
-            .raw = TextureManager.Source.Raw {
-                .bytes = bytes,
-                .extent = extent,
-                .format = format.toVk(),
-            },
-        }, std.mem.span(name)) catch unreachable; // TODO: error handling
-    }
+    // pub export fn HdMoonshineCreateRawTexture(self: *HdMoonshine, data: [*]u8, extent: vk.Extent2D, format: TextureFormat, name: [*:0]const u8) TextureManager.Handle {
+    //     self.mutex.lock();
+    //     defer self.mutex.unlock();
+    //     const bytes = std.mem.sliceAsBytes(data[0..extent.width * extent.height * format.pixelSizeInBytes()]);
+    //     return self.world.materials.textures.upload(&self.vc, &self.vk_allocator, self.allocator.allocator(), &self.encoder, TextureManager.Source {
+    //         .raw = TextureManager.Source.Raw {
+    //             .bytes = bytes,
+    //             .extent = extent,
+    //             .format = format.toVk(),
+    //         },
+    //     }, std.mem.span(name)) catch unreachable; // TODO: error handling
+    // }
 
     pub export fn HdMoonshineCreateMaterial(self: *HdMoonshine, material: Material) MaterialManager.Handle {
         self.mutex.lock();

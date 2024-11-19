@@ -11,8 +11,6 @@ const Image = core.Image;
 const vk_helpers = core.vk_helpers;
 
 const F32x2 = engine.vector.Vec2(f32);
-const F32x3 = engine.vector.Vec3(f32);
-const F32x4 = engine.vector.Vec4(f32);
 
 // I define a material to be a BSDF that may vary over a surface,
 // plus a normal and emissive map
@@ -143,7 +141,6 @@ pub fn createEmpty(vc: *const VulkanContext) !Self {
 pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, info: Material, name: [:0]const u8) !Handle {
     std.debug.assert(self.material_count < max_materials);
 
-    try encoder.begin();
     inline for (@typeInfo(PolymorphicBSDF).@"union".fields, 0..) |field, field_idx| {
         if (@as(BSDF, @enumFromInt(field_idx)) == std.meta.activeTag(info.bsdf)) {
             if (@sizeOf(field.type) != 0) {
@@ -168,7 +165,6 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
             encoder.updateBuffer(GpuMaterial, self.materials, &.{ gpu_material }, self.material_count);
         }
     }
-    try encoder.submitAndIdleUntilDone(vc);
 
     self.material_count += 1;
     return self.material_count - 1;
@@ -210,7 +206,6 @@ pub fn destroy(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocat
     }
 }
 
-// TODO: individual texture destruction
 pub const TextureManager = struct {
     const max_descriptors = 8192; // TODO: consider using VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT, reallocation
     // must be kept in sync with shader
@@ -227,26 +222,6 @@ pub const TextureManager = struct {
             .stage_flags = .{ .raygen_bit_khr = true, .compute_bit = true },
         }
     }, .{}, 1, "Textures");
-
-    pub const Source = union(enum) {
-        pub const Raw = struct {
-            bytes: []const u8,
-            extent: vk.Extent2D,
-            format: vk.Format,
-        };
-
-        raw: Raw,
-        f32x3: F32x3,
-        f32x2: F32x2,
-        f32x1: f32,
-    };
-
-    comptime {
-        // so that we can do some hacky stuff below like
-        // reinterpret the f32x3 field as F32x4
-        // TODO: even this is not quite right
-        std.debug.assert(@sizeOf(Source) >= @sizeOf(F32x4));
-    }
 
     data: std.MultiArrayList(Image),
     descriptor_layout: DescriptorLayout,
@@ -275,54 +250,21 @@ pub const TextureManager = struct {
 
     pub const Handle = u32;
 
-    pub fn upload(self: *TextureManager, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, source: Source, name: [:0]const u8) !TextureManager.Handle {
+    pub fn upload(self: *TextureManager, vc: *const VulkanContext, comptime T: type, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, src: VkAllocator.BufferSlice(T), extent: vk.Extent2D, name: [:0]const u8) !TextureManager.Handle {
+        const format = comptime vk_helpers.typeToFormat(T);
+
+        // > If dstImage does not have either a depth/stencil format or a multi-planar format,
+        // > then for each element of pRegions, bufferOffset must be a multiple of the texel block size
+        // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdCopyBufferToImage.html
+        std.debug.assert(src.offset % vk_helpers.texelBlockSize(format) == 0);
+
         const texture_index: TextureManager.Handle = @intCast(self.data.len);
         std.debug.assert(texture_index < max_descriptors);
 
-        var extent: vk.Extent2D = undefined;
-        var bytes: []const u8 = undefined;
-        var format: vk.Format = undefined;
-        switch (source) {
-            .raw => |raw_info| {
-                bytes = raw_info.bytes;
-                extent = raw_info.extent;
-                format = raw_info.format;
-            },
-            .f32x3 => {
-                bytes = std.mem.asBytes(&source.f32x3);
-                bytes.len = @sizeOf(F32x4); // we store this as f32x4
-                extent = vk.Extent2D {
-                    .width = 1,
-                    .height = 1,
-                };
-                format = .r32g32b32a32_sfloat;
-            },
-            .f32x2 => {
-                bytes = std.mem.asBytes(&source.f32x2);
-                extent = vk.Extent2D {
-                    .width = 1,
-                    .height = 1,
-                };
-                format = .r32g32_sfloat;
-            },
-            .f32x1 => {
-                bytes = std.mem.asBytes(&source.f32x1);
-                extent = vk.Extent2D {
-                    .width = 1,
-                    .height = 1,
-                };
-                format = .r32_sfloat;
-            },
-        }
         const image = try Image.create(vc, vk_allocator, extent, .{ .transfer_dst_bit = true, .sampled_bit = true }, format, false, name);
         try self.data.append(allocator, image);
 
-        const staging_buffer = try vk_allocator.createHostBuffer(vc, u8, @intCast(bytes.len), .{ .transfer_src_bit = true });
-        defer staging_buffer.destroy(vc);
-        @memcpy(staging_buffer.data, bytes);
-        try encoder.begin();
-        encoder.uploadDataToImage(u8, image.handle, staging_buffer, extent, .shader_read_only_optimal);
-        try encoder.submitAndIdleUntilDone(vc);
+        encoder.uploadDataToImage(T, src, image.handle, extent, .shader_read_only_optimal);
 
         vc.device.updateDescriptorSets(1, @ptrCast(&.{
             vk.WriteDescriptorSet {

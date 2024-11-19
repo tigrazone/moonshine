@@ -44,7 +44,7 @@ pub const ClickedObject = struct {
     barycentrics: F32x2,
 };
 
-buffer: VkAllocator.HostBuffer(ClickDataShader),
+buffer: VkAllocator.OwnedHostBuffer(ClickDataShader),
 pipeline: Pipeline,
 
 encoder: Encoder,

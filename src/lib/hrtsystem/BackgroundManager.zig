@@ -110,11 +110,9 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
 
     const equirectangular_extent = color_image.extent;
     const equirectangular_image = try Image.create(vc, vk_allocator, equirectangular_extent, .{ .transfer_dst_bit = true, .sampled_bit = true }, .r32g32b32a32_sfloat, false, texture_name);
-    defer equirectangular_image.destroy(vc);
+    try encoder.attachResource(equirectangular_image);
 
-    const equirectangular_image_host = try vk_allocator.createHostBuffer(vc, [4]f32, @intCast(color_image.asSlice().len), .{ .transfer_src_bit = true });
-    defer equirectangular_image_host.destroy(vc);
-    @memcpy(equirectangular_image_host.data, color_image.asSlice());
+    const equirectangular_image_host = try encoder.uploadAllocator().dupe([4]f32, color_image.asSlice());
 
     const equal_area_map_size: u32 = @min(std.math.ceilPowerOfTwoAssert(u32, color_image.extent.width), maximum_equal_area_map_size);
     const equal_area_extent = vk.Extent2D { .width = equal_area_map_size, .height = equal_area_map_size };
@@ -128,9 +126,8 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
     const actual_mip_count = std.math.log2(equal_area_map_size) + 1;
     const maximum_mip_count = comptime std.math.log2(maximum_equal_area_map_size) + 1;
     var luminance_mips_views = std.BoundedArray(vk.ImageView, maximum_mip_count) {};
-    defer for (luminance_mips_views.slice()) |view| vc.device.destroyImageView(view, null);
     for (0..actual_mip_count) |level_index| {
-        try luminance_mips_views.append(try vc.device.createImageView(&vk.ImageViewCreateInfo {
+        const view = try vc.device.createImageView(&vk.ImageViewCreateInfo {
             .flags = .{},
             .image = luminance_image.handle,
             .view_type = vk.ImageViewType.@"2d",
@@ -148,10 +145,10 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
                 .base_array_layer = 0,
                 .layer_count = vk.REMAINING_ARRAY_LAYERS,
             },
-        }, null));
+        }, null);
+        try luminance_mips_views.append(view);
+        try encoder.attachResource(view);
     }
-
-    try encoder.begin();
 
     // copy equirectangular image to device
     encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
@@ -207,7 +204,9 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
             },
         },
     });
-    encoder.copyBufferToImage(equirectangular_image_host.handle, equirectangular_image.handle, .transfer_dst_optimal, equirectangular_extent);
+
+    const equirectangular_image_host_slice = encoder.upload_allocator.getBufferSlice(equirectangular_image_host);
+    encoder.copyBufferToImage(equirectangular_image_host_slice.handle, equirectangular_image_host_slice.offset, equirectangular_image.handle, .transfer_dst_optimal, equirectangular_extent);
 
     encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
@@ -329,8 +328,6 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
             }
         },
     });
-
-    try encoder.submitAndIdleUntilDone(vc);
 
     try self.data.append(allocator, .{
         .rgb_image = equal_area_image,

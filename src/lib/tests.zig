@@ -20,17 +20,19 @@ const exr = engine.fileformats.exr;
 const Rgba2D = exr.helpers.Rgba2D;
 
 const vector = engine.vector;
+const F32x4 = vector.Vec4(f32);
 const F32x3 = vector.Vec3(f32);
+const F32x2 = vector.Vec2(f32);
 const U32x3 = vector.Vec3(u32);
 const Mat3x4 = vector.Mat3x4(f32);
 
-const utils = engine.core.vk_helpers;
+const vk_helpers = engine.core.vk_helpers;
 
 const TestingContext = struct {
     vc: VulkanContext,
     vk_allocator: VkAllocator,
     encoder: Encoder,
-    output_buffer: VkAllocator.HostBuffer([4]f32),
+    output_buffer: VkAllocator.OwnedHostBuffer([4]f32),
 
     fn create(allocator: std.mem.Allocator, extent: vk.Extent2D) !TestingContext {
         const vc = try VulkanContext.create(allocator, "engine-tests", &.{}, &engine.hrtsystem.required_device_extensions, &engine.hrtsystem.required_device_features, null);
@@ -121,7 +123,7 @@ const TestingContext = struct {
 //
 // http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
 // https://observablehq.com/@mourner/fast-icosphere-mesh
-fn icosphere(order: usize, allocator: std.mem.Allocator, reverse_winding_order: bool) !MeshManager.Mesh {
+fn icosphere(order: usize, allocator: std.mem.Allocator, encoder: *Encoder, reverse_winding_order: bool) !MeshManager.Mesh {
     const Subdivider = struct {
         const MidpointCache = std.AutoArrayHashMapUnmanaged(u64, u32);
 
@@ -233,13 +235,13 @@ fn icosphere(order: usize, allocator: std.mem.Allocator, reverse_winding_order: 
         try subdivider.subdivide();
     }
 
-    const positions = try allocator.dupe(F32x3, subdivider.positions.items);
+    const positions = try encoder.uploadAllocator().dupe(F32x3, subdivider.positions.items);
 
     for (positions) |*position| {
         position.* = position.unit();
     }
 
-    const indices = try allocator.dupe(U32x3, subdivider.triangles.items);
+    const indices = try encoder.uploadAllocator().dupe(U32x3, subdivider.triangles.items);
     if (reverse_winding_order) {
         for (indices) |*index| {
             index.* = U32x3.new(index.z, index.y, index.x);
@@ -248,10 +250,10 @@ fn icosphere(order: usize, allocator: std.mem.Allocator, reverse_winding_order: 
 
     const mesh = MeshManager.Mesh {
         .name = "icosphere",
-        .positions = positions,
+        .positions = encoder.upload_allocator.getBufferSlice(positions),
         .normals = null, // TODO: add normals here when normals are robust enough
         .texcoords = null,
-        .indices = indices,
+        .indices = encoder.upload_allocator.getBufferSlice(indices),
     };
     return mesh;
 }
@@ -290,21 +292,25 @@ test "white sphere on white background is white" {
     var tc = try TestingContext.create(allocator, extent);
     defer tc.destroy(allocator);
 
+    try tc.encoder.begin();
     var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder);
 
     // add sphere to world
     {
-        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, try icosphere(5, allocator, false));
+        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, try icosphere(5, allocator, &tc.encoder, false));
 
-        const normal_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
-            .f32x2 = MaterialManager.Material.default_normal,
-        }, "");
-        const albedo_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
-            .f32x3 = F32x3.new(1, 1, 1),
-        }, "");
-        const emissive_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
-            .f32x3 = F32x3.new(0, 0, 0),
-        }, "");
+        const normal: *F32x2 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x2)), @sizeOf(F32x2)));
+        normal.* = MaterialManager.Material.default_normal;
+        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x2, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
+
+        const albedo: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        albedo.* = F32x4.new(1, 1, 1, std.math.nan(f32));
+        const albedo_texture = try world.materials.textures.upload(&tc.vc, F32x4, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(albedo), vk.Extent2D { .width = 1, .height = 1 }, "");
+
+        const emissive: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        emissive.* = F32x4.new(0, 0, 0, std.math.nan(f32));
+        const emissive_texture = try world.materials.textures.upload(&tc.vc, F32x4, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(emissive), vk.Extent2D { .width = 1, .height = 1 }, "");
+
         const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, MaterialManager.Material {
             .normal = normal_texture,
             .emissive = emissive_texture,
@@ -362,17 +368,20 @@ test "white sphere on white background is white" {
         .mesh_samples_per_bounce = 0,
     }, .{ scene.background.sampler });
     defer pipeline.destroy(&tc.vc);
+    try tc.encoder.submitAndIdleUntilDone(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 512);
     try assertWhiteFurnaceImage(tc.output_buffer.data);
 
     // do that again but with env sampling
-    const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, .{
+    try tc.encoder.begin();
+    const other_pipeline = try pipeline.recreate(&tc.vc, allocator, &tc.encoder, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 1,
         .mesh_samples_per_bounce = 0,
     });
     defer tc.vc.device.destroyPipeline(other_pipeline, null);
+    try tc.encoder.submitAndIdleUntilDone(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 512);
     try assertWhiteFurnaceImage(tc.output_buffer.data);
@@ -385,21 +394,25 @@ test "inside illuminating sphere is white" {
     var tc = try TestingContext.create(allocator, extent);
     defer tc.destroy(allocator);
 
+    try tc.encoder.begin();
     var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder);
 
     // add sphere to world
     {
-        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, try icosphere(5, allocator, true));
+        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, try icosphere(5, allocator, &tc.encoder, true));
 
-        const normal_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
-            .f32x2 = MaterialManager.Material.default_normal,
-        }, "");
-        const albedo_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
-            .f32x3 = F32x3.new(0.5, 0.5, 0.5),
-        }, "");
-        const emissive_texture = try world.materials.textures.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, TextureManager.Source {
-            .f32x3 = F32x3.new(0.5, 0.5, 0.5),
-        }, "");
+        const normal: *F32x2 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x2)), @sizeOf(F32x2)));
+        normal.* = MaterialManager.Material.default_normal;
+        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x2, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
+
+        const albedo: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        albedo.* = F32x4.new(0.5, 0.5, 0.5, std.math.nan(f32));
+        const albedo_texture = try world.materials.textures.upload(&tc.vc, F32x4, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(albedo), vk.Extent2D { .width = 1, .height = 1 }, "");
+
+        const emissive: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        emissive.* = F32x4.new(0.5, 0.5, 0.5, std.math.nan(f32));
+        const emissive_texture = try world.materials.textures.upload(&tc.vc, F32x4, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(emissive), vk.Extent2D { .width = 1, .height = 1 }, "");
+
         const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, MaterialManager.Material {
             .normal = normal_texture,
             .emissive = emissive_texture,
@@ -458,16 +471,20 @@ test "inside illuminating sphere is white" {
     }, .{ scene.background.sampler });
     defer pipeline.destroy(&tc.vc);
 
+    try tc.encoder.submitAndIdleUntilDone(&tc.vc);
+
     try tc.renderToOutput(&pipeline, &scene, 1024);
     try assertWhiteFurnaceImage(tc.output_buffer.data);
 
+    try tc.encoder.begin();
     // do that again but with mesh sampling
-    const other_pipeline = try pipeline.recreate(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, .{
+    const other_pipeline = try pipeline.recreate(&tc.vc, allocator, &tc.encoder, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 1,
     });
     defer tc.vc.device.destroyPipeline(other_pipeline, null);
+    try tc.encoder.submitAndIdleUntilDone(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 1024);
     try assertWhiteFurnaceImage(tc.output_buffer.data);

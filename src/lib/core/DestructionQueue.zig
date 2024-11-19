@@ -19,6 +19,7 @@ const Destruction = struct {
             .image_view => vc.device.destroyImageView(@enumFromInt(self.destroyee), null),
             .image => vc.device.destroyImage(@enumFromInt(self.destroyee), null),
             .device_memory => vc.device.freeMemory(@enumFromInt(self.destroyee), null),
+            .acceleration_structure_khr => vc.device.destroyAccelerationStructureKHR(@enumFromInt(self.destroyee), null),
             else => unreachable, // TODO
         }
     }

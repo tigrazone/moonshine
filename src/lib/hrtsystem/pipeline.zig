@@ -153,7 +153,7 @@ pub fn Pipeline(comptime options: struct {
         }
 
         // returns old handle which must be cleaned up
-        pub fn recreate(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, constants: SpecConstants) !vk.Pipeline {
+        pub fn recreate(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder, constants: SpecConstants) !vk.Pipeline {
             const module = try core.pipeline.createShaderModule(vc, options.shader_path, allocator, .ray_tracing);
             defer vc.device.destroyShaderModule(module, null);
 
@@ -214,7 +214,7 @@ pub fn Pipeline(comptime options: struct {
             errdefer vc.device.destroyPipeline(self.handle, null);
             try core.vk_helpers.setDebugName(vc.device, self.handle, options.shader_path);
 
-            try self.sbt.recreate(vc, vk_allocator, self.handle, encoder);
+            try self.sbt.recreate(vc, self.handle, encoder);
 
             return old_handle;
         }
@@ -360,7 +360,6 @@ const ShaderInfo = struct {
     }
 };
 
-// TODO: maybe use vkencoderUploadBuffer here
 const ShaderBindingTable = struct {
     handle: VkAllocator.DeviceBuffer(u8),
 
@@ -402,9 +401,8 @@ const ShaderBindingTable = struct {
         const sbt_size = callable_index + callable_entry_count * handle_size_aligned;
 
         // query sbt from pipeline
-        const sbt = try vk_allocator.createHostBuffer(vc, u8, sbt_size, .{ .transfer_src_bit = true });
-        defer sbt.destroy(vc);
-        try vc.device.getRayTracingShaderGroupHandlesKHR(pipeline, 0, group_count, sbt.data.len, sbt.data.ptr);
+        const sbt = try encoder.uploadAllocator().alloc(u8, sbt_size);
+        try vc.device.getRayTracingShaderGroupHandlesKHR(pipeline, 0, group_count, sbt.len, sbt.ptr);
 
         const raygen_size = handle_size_aligned * raygen_entry_count;
         const miss_size = handle_size_aligned * miss_entry_count;
@@ -412,16 +410,14 @@ const ShaderBindingTable = struct {
         const callable_size = handle_size_aligned * callable_entry_count;
 
         // must align up to shader_group_base_alignment
-        std.mem.copyBackwards(u8, sbt.data[callable_index..callable_index + callable_size], sbt.data[raygen_size + miss_size + hit_size..raygen_size + miss_size + hit_size + callable_size]);
-        std.mem.copyBackwards(u8, sbt.data[hit_index..hit_index + hit_size], sbt.data[raygen_size + miss_size..raygen_size + miss_size + hit_size]);
-        std.mem.copyBackwards(u8, sbt.data[miss_index..miss_index + miss_size], sbt.data[raygen_size..raygen_size + miss_size]);
+        std.mem.copyBackwards(u8, sbt[callable_index..callable_index + callable_size], sbt[raygen_size + miss_size + hit_size..raygen_size + miss_size + hit_size + callable_size]);
+        std.mem.copyBackwards(u8, sbt[hit_index..hit_index + hit_size], sbt[raygen_size + miss_size..raygen_size + miss_size + hit_size]);
+        std.mem.copyBackwards(u8, sbt[miss_index..miss_index + miss_size], sbt[raygen_size..raygen_size + miss_size]);
 
         const handle = try vk_allocator.createDeviceBuffer(vc, allocator, u8, sbt_size, .{ .shader_binding_table_bit_khr = true, .transfer_dst_bit = true, .shader_device_address_bit = true }, "sbt");
         errdefer handle.destroy(vc);
 
-        try encoder.begin();
-        encoder.uploadBuffer(u8, handle, sbt);
-        try encoder.submitAndIdleUntilDone(vc);
+        encoder.uploadBuffer(u8, encoder.upload_allocator.getBufferSlice(sbt), handle);
 
         const raygen_address = handle.getAddress(vc);
         const miss_address = raygen_address + miss_index;
@@ -446,7 +442,7 @@ const ShaderBindingTable = struct {
     }
 
     // recreate with with same table entries but new pipeline
-    fn recreate(self: *ShaderBindingTable, vc: *const VulkanContext, vk_allocator: *VkAllocator, pipeline: vk.Pipeline, encoder: *Encoder) !void {
+    fn recreate(self: *ShaderBindingTable, vc: *const VulkanContext, pipeline: vk.Pipeline, encoder: *Encoder) !void {
         const rt_properties = blk: {
             var rt_properties: vk.PhysicalDeviceRayTracingPipelinePropertiesKHR = undefined;
             rt_properties.s_type = .physical_device_ray_tracing_pipeline_properties_khr;
@@ -472,9 +468,8 @@ const ShaderBindingTable = struct {
         const sbt_size = callable_index + self.callable_count * handle_size_aligned;
 
         // query sbt from pipeline
-        const sbt = try vk_allocator.createHostBuffer(vc, u8, sbt_size, .{ .transfer_src_bit = true });
-        defer sbt.destroy(vc);
-        try vc.device.getRayTracingShaderGroupHandlesKHR(pipeline, 0, group_count, sbt.data.len, sbt.data.ptr);
+        const sbt = try encoder.uploadAllocator().alloc(u8, sbt_size);
+        try vc.device.getRayTracingShaderGroupHandlesKHR(pipeline, 0, group_count, sbt.len, sbt.ptr);
 
         const raygen_size = handle_size_aligned * self.raygen_count;
         const miss_size = handle_size_aligned * self.miss_count;
@@ -482,13 +477,11 @@ const ShaderBindingTable = struct {
         const callable_size = handle_size_aligned * self.callable_count;
 
         // must align up to shader_group_base_alignment
-        std.mem.copyBackwards(u8, sbt.data[callable_index..callable_index + callable_size], sbt.data[raygen_size + miss_size + hit_size..raygen_size + miss_size + hit_size + callable_size]);
-        std.mem.copyBackwards(u8, sbt.data[hit_index..hit_index + hit_size], sbt.data[raygen_size + miss_size..raygen_size + miss_size + hit_size]);
-        std.mem.copyBackwards(u8, sbt.data[miss_index..miss_index + miss_size], sbt.data[raygen_size..raygen_size + miss_size]);
+        std.mem.copyBackwards(u8, sbt[callable_index..callable_index + callable_size], sbt[raygen_size + miss_size + hit_size..raygen_size + miss_size + hit_size + callable_size]);
+        std.mem.copyBackwards(u8, sbt[hit_index..hit_index + hit_size], sbt[raygen_size + miss_size..raygen_size + miss_size + hit_size]);
+        std.mem.copyBackwards(u8, sbt[miss_index..miss_index + miss_size], sbt[raygen_size..raygen_size + miss_size]);
 
-        try encoder.begin();
-        encoder.uploadBuffer(u8, self.handle, sbt);
-        try encoder.submitAndIdleUntilDone(vc);
+        encoder.uploadBuffer(u8, encoder.upload_allocator.getBufferSlice(sbt), self.handle);
     }
 
     pub fn getRaygenSBT(self: *const ShaderBindingTable) vk.StridedDeviceAddressRegionKHR {

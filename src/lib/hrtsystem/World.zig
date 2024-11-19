@@ -28,6 +28,8 @@ const F32x4 = vector.Vec4(f32);
 const F32x3 = vector.Vec3(f32);
 const F32x2 = vector.Vec2(f32);
 const U32x3 = vector.Vec3(u32);
+const U8x2 = vector.Vec2(u8);
+const U8x4 = vector.Vec4(u8);
 
 pub const Material = MaterialManager.Material;
 pub const PolymorphicBSDF = MaterialManager.PolymorphicBSDF;
@@ -66,29 +68,21 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
             // this gives us rgb --> need to convert to rg
             // theoretically gltf spec claims these values should already be linear
             var img = try loadImage(allocator, image, gltf_directory);
+            std.debug.assert(img.pixels == .rgb24);
             defer img.deinit();
 
-            var rg = try allocator.alloc(u8, img.pixels.len() * 2);
-            defer allocator.free(rg);
+            const rg = try encoder.uploadAllocator().alloc(U8x2, img.pixels.len());
             for (img.pixels.rgb24, 0..) |pixel, i| {
-                rg[i * 2 + 0] = pixel.r;
-                rg[i * 2 + 1] = pixel.g;
+                rg[i] = U8x2.new(pixel.r, pixel.g);
             }
             const debug_name = try std.fmt.allocPrintZ(allocator, "{s} normal", .{ gltf_material.name });
             defer allocator.free(debug_name);
-            break :normal try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-                .raw = .{
-                    .bytes = rg,
-                    .extent = vk.Extent2D {
-                        .width = @intCast(img.width),
-                        .height = @intCast(img.height),
-                    },
-                    .format = .r8g8_unorm,
-                },
-            }, debug_name);
-        } else try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-            .f32x2 = Material.default_normal,
-        }, "default normal");
+            break :normal try textures.upload(vc, U8x2, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(rg), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
+        } else normal: {
+            const rg: *F32x2 = @ptrCast(try encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x2)), @sizeOf(F32x2)));
+            rg.* = Material.default_normal;
+            break :normal try textures.upload(vc, F32x2, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(rg), vk.Extent2D { .width = 1, .height = 1 }, "default normal");
+        };
 
         material.emissive = if (gltf_material.emissive_texture) |texture| emissive: {
             const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
@@ -97,33 +91,26 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
             defer img.deinit();
 
             // image may be rgba32 or rgb24
-            var rgba = if (img.pixels == .rgb24) try zigimg.color.PixelStorage.init(allocator, .rgba32, img.pixels.len()) else img.pixels;
-            defer if (img.pixels == .rgb24) rgba.deinit(allocator);
+            const rgba = try encoder.uploadAllocator().alloc(U8x4, img.pixels.len());
             if (img.pixels == .rgb24) {
-                for (img.pixels.rgb24, rgba.rgba32) |pixel, *rgba32| {
-                    rgba32.* = zigimg.color.Rgba32.initRgba(pixel.r, pixel.g, pixel.b, std.math.maxInt(u8));
+                for (img.pixels.rgb24, rgba) |src_pixel, *dst_pixel| {
+                    dst_pixel.* = U8x4.new(src_pixel.r, src_pixel.g, src_pixel.b, std.math.maxInt(u8));
+                }
+            } else {
+                for (img.pixels.rgba32, rgba) |src_pixel, *dst_pixel| {
+                    dst_pixel.* = U8x4.new(src_pixel.r, src_pixel.g, src_pixel.b, src_pixel.a);
                 }
             }
 
             const debug_name = try std.fmt.allocPrintZ(allocator, "{s} emissive", .{ gltf_material.name });
             defer allocator.free(debug_name);
-            break :emissive try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-                .raw = .{
-                    .bytes = rgba.asBytes(),
-                    .extent = vk.Extent2D {
-                        .width = @intCast(img.width),
-                        .height = @intCast(img.height),
-                    },
-                    .format = .r8g8b8a8_srgb,
-                },
-            }, debug_name);
+            break :emissive try textures.upload(vc, U8x4, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(rgba), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
         } else emissive: {
-            const constant = F32x3.new(gltf_material.emissive_factor[0], gltf_material.emissive_factor[1], gltf_material.emissive_factor[2]).mul_scalar(gltf_material.emissive_strength);
+            const constant: *F32x4 = @ptrCast(try encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+            constant.* = F32x4.new(gltf_material.emissive_factor[0], gltf_material.emissive_factor[1], gltf_material.emissive_factor[2], std.math.nan(f32)).mul_scalar(gltf_material.emissive_strength);
             const debug_name = try std.fmt.allocPrintZ(allocator, "{s} constant emissive {}", .{ gltf_material.name, constant });
             defer allocator.free(debug_name);
-            break :emissive try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-                .f32x3 = constant,
-            }, debug_name);
+            break :emissive try textures.upload(vc, F32x4, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(constant), vk.Extent2D { .width = 1, .height = 1 }, debug_name);
         };
 
         break :blk material;
@@ -153,33 +140,26 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
         defer img.deinit();
 
         // image may be rgba32 or rgb24
-        var rgba = if (img.pixels == .rgb24) try zigimg.color.PixelStorage.init(allocator, .rgba32, img.pixels.len()) else img.pixels;
-        defer if (img.pixels == .rgb24) rgba.deinit(allocator);
+        const rgba = try encoder.uploadAllocator().alloc(U8x4, img.pixels.len());
         if (img.pixels == .rgb24) {
-            for (img.pixels.rgb24, rgba.rgba32) |pixel, *rgba32| {
-                rgba32.* = zigimg.color.Rgba32.initRgba(pixel.r, pixel.g, pixel.b, std.math.maxInt(u8));
+            for (img.pixels.rgb24, rgba) |src_pixel, *dst_pixel| {
+                dst_pixel.* = U8x4.new(src_pixel.r, src_pixel.g, src_pixel.b, std.math.maxInt(u8));
+            }
+        } else {
+            for (img.pixels.rgba32, rgba) |src_pixel, *dst_pixel| {
+                dst_pixel.* = U8x4.new(src_pixel.r, src_pixel.g, src_pixel.b, src_pixel.a);
             }
         }
 
         const debug_name = try std.fmt.allocPrintZ(allocator, "{s} color", .{ gltf_material.name });
         defer allocator.free(debug_name);
-        break :blk try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-            .raw = .{
-                .bytes = rgba.asBytes(),
-                .extent = vk.Extent2D {
-                    .width = @intCast(img.width),
-                    .height = @intCast(img.height),
-                },
-                .format = .r8g8b8a8_srgb,
-            },
-        }, debug_name);
+        break :blk try textures.upload(vc, U8x4, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(rgba), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
     } else blk: {
-        const constant = F32x3.new(gltf_material.metallic_roughness.base_color_factor[0], gltf_material.metallic_roughness.base_color_factor[1], gltf_material.metallic_roughness.base_color_factor[2]);
+        const constant: *F32x4 = @ptrCast(try encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        constant.* = F32x4.new(gltf_material.metallic_roughness.base_color_factor[0], gltf_material.metallic_roughness.base_color_factor[1], gltf_material.metallic_roughness.base_color_factor[2], std.math.nan(f32));
         const debug_name = try std.fmt.allocPrintZ(allocator, "{s} constant color {}", .{ gltf_material.name, constant });
         defer allocator.free(debug_name);
-        break :blk try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-            .f32x3 = F32x3.new(gltf_material.metallic_roughness.base_color_factor[0], gltf_material.metallic_roughness.base_color_factor[1], gltf_material.metallic_roughness.base_color_factor[2])
-        }, debug_name);
+        break :blk try textures.upload(vc, F32x4, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(constant), vk.Extent2D { .width = 1, .height = 1 }, debug_name);
     };
 
     if (gltf_material.metallic_roughness.metallic_roughness_texture) |texture| {
@@ -190,19 +170,17 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
         var img = try loadImage(allocator, image, gltf_directory);
         defer img.deinit();
 
-        const rs = try allocator.alloc(u8, img.pixels.len());
-        defer allocator.free(rs);
-        const gs = try allocator.alloc(u8, img.pixels.len());
-        defer allocator.free(gs);
+        const metalness = try encoder.uploadAllocator().alloc(u8, img.pixels.len());
+        const roughness = try encoder.uploadAllocator().alloc(u8, img.pixels.len());
         switch (img.pixels) {
             .rgb24 => |rgb| {
-                for (rgb, rs, gs) |pixel, *r, *g| {
+                for (rgb, metalness, roughness) |pixel, *r, *g| {
                     r.* = pixel.r;
                     g.* = pixel.g;
                 }
             },
             .rgba32 => |rgba| {
-                for (rgba, rs, gs) |pixel, *r, *g| {
+                for (rgba, metalness, roughness) |pixel, *r, *g| {
                     r.* = pixel.r;
                     g.* = pixel.g;
                 }
@@ -211,28 +189,10 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
         }
         const debug_name_metalness = try std.fmt.allocPrintZ(allocator, "{s} metalness", .{ gltf_material.name });
         defer allocator.free(debug_name_metalness);
-        standard_pbr.metalness = try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-            .raw = .{
-                .bytes = rs,
-                .extent = vk.Extent2D {
-                    .width = @intCast(img.width),
-                    .height = @intCast(img.height),
-                },
-                .format = .r8_unorm,
-            },
-        }, debug_name_metalness);
+        standard_pbr.metalness = try textures.upload(vc, u8, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(metalness), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name_metalness);
         const debug_name_roughness = try std.fmt.allocPrintZ(allocator, "{s} roughness", .{ gltf_material.name });
         defer allocator.free(debug_name_roughness);
-        standard_pbr.roughness = try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-            .raw = .{
-                .bytes = gs,
-                .extent = vk.Extent2D {
-                    .width = @intCast(img.width),
-                    .height = @intCast(img.height),
-                },
-                .format = .r8_unorm,
-            },
-        }, debug_name_roughness);
+        standard_pbr.metalness = try textures.upload(vc, u8, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(roughness), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name_roughness);
         material.bsdf = .{ .standard_pbr = standard_pbr };
         return material;
     } else {
@@ -250,14 +210,16 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
         } else {
             const debug_name_metalness = try std.fmt.allocPrintZ(allocator, "{s} constant metalness {}", .{ gltf_material.name, gltf_material.metallic_roughness.metallic_factor });
             defer allocator.free(debug_name_metalness);
-            standard_pbr.metalness = try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-                .f32x1 = gltf_material.metallic_roughness.metallic_factor,
-            }, debug_name_metalness);
-            const debug_name_roughness = try std.fmt.allocPrintZ(allocator, "{s} constant debug_name_roughness {}", .{ gltf_material.name, gltf_material.metallic_roughness.roughness_factor });
+            const metalness = try encoder.uploadAllocator().create(f32);
+            metalness.* = gltf_material.metallic_roughness.metallic_factor;
+            standard_pbr.metalness = try textures.upload(vc, f32, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(metalness), vk.Extent2D { .width = 1, .height = 1 }, debug_name_metalness);
+
+            const debug_name_roughness = try std.fmt.allocPrintZ(allocator, "{s} constant roughness {}", .{ gltf_material.name, gltf_material.metallic_roughness.roughness_factor });
             defer allocator.free(debug_name_roughness);
-            standard_pbr.roughness = try textures.upload(vc, vk_allocator, allocator, encoder, TextureManager.Source {
-                .f32x1 = gltf_material.metallic_roughness.roughness_factor,
-            }, debug_name_roughness);
+            const roughness = try encoder.uploadAllocator().create(f32);
+            roughness.* = gltf_material.metallic_roughness.metallic_factor;
+            standard_pbr.roughness = try textures.upload(vc, f32, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(roughness), vk.Extent2D { .width = 1, .height = 1 }, debug_name_roughness);
+
             material.bsdf = .{ .standard_pbr = standard_pbr };
             return material;
         }
@@ -289,7 +251,6 @@ pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator:
 
     var objects = std.ArrayList(MeshManager.Mesh).init(allocator);
     defer objects.deinit();
-    defer for (objects.items) |*object| object.destroy(allocator);
 
     // go over heirarchy, finding meshes
     var instances = std.ArrayList(Instance).init(allocator);
@@ -333,14 +294,14 @@ pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator:
                             gltf.getDataFromBufferView(u16, &indices, accessor, buffer);
 
                             // convert to U32x3
-                            const actual_indices = try allocator.alloc(U32x3, indices.items.len / 3);
+                            const actual_indices = try encoder.uploadAllocator().alloc(U32x3, indices.items.len / 3);
                             for (actual_indices, 0..) |*index, i| {
                                 index.* = U32x3.new(indices.items[i * 3 + 0], indices.items[i * 3 + 1], indices.items[i * 3 + 2]);
                             }
                             break :blk3 actual_indices;
                         },
                         .unsigned_integer => blk3: {
-                            var indices = std.ArrayList(u32).init(allocator);
+                            var indices = std.ArrayList(u32).init(encoder.uploadAllocator());
                             defer indices.deinit();
 
                             gltf.getDataFromBufferView(u32, &indices, accessor, buffer);
@@ -350,12 +311,12 @@ pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator:
                         else => unreachable,
                     };
                 } else null;
-                errdefer if (indices) |nonnull| allocator.free(nonnull);
+                errdefer if (indices) |nonnull| encoder.uploadAllocator().free(nonnull);
 
                 const vertices = blk2: {
-                    var positions = std.ArrayList(f32).init(allocator);
-                    var texcoords = std.ArrayList(f32).init(allocator);
-                    var normals = std.ArrayList(f32).init(allocator);
+                    var positions = std.ArrayList(f32).init(encoder.uploadAllocator());
+                    var texcoords = std.ArrayList(f32).init(encoder.uploadAllocator());
+                    var normals = std.ArrayList(f32).init(encoder.uploadAllocator());
 
                     for (primitive.attributes.items) |attribute| {
                         switch (attribute) {
@@ -389,16 +350,16 @@ pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator:
                         .normals = @as([*]F32x3, @ptrCast(normals_slice.ptr))[0..normals_slice.len / 3],
                     };
                 };
-                errdefer allocator.free(vertices.positions);
-                errdefer allocator.free(vertices.texcoords);
+                errdefer encoder.uploadAllocator().free(vertices.positions);
+                errdefer encoder.uploadAllocator().free(vertices.texcoords);
 
                 // get vertices
                 try objects.append(MeshManager.Mesh {
                     .name = mesh.name,
-                    .positions = vertices.positions,
-                    .texcoords = if (vertices.texcoords.len != 0) vertices.texcoords else null,
-                    .normals = if (vertices.normals.len != 0) vertices.normals else null,
-                    .indices = indices,
+                    .positions = encoder.upload_allocator.getBufferSlice(vertices.positions),
+                    .texcoords = if (vertices.texcoords.len != 0) encoder.upload_allocator.getBufferSlice(vertices.texcoords) else null,
+                    .normals = if (vertices.normals.len != 0) encoder.upload_allocator.getBufferSlice(vertices.normals) else null,
+                    .indices = if (indices) |i| encoder.upload_allocator.getBufferSlice(i) else null,
                 });
             }
 

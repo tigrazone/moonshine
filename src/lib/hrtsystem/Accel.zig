@@ -99,7 +99,7 @@ blases: BottomLevelAccels = .{},
 
 instance_count: u32 = 0,
 instances_device: VkAllocator.DeviceBuffer(vk.AccelerationStructureInstanceKHR),
-instances_host: VkAllocator.HostBuffer(vk.AccelerationStructureInstanceKHR),
+instances_host: VkAllocator.OwnedHostBuffer(vk.AccelerationStructureInstanceKHR),
 instances_address: vk.DeviceAddress,
 
 // keep track of inverse transform -- non-inverse we can get from instances_device
@@ -107,7 +107,7 @@ instances_address: vk.DeviceAddress,
 // in raygen
 // ray queries provide them in any shader which would be a benefit of using them
 world_to_instance_device: VkAllocator.DeviceBuffer(Mat3x4),
-world_to_instance_host: VkAllocator.HostBuffer(Mat3x4),
+world_to_instance_host: VkAllocator.OwnedHostBuffer(Mat3x4),
 
 // flat jagged array for geometries --
 // use instanceCustomIndex + GeometryID() here to get geometry
@@ -131,12 +131,10 @@ const max_emissive_triangles = std.math.powi(u32, 2, 15) catch unreachable;
 // lots of temp memory allocations here
 // encoder must be in recording state
 // returns scratch buffers that must be kept alive until command is completed
-fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, mesh_manager: MeshManager, geometries: []const []const Geometry, blases: *BottomLevelAccels) ![]const VkAllocator.OwnedDeviceBuffer {
+fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, mesh_manager: MeshManager, geometries: []const []const Geometry, blases: *BottomLevelAccels) !void {
     const build_geometry_infos = try allocator.alloc(vk.AccelerationStructureBuildGeometryInfoKHR, geometries.len);
     defer allocator.free(build_geometry_infos);
     defer for (build_geometry_infos) |build_geometry_info| allocator.free(build_geometry_info.p_geometries.?[0..build_geometry_info.geometry_count]);
-
-    const scratch_buffers = try allocator.alloc(VkAllocator.OwnedDeviceBuffer, geometries.len);
 
     const build_infos = try allocator.alloc([*]vk.AccelerationStructureBuildRangeInfoKHR, geometries.len);
     defer allocator.free(build_infos);
@@ -144,7 +142,7 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
 
     try blases.ensureUnusedCapacity(allocator, geometries.len);
 
-    for (geometries, build_infos, build_geometry_infos, scratch_buffers) |list, *build_info, *build_geometry_info, *scratch_buffer| {
+    for (geometries, build_infos, build_geometry_infos) |list, *build_info, *build_geometry_info| {
         const vk_geometries = try allocator.alloc(vk.AccelerationStructureGeometryKHR, list.len);
 
         build_geometry_info.* = vk.AccelerationStructureBuildGeometryInfoKHR {
@@ -197,8 +195,8 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
 
         const size_info = getBuildSizesInfo(vc, build_geometry_info, primitive_counts.ptr);
 
-        scratch_buffer.* = try vk_allocator.createOwnedDeviceBuffer(vc, size_info.build_scratch_size, .{ .shader_device_address_bit = true, .storage_buffer_bit = true }, "blas scratch buffer");
-        errdefer scratch_buffer.destroy(vc);
+        const scratch_buffer = try vk_allocator.createOwnedDeviceBuffer(vc, size_info.build_scratch_size, .{ .shader_device_address_bit = true, .storage_buffer_bit = true }, "blas scratch buffer");
+        try encoder.attachResource(scratch_buffer);
         build_geometry_info.scratch_data.device_address = scratch_buffer.getAddress(vc);
 
         const buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.acceleration_structure_size, .{ .acceleration_structure_storage_bit_khr = true, .shader_device_address_bit = true }, "blas buffer");
@@ -219,8 +217,6 @@ fn makeBlases(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: s
     }
 
     encoder.buildAccelerationStructures(build_geometry_infos, build_infos);
-
-    return scratch_buffers;
 }
 
 pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, texture_descriptor_layout: MaterialManager.TextureManager.DescriptorLayout, encoder: *Encoder) !Self {
@@ -279,7 +275,6 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
     const world_to_instance_host = try vk_allocator.createHostBuffer(vc, Mat3x4, max_instances, .{ .transfer_src_bit = true });
     errdefer world_to_instance_host.destroy(vc);
 
-    try encoder.begin();
     encoder.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = &[1]vk.ImageMemoryBarrier2 {
@@ -326,8 +321,6 @@ pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocat
         },
     });
 
-    try encoder.submitAndIdleUntilDone(vc);
-
     return Self {
         .triangle_power_pipeline = triangle_power_pipeline,
         .triangle_power_fold_pipeline = triangle_power_fold_pipeline,
@@ -351,10 +344,7 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     std.debug.assert(self.geometry_count + instance.geometries.len <= max_geometries);
     std.debug.assert(self.instance_count < max_instances);
 
-    try encoder.begin();
-    const scratch_buffers = try makeBlases(vc, vk_allocator, allocator, encoder, mesh_manager, &.{ instance.geometries }, &self.blases);
-    defer allocator.free(scratch_buffers);
-    defer for (scratch_buffers) |scratch_buffer| scratch_buffer.destroy(vc);
+    try makeBlases(vc, vk_allocator, allocator, encoder, mesh_manager, &.{ instance.geometries }, &self.blases);
 
     // update geometries flat jagged array
     encoder.updateBuffer(Geometry, self.geometries, instance.geometries, self.geometry_count);
@@ -416,12 +406,12 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     const size_info = getBuildSizesInfo(vc, &geometry_info, @ptrCast(&self.instance_count));
 
     const scratch_buffer = try vk_allocator.createOwnedDeviceBuffer(vc, size_info.build_scratch_size, .{ .shader_device_address_bit = true, .storage_buffer_bit = true }, "tlas scratch buffer");
-    defer scratch_buffer.destroy(vc);
+    try encoder.attachResource(scratch_buffer);
 
-    self.tlas_buffer.destroy(vc);
+    try encoder.attachResource(self.tlas_buffer); // might still be used if this function was called in a loop. TODO: do not needlessly rebuild TLAS in this situation
     self.tlas_buffer = try vk_allocator.createDeviceBuffer(vc, allocator, u8, size_info.acceleration_structure_size, .{ .acceleration_structure_storage_bit_khr = true, .shader_device_address_bit = true }, "tlas buffer");
 
-    vc.device.destroyAccelerationStructureKHR(self.tlas_handle, null);
+    try encoder.attachResource(self.tlas_handle); // might still be used if this function was called in a loop. TODO: do not needlessly rebuild TLAS in this situation
     geometry_info.dst_acceleration_structure = try vc.device.createAccelerationStructureKHR(&.{
         .buffer = self.tlas_buffer.handle,
         .offset = 0,
@@ -462,8 +452,6 @@ pub fn uploadInstance(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAl
     for (instance.geometries, 0..) |geometry, i| {
         self.recordUpdatePower(encoder, mesh_manager, material_manager, @intCast(self.instance_count - 1), @intCast(i), geometry.mesh);
     }
-
-    try encoder.submitAndIdleUntilDone(vc);
 
     self.geometry_count += @intCast(instance.geometries.len);
 

@@ -149,7 +149,25 @@ pub fn createOwnedDeviceBuffer(self: *Allocator, vc: *const VulkanContext, size:
     };
 }
 
-pub fn HostBuffer(comptime T: type) type {
+pub fn BufferSlice(comptime T: type) type {
+    return struct {
+        handle: vk.Buffer = .null_handle,
+        offset: vk.DeviceSize = 0,
+        len: vk.DeviceSize = 0,
+
+        const Self = @This();
+
+        pub fn asBytes(self: Self) BufferSlice(u8) {
+            return BufferSlice(u8) {
+                .handle = self.handle,
+                .offset = self.offset,
+                .len = @sizeOf(T) * self.len,
+            };
+        }
+    };
+}
+
+pub fn OwnedHostBuffer(comptime T: type) type {
     return struct {
         handle: vk.Buffer = .null_handle,
         memory: vk.DeviceMemory = .null_handle,
@@ -165,15 +183,8 @@ pub fn HostBuffer(comptime T: type) type {
             }
         }
 
-        // must've been created with shader device address bit enabled
-        pub fn getAddress(self: BufferSelf, vc: *const VulkanContext) vk.DeviceAddress {
-            return vc.device.getBufferDeviceAddress(&.{
-                .buffer = self.handle,
-            });
-        }
-
-        pub fn toBytes(self: BufferSelf) HostBuffer(u8) {
-            return HostBuffer(u8) {
+        pub fn toBytes(self: BufferSelf) OwnedHostBuffer(u8) {
+            return OwnedHostBuffer(u8) {
                 .handle = self.handle,
                 .memory = self.memory,
                 .data = @as([*]u8, @ptrCast(self.data))[0..self.data.len * @sizeOf(T)],
@@ -187,14 +198,8 @@ pub fn HostBuffer(comptime T: type) type {
 }
 
 // count not in bytes, but number of T
-pub fn createHostBuffer(self: *Allocator, vc: *const VulkanContext, comptime T: type, count: vk.DeviceSize, usage: vk.BufferUsageFlags) !HostBuffer(T) {
-    if (count == 0) {
-        return HostBuffer(T) {
-            .handle = .null_handle,
-            .memory = .null_handle,
-            .data = &.{},
-        };
-    }
+pub fn createHostBuffer(self: *Allocator, vc: *const VulkanContext, comptime T: type, count: vk.DeviceSize, usage: vk.BufferUsageFlags) !OwnedHostBuffer(T) {
+    if (count == 0) return OwnedHostBuffer(T) {};
 
     var buffer: vk.Buffer = undefined;
     var memory: vk.DeviceMemory = undefined;
@@ -203,7 +208,7 @@ pub fn createHostBuffer(self: *Allocator, vc: *const VulkanContext, comptime T: 
 
     const data = @as([*]T, @ptrCast(@alignCast((try vc.device.mapMemory(memory, 0, size, .{})).?)))[0..count];
 
-    return HostBuffer(T) {
+    return OwnedHostBuffer(T) {
         .handle = buffer,
         .memory = memory,
         .data = data,
@@ -237,6 +242,7 @@ pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime re
 
         device: VulkanContext.Device,
         memory_type_index: MemoryTypeIndex,
+        required_alignment_log2: std.math.Log2Int(vk.DeviceSize),
         allocations: Allocations = .{},
 
         pub fn init(vc: *const VulkanContext) Self {
@@ -261,6 +267,7 @@ pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime re
             return Self {
                 .device = vc.device,
                 .memory_type_index = memory_type_index,
+                .required_alignment_log2 = std.math.log2_int(vk.DeviceSize, memory_requirements.memory_requirements.alignment), // vulkan guarantees this is a power of two,
                 .allocations = Allocations {},
             };
         }
@@ -276,6 +283,30 @@ pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime re
             };
         }
 
+        pub fn getBufferSlice(self: Self, data: anytype) BufferSlice(@typeInfo(@TypeOf(data)).pointer.child) {
+            const T = @typeInfo(@TypeOf(data)).pointer.child;
+
+            const ptr = switch (@typeInfo(@TypeOf(data)).pointer.size) {
+                .One => data,
+                .Slice => data.ptr,
+                else => comptime unreachable,
+            };
+
+            const len = switch (@typeInfo(@TypeOf(data)).pointer.size) {
+                .One => 1,
+                .Slice => data.len,
+                else => comptime unreachable,
+            };
+
+            const node = self.findNode(@ptrCast(ptr));
+
+            return BufferSlice(T) {
+                .handle = node.key.buffer,
+                .offset = @as([*]const u8, @ptrCast(ptr)) - node.key.slice.ptr,
+                .len = len,
+            };
+        }
+
         fn alloc(ctx: *anyopaque, len: usize, alignment_log2: u8, ret_addr: usize) ?[*]u8 {
             _ = ret_addr;
             const self: *Self = @ptrCast(@alignCast(ctx));
@@ -283,7 +314,10 @@ pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime re
 
             const worst_case_additional_memory_required = @max(@sizeOf(Allocations.Node), required_alignment);
 
-            const total_len = len + worst_case_additional_memory_required;
+            // > For a VkBuffer, the size memory requirement is never greater than the result of
+            // > aligning VkBufferCreateInfo::size with the alignment memory requirement.
+            const required_alignment_vk = @as(usize, 1) << @as(std.mem.Allocator.Log2Align, @intCast(self.required_alignment_log2));
+            const total_len = std.mem.alignForward(usize, len + worst_case_additional_memory_required, required_alignment_vk);
             const allocate_info = vk.MemoryAllocateInfo {
                 .allocation_size = total_len,
                 .memory_type_index = self.memory_type_index,
@@ -301,10 +335,15 @@ pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime re
             const ptr_aligned = std.mem.alignPointer(ptr_unaligned + @sizeOf(Allocations.Node), required_alignment).?;
 
             const buffer = self.device.createBuffer(&.{
-                .size = len,
+                .size = total_len,
                 .usage = usage,
                 .sharing_mode = .exclusive,
             }, null) catch return null;
+            if (comptime @import("build_options").vk_validation) {
+                var debug_name_buf: [128]u8 = undefined;
+                const debug_name = std.fmt.bufPrintZ(&debug_name_buf, "[{}]align({})", .{ len, required_alignment }) catch |err| std.debug.panic("{s}", .{ @errorName(err) });
+                vk_helpers.setDebugName(self.device, buffer, debug_name) catch |err| std.debug.panic("{s}", .{ @errorName(err) });
+            }
 
             self.device.bindBufferMemory(buffer, memory, 0) catch return null;
 
