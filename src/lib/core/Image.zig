@@ -5,7 +5,6 @@ const engine = @import("../engine.zig");
 const core = engine.core;
 const vk_helpers = core.vk_helpers;
 const VulkanContext = core.VulkanContext;
-const VkAllocator = core.Allocator;
 
 const Self = @This();
 
@@ -13,7 +12,7 @@ handle: vk.Image,
 view: vk.ImageView,
 memory: vk.DeviceMemory,
 
-pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, size: vk.Extent2D, usage: vk.ImageUsageFlags, format: vk.Format, with_mips: bool, name: [:0]const u8) !Self {
+pub fn create(vc: *const VulkanContext, size: vk.Extent2D, usage: vk.ImageUsageFlags, format: vk.Format, with_mips: bool, name: [:0]const u8) !Self {
     const extent = vk.Extent3D {
         .width = size.width,
         .height = size.height,
@@ -43,7 +42,7 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, size: vk.Ext
 
     const memory = try vc.device.allocateMemory(&.{
         .allocation_size = mem_requirements.size,
-        .memory_type_index = try vk_allocator.findMemoryType(mem_requirements.memory_type_bits, .{ .device_local_bit = true }),
+        .memory_type_index = try vc.findMemoryType(mem_requirements.memory_type_bits, .{ .device_local_bit = true }),
     }, null);
     errdefer vc.device.freeMemory(memory, null);
 

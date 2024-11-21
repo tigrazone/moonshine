@@ -5,23 +5,21 @@
 
 const core = @import("core.zig");
 const VulkanContext = core.VulkanContext;
-const VkAllocator = core.Allocator;
 const Encoder = core.Encoder;
 const vk_helpers = core.vk_helpers;
 
 const std = @import("std");
 const vk = @import("vulkan");
 
-buffer: VkAllocator.OwnedHostBuffer(u8),
+buffer: core.mem.DownloadBuffer(u8),
 
 encoder: Encoder,
 ready_fence: vk.Fence,
 
 const Self = @This();
 
-pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, max_bytes: u32) !Self {
-    const buffer = try vk_allocator.createHostBuffer(vc, u8, max_bytes, .{ .transfer_dst_bit = true });
-    try vk_helpers.setDebugName(vc.device, buffer.handle, "sync copier");
+pub fn create(vc: *const VulkanContext, max_bytes: u32) !Self {
+    const buffer = try core.mem.DownloadBuffer(u8).create(vc, max_bytes, "sync copier");
 
     var encoder = try Encoder.create(vc, "sync copier");
     errdefer encoder.destroy(vc);
@@ -36,11 +34,11 @@ pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, max_bytes: u
     };
 }
 
-pub fn copyBufferItem(self: *Self, vc: *const VulkanContext, comptime BufferInner: type, buffer: VkAllocator.DeviceBuffer(BufferInner), idx: vk.DeviceSize) !BufferInner {
-    std.debug.assert(@sizeOf(BufferInner) <= self.buffer.data.len);
+pub fn copyBufferItem(self: *Self, vc: *const VulkanContext, comptime BufferInner: type, buffer: vk.Buffer, idx: vk.DeviceSize) !BufferInner {
+    std.debug.assert(@sizeOf(BufferInner) <= self.buffer.slice.len);
 
     try self.encoder.begin();
-    self.encoder.copyBuffer(buffer.handle, self.buffer.handle, &[_]vk.BufferCopy {
+    self.encoder.copyBuffer(buffer, self.buffer.handle, &[_]vk.BufferCopy {
         .{
             .src_offset = @sizeOf(BufferInner) * idx,
             .dst_offset = 0,
@@ -53,11 +51,11 @@ pub fn copyBufferItem(self: *Self, vc: *const VulkanContext, comptime BufferInne
     try vc.device.resetFences(1, @ptrCast(&self.ready_fence));
     try vc.device.resetCommandPool(self.encoder.pool, .{});
 
-    return @as(*BufferInner, @ptrCast(@alignCast(self.buffer.data.ptr))).*;
+    return @as(*BufferInner, @ptrCast(@alignCast(self.buffer.slice.ptr))).*;
 }
 
 pub fn copyImagePixel(self: *Self, vc: *const VulkanContext, comptime PixelType: type, src_image: vk.Image, src_layout: vk.ImageLayout, offset: vk.Offset3D) !PixelType {
-    std.debug.assert(@sizeOf(PixelType) <= self.buffer.data.len);
+    std.debug.assert(@sizeOf(PixelType) <= self.buffer.slice.len);
 
     try self.encoder.begin();
     self.encoder.buffer.copyImageToBuffer(src_image, src_layout, self.buffer.handle, 1, @ptrCast(&vk.BufferImageCopy {
@@ -83,7 +81,7 @@ pub fn copyImagePixel(self: *Self, vc: *const VulkanContext, comptime PixelType:
     try vc.device.resetFences(1, @ptrCast(&self.ready_fence));
     try vc.device.resetCommandPool(self.encoder.pool, .{});
 
-    return @as(*PixelType, @ptrCast(@alignCast(self.buffer.data.ptr))).*;
+    return @as(*PixelType, @ptrCast(@alignCast(self.buffer.slice.ptr))).*;
 }
 
 pub fn destroy(self: *Self, vc: *const VulkanContext) void {

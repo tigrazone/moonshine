@@ -260,6 +260,8 @@ debug_messenger: if (validate) vk.DebugUtilsMessengerEXT else void,
 
 queue: Queue,
 
+memory_types: std.BoundedArray(vk.MemoryPropertyFlags, vk.MAX_MEMORY_TYPES),
+
 const Self = @This();
 
 const QueueFamilyAcceptable = fn(vk.Instance, vk.PhysicalDevice, u32) bool;
@@ -294,6 +296,14 @@ pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_ex
     const queue_handle = device.getDeviceQueue(physical_device.queue_family_index, 0);
     const queue = Queue.init(queue_handle, device_dispatch);
 
+    const properties = instance.getPhysicalDeviceMemoryProperties(physical_device.handle);
+
+    var memory_types = std.BoundedArray(vk.MemoryPropertyFlags, vk.MAX_MEMORY_TYPES).init(properties.memory_type_count) catch unreachable;
+
+    for (properties.memory_types[0..properties.memory_type_count], memory_types.slice()) |src, *dst| {
+        dst.* = src.property_flags;
+    }
+
     return Self {
         .base = base,
         .instance_dispatch = instance_dispatch,
@@ -304,7 +314,17 @@ pub fn create(allocator: std.mem.Allocator, app_name: [*:0]const u8, instance_ex
         .physical_device = physical_device,
 
         .queue = queue,
+
+        .memory_types = memory_types,
     };
+}
+
+pub fn findMemoryType(self: Self, type_filter: u32, required_properties: vk.MemoryPropertyFlags) !std.meta.Int(.unsigned, vk.MAX_MEMORY_TYPES) {
+    return for (self.memory_types.slice(), 0..) |avalable_properties, i| {
+        if (type_filter & (@as(u32, 1) << @intCast(i)) != 0 and avalable_properties.contains(required_properties)) {
+            break @intCast(i);
+        }
+    } else error.UnavailbleMemoryType;
 }
 
 pub fn destroy(self: Self, allocator: std.mem.Allocator) void {

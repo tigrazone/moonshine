@@ -7,7 +7,6 @@ const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
 const Encoder = core.Encoder;
-const VkAllocator = core.Allocator;
 const descriptor = core.descriptor;
 
 const Camera = @import("./Camera.zig");
@@ -76,7 +75,7 @@ pub fn Pipeline(comptime options: struct {
         pub const SpecConstants = options.SpecConstants;
         pub const PushSetBindings = options.PushSetBindings;
 
-        pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler) !Self {
+        pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder, additional_descriptor_layouts: [options.additional_descriptor_layout_count]vk.DescriptorSetLayout, constants: SpecConstants, samplers: [Bindings.sampler_count]vk.Sampler) !Self {
             var bindings = try Bindings.create(vc, samplers, additional_descriptor_layouts);
             errdefer bindings.destroy(vc);
 
@@ -141,7 +140,7 @@ pub fn Pipeline(comptime options: struct {
             try core.vk_helpers.setDebugName(vc.device, handle, options.shader_path);
 
             const shader_info = comptime ShaderInfo.find(options.stages);
-            const sbt = try ShaderBindingTable.create(vc, vk_allocator, allocator, handle, encoder, shader_info.raygen_count, shader_info.miss_count, shader_info.hit_count, shader_info.callable_count);
+            const sbt = try ShaderBindingTable.create(vc, handle, encoder, shader_info.raygen_count, shader_info.miss_count, shader_info.hit_count, shader_info.callable_count);
             errdefer sbt.destroy(vc);
 
             return Self {
@@ -361,7 +360,7 @@ const ShaderInfo = struct {
 };
 
 const ShaderBindingTable = struct {
-    handle: VkAllocator.DeviceBuffer(u8),
+    handle: core.mem.DeviceBuffer(u8, .{ .shader_binding_table_bit_khr = true, .transfer_dst_bit = true, .shader_device_address_bit = true }),
 
     raygen_address: vk.DeviceAddress,
     miss_address: vk.DeviceAddress,
@@ -375,7 +374,7 @@ const ShaderBindingTable = struct {
 
     handle_size_aligned: u32,
 
-    fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, pipeline: vk.Pipeline, encoder: *Encoder, raygen_entry_count: u32, miss_entry_count: u32, hit_entry_count: u32, callable_entry_count: u32) !ShaderBindingTable {
+    fn create(vc: *const VulkanContext, pipeline: vk.Pipeline, encoder: *Encoder, raygen_entry_count: u32, miss_entry_count: u32, hit_entry_count: u32, callable_entry_count: u32) !ShaderBindingTable {
         const rt_properties = blk: {
             var rt_properties: vk.PhysicalDeviceRayTracingPipelinePropertiesKHR = undefined;
             rt_properties.s_type = .physical_device_ray_tracing_pipeline_properties_khr;
@@ -414,10 +413,10 @@ const ShaderBindingTable = struct {
         std.mem.copyBackwards(u8, sbt[hit_index..hit_index + hit_size], sbt[raygen_size + miss_size..raygen_size + miss_size + hit_size]);
         std.mem.copyBackwards(u8, sbt[miss_index..miss_index + miss_size], sbt[raygen_size..raygen_size + miss_size]);
 
-        const handle = try vk_allocator.createDeviceBuffer(vc, allocator, u8, sbt_size, .{ .shader_binding_table_bit_khr = true, .transfer_dst_bit = true, .shader_device_address_bit = true }, "sbt");
+        const handle = try core.mem.DeviceBuffer(u8, .{ .shader_binding_table_bit_khr = true, .transfer_dst_bit = true, .shader_device_address_bit = true }).create(vc, sbt_size, "sbt");
         errdefer handle.destroy(vc);
 
-        encoder.uploadBuffer(u8, encoder.upload_allocator.getBufferSlice(sbt), handle);
+        handle.uploadFrom(encoder, encoder.upload_allocator.getBufferSlice(sbt));
 
         const raygen_address = handle.getAddress(vc);
         const miss_address = raygen_address + miss_index;
@@ -481,7 +480,7 @@ const ShaderBindingTable = struct {
         std.mem.copyBackwards(u8, sbt[hit_index..hit_index + hit_size], sbt[raygen_size + miss_size..raygen_size + miss_size + hit_size]);
         std.mem.copyBackwards(u8, sbt[miss_index..miss_index + miss_size], sbt[raygen_size..raygen_size + miss_size]);
 
-        encoder.uploadBuffer(u8, encoder.upload_allocator.getBufferSlice(sbt), self.handle);
+        self.handle.uploadFrom(encoder, encoder.upload_allocator.getBufferSlice(sbt));
     }
 
     pub fn getRaygenSBT(self: *const ShaderBindingTable) vk.StridedDeviceAddressRegionKHR {

@@ -5,7 +5,6 @@ const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
 const DestructionQueue = core.DestructionQueue;
-const VkAllocator = core.Allocator;
 const Encoder = core.Encoder;
 const vk_helpers = core.vk_helpers;
 

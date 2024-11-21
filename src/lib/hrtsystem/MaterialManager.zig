@@ -6,7 +6,6 @@ const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
 const Encoder = core.Encoder;
-const VkAllocator = core.Allocator;
 const Image = core.Image;
 const vk_helpers = core.vk_helpers;
 
@@ -107,7 +106,7 @@ fn StructFromTaggedUnion(comptime Union: type, comptime InnerFn: fn(type) type) 
 
 fn VariantBuffer(comptime T: type) type {
     return struct {
-        buffer: VkAllocator.DeviceBuffer(T) = .{},
+        buffer: core.mem.DeviceBuffer(T, .{ .shader_device_address_bit = true, .transfer_dst_bit = true }) = .{},
         addr: vk.DeviceAddress = 0,
         len: vk.DeviceSize = 0,
     };
@@ -117,7 +116,7 @@ const VariantBuffers = StructFromTaggedUnion(PolymorphicBSDF, VariantBuffer);
 
 material_count: u32,
 textures: TextureManager,
-materials: VkAllocator.DeviceBuffer(GpuMaterial),
+materials: core.mem.DeviceBuffer(GpuMaterial, .{ .storage_buffer_bit = true, .transfer_dst_bit = true }),
 
 variant_buffers: VariantBuffers,
 
@@ -138,20 +137,20 @@ pub fn createEmpty(vc: *const VulkanContext) !Self {
 
 // you can either do this or create below, but not both
 // texture handles must've been already added to the MaterialManager's textures
-pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, info: Material, name: [:0]const u8) !Handle {
+pub fn upload(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder, info: Material, name: [:0]const u8) !Handle {
     std.debug.assert(self.material_count < max_materials);
 
     inline for (@typeInfo(PolymorphicBSDF).@"union".fields, 0..) |field, field_idx| {
         if (@as(BSDF, @enumFromInt(field_idx)) == std.meta.activeTag(info.bsdf)) {
             if (@sizeOf(field.type) != 0) {
                 const variant_buffer = &@field(self.variant_buffers, field.name);
-                if (variant_buffer.buffer.is_null()) {
+                if (variant_buffer.buffer.isNull()) {
                     const buffer_name = try std.fmt.allocPrintZ(allocator, "material {s} {s}", .{ name, field.name });
                     defer allocator.free(buffer_name);
-                    variant_buffer.buffer = try vk_allocator.createDeviceBuffer(vc, allocator, field.type, max_materials, .{ .shader_device_address_bit = true, .transfer_dst_bit = true }, buffer_name);
+                    variant_buffer.buffer = try core.mem.DeviceBuffer(field.type, .{ .shader_device_address_bit = true, .transfer_dst_bit = true }).create(vc, max_materials, buffer_name);
                     variant_buffer.addr = variant_buffer.buffer.getAddress(vc);
                 }
-                encoder.updateBuffer(field.type, variant_buffer.buffer, &.{ @field(info.bsdf, field.name) }, variant_buffer.len);
+                variant_buffer.buffer.updateFrom(encoder, variant_buffer.len, &.{ @field(info.bsdf, field.name) });
                 variant_buffer.len += 1;
             }
 
@@ -161,8 +160,8 @@ pub fn upload(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator,
                 .type = std.meta.activeTag(info.bsdf),
                 .addr = if (@sizeOf(field.type) != 0) @field(self.variant_buffers, field.name).addr + (@field(self.variant_buffers, field.name).len - 1) * @sizeOf(field.type) else 0,
             };
-            if (self.materials.is_null()) self.materials = try vk_allocator.createDeviceBuffer(vc, allocator, GpuMaterial, max_materials, .{ .storage_buffer_bit = true, .transfer_dst_bit = true }, "materials");
-            encoder.updateBuffer(GpuMaterial, self.materials, &.{ gpu_material }, self.material_count);
+            if (self.materials.isNull()) self.materials = try core.mem.DeviceBuffer(GpuMaterial, .{ .storage_buffer_bit = true, .transfer_dst_bit = true }).create(vc, max_materials, "materials");
+            self.materials.updateFrom(encoder, self.material_count, &.{ gpu_material });
         }
     }
 
@@ -250,7 +249,7 @@ pub const TextureManager = struct {
 
     pub const Handle = u32;
 
-    pub fn upload(self: *TextureManager, vc: *const VulkanContext, comptime T: type, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, src: VkAllocator.BufferSlice(T), extent: vk.Extent2D, name: [:0]const u8) !TextureManager.Handle {
+    pub fn upload(self: *TextureManager, vc: *const VulkanContext, comptime T: type, allocator: std.mem.Allocator, encoder: *Encoder, src: core.mem.BufferSlice(T), extent: vk.Extent2D, name: [:0]const u8) !TextureManager.Handle {
         const format = comptime vk_helpers.typeToFormat(T);
 
         // > If dstImage does not have either a depth/stencil format or a multi-planar format,
@@ -261,7 +260,7 @@ pub const TextureManager = struct {
         const texture_index: TextureManager.Handle = @intCast(self.data.len);
         std.debug.assert(texture_index < max_descriptors);
 
-        const image = try Image.create(vc, vk_allocator, extent, .{ .transfer_dst_bit = true, .sampled_bit = true }, format, false, name);
+        const image = try Image.create(vc, extent, .{ .transfer_dst_bit = true, .sampled_bit = true }, format, false, name);
         try self.data.append(allocator, image);
 
         encoder.uploadDataToImage(T, src, image.handle, extent, .shader_read_only_optimal);

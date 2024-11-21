@@ -8,7 +8,6 @@ const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
 const Encoder = core.Encoder;
-const VkAllocator = core.Allocator;
 const descriptor = core.descriptor;
 
 pub const supports_hot_reload = build_options.shader_source == .load;

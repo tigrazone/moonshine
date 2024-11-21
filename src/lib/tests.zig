@@ -3,9 +3,9 @@ const vk = @import("vulkan");
 
 const engine = @import("engine");
 
-const VulkanContext = engine.core.VulkanContext;
-const Encoder = engine.core.Encoder;
-const VkAllocator = engine.core.Allocator;
+const core = engine.core;
+const VulkanContext = core.VulkanContext;
+const Encoder = core.Encoder;
 const Pipeline = engine.hrtsystem.pipeline.PathTracing;
 const Scene = engine.hrtsystem.Scene;
 const World = engine.hrtsystem.World;
@@ -30,26 +30,21 @@ const vk_helpers = engine.core.vk_helpers;
 
 const TestingContext = struct {
     vc: VulkanContext,
-    vk_allocator: VkAllocator,
     encoder: Encoder,
-    output_buffer: VkAllocator.OwnedHostBuffer([4]f32),
+    output_buffer: core.mem.DownloadBuffer([4]f32),
 
     fn create(allocator: std.mem.Allocator, extent: vk.Extent2D) !TestingContext {
         const vc = try VulkanContext.create(allocator, "engine-tests", &.{}, &engine.hrtsystem.required_device_extensions, &engine.hrtsystem.required_device_features, null);
         errdefer vc.destroy(allocator);
 
-        var vk_allocator = VkAllocator.create(&vc);
-        errdefer vk_allocator.destroy(&vc, allocator);
-
         var encoder = try Encoder.create(&vc, "main");
         errdefer encoder.destroy(&vc);
 
-        const output_buffer = try vk_allocator.createHostBuffer(&vc, [4]f32, extent.width * extent.height, .{ .transfer_dst_bit = true });
+        const output_buffer = try core.mem.DownloadBuffer([4]f32).create(&vc, extent.width * extent.height, "output");
         errdefer output_buffer.destroy(&vc);
 
         return TestingContext {
             .vc = vc,
-            .vk_allocator = vk_allocator,
             .encoder = encoder,
             .output_buffer = output_buffer,
         };
@@ -114,7 +109,6 @@ const TestingContext = struct {
     fn destroy(self: *TestingContext, allocator: std.mem.Allocator) void {
         self.output_buffer.destroy(&self.vc);
         self.encoder.destroy(&self.vc);
-        self.vk_allocator.destroy(&self.vc, allocator);
         self.vc.destroy(allocator);
     }
 };
@@ -293,25 +287,25 @@ test "white sphere on white background is white" {
     defer tc.destroy(allocator);
 
     try tc.encoder.begin();
-    var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder);
+    var world = try World.createEmpty(&tc.vc, allocator, &tc.encoder);
 
     // add sphere to world
     {
-        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, try icosphere(5, allocator, &tc.encoder, false));
+        const mesh_handle = try world.meshes.upload(&tc.vc, allocator, &tc.encoder, try icosphere(5, allocator, &tc.encoder, false));
 
         const normal: *F32x2 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x2)), @sizeOf(F32x2)));
         normal.* = MaterialManager.Material.default_normal;
-        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x2, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
+        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x2, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
 
         const albedo: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
         albedo.* = F32x4.new(1, 1, 1, std.math.nan(f32));
-        const albedo_texture = try world.materials.textures.upload(&tc.vc, F32x4, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(albedo), vk.Extent2D { .width = 1, .height = 1 }, "");
+        const albedo_texture = try world.materials.textures.upload(&tc.vc, F32x4, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(albedo), vk.Extent2D { .width = 1, .height = 1 }, "");
 
         const emissive: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
         emissive.* = F32x4.new(0, 0, 0, std.math.nan(f32));
-        const emissive_texture = try world.materials.textures.upload(&tc.vc, F32x4, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(emissive), vk.Extent2D { .width = 1, .height = 1 }, "");
+        const emissive_texture = try world.materials.textures.upload(&tc.vc, F32x4, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(emissive), vk.Extent2D { .width = 1, .height = 1 }, "");
 
-        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, MaterialManager.Material {
+        const material_handle = try world.materials.upload(&tc.vc, allocator, &tc.encoder, MaterialManager.Material {
             .normal = normal_texture,
             .emissive = emissive_texture,
             .bsdf = MaterialManager.PolymorphicBSDF {
@@ -321,7 +315,7 @@ test "white sphere on white background is white" {
             }
         }, "white");
 
-        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, world.meshes, world.materials, Accel.Instance {
+        _ = try world.accel.uploadInstance(&tc.vc, allocator, &tc.encoder, world.meshes, world.materials, Accel.Instance {
             .visible = true,
             .transform = Mat3x4.identity,
             .geometries = &[1]Accel.Geometry {
@@ -342,7 +336,7 @@ test "white sphere on white background is white" {
         .aperture = 0,
         .focus_distance = 1,
     });
-    _ = try camera.appendSensor(&tc.vc, &tc.vk_allocator, allocator, extent);
+    _ = try camera.appendSensor(&tc.vc, allocator, extent);
 
     var background = try Background.create(&tc.vc, allocator);
     var white = [4]f32 {1, 1, 1, 1};
@@ -353,7 +347,7 @@ test "white sphere on white background is white" {
             .height = 1,
         }
     };
-    try background.addBackground(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, image, "white");
+    try background.addBackground(&tc.vc, allocator, &tc.encoder, image, "white");
 
     var scene = Scene {
         .world = world,
@@ -362,7 +356,7 @@ test "white sphere on white background is white" {
     };
     defer scene.destroy(&tc.vc, allocator);
 
-    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&tc.vc, allocator, &tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 0,
@@ -371,7 +365,7 @@ test "white sphere on white background is white" {
     try tc.encoder.submitAndIdleUntilDone(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 512);
-    try assertWhiteFurnaceImage(tc.output_buffer.data);
+    try assertWhiteFurnaceImage(tc.output_buffer.slice);
 
     // do that again but with env sampling
     try tc.encoder.begin();
@@ -384,7 +378,7 @@ test "white sphere on white background is white" {
     try tc.encoder.submitAndIdleUntilDone(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 512);
-    try assertWhiteFurnaceImage(tc.output_buffer.data);
+    try assertWhiteFurnaceImage(tc.output_buffer.slice);
 }
 
 test "inside illuminating sphere is white" {
@@ -395,25 +389,25 @@ test "inside illuminating sphere is white" {
     defer tc.destroy(allocator);
 
     try tc.encoder.begin();
-    var world = try World.createEmpty(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder);
+    var world = try World.createEmpty(&tc.vc, allocator, &tc.encoder);
 
     // add sphere to world
     {
-        const mesh_handle = try world.meshes.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, try icosphere(5, allocator, &tc.encoder, true));
+        const mesh_handle = try world.meshes.upload(&tc.vc, allocator, &tc.encoder, try icosphere(5, allocator, &tc.encoder, true));
 
         const normal: *F32x2 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x2)), @sizeOf(F32x2)));
         normal.* = MaterialManager.Material.default_normal;
-        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x2, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
+        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x2, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
 
         const albedo: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
         albedo.* = F32x4.new(0.5, 0.5, 0.5, std.math.nan(f32));
-        const albedo_texture = try world.materials.textures.upload(&tc.vc, F32x4, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(albedo), vk.Extent2D { .width = 1, .height = 1 }, "");
+        const albedo_texture = try world.materials.textures.upload(&tc.vc, F32x4, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(albedo), vk.Extent2D { .width = 1, .height = 1 }, "");
 
         const emissive: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
         emissive.* = F32x4.new(0.5, 0.5, 0.5, std.math.nan(f32));
-        const emissive_texture = try world.materials.textures.upload(&tc.vc, F32x4, &tc.vk_allocator, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(emissive), vk.Extent2D { .width = 1, .height = 1 }, "");
+        const emissive_texture = try world.materials.textures.upload(&tc.vc, F32x4, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(emissive), vk.Extent2D { .width = 1, .height = 1 }, "");
 
-        const material_handle = try world.materials.upload(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, MaterialManager.Material {
+        const material_handle = try world.materials.upload(&tc.vc, allocator, &tc.encoder, MaterialManager.Material {
             .normal = normal_texture,
             .emissive = emissive_texture,
             .bsdf = MaterialManager.PolymorphicBSDF {
@@ -423,7 +417,7 @@ test "inside illuminating sphere is white" {
             }
         }, "white");
 
-        _ = try world.accel.uploadInstance(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, world.meshes, world.materials, Accel.Instance {
+        _ = try world.accel.uploadInstance(&tc.vc, allocator, &tc.encoder, world.meshes, world.materials, Accel.Instance {
             .visible = true,
             .transform = Mat3x4.identity,
             .geometries = &[1]Accel.Geometry {
@@ -444,7 +438,7 @@ test "inside illuminating sphere is white" {
         .aperture = 0,
         .focus_distance = 1,
     });
-    _ = try camera.appendSensor(&tc.vc, &tc.vk_allocator, allocator, extent);
+    _ = try camera.appendSensor(&tc.vc, allocator, extent);
 
     var background = try Background.create(&tc.vc, allocator);
     var black = [4]f32 {0, 0, 0, 1};
@@ -455,7 +449,7 @@ test "inside illuminating sphere is white" {
             .height = 1,
         }
     };
-    try background.addBackground(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, image, "black");
+    try background.addBackground(&tc.vc, allocator, &tc.encoder, image, "black");
 
     var scene = Scene {
         .world = world,
@@ -464,7 +458,7 @@ test "inside illuminating sphere is white" {
     };
     defer scene.destroy(&tc.vc, allocator);
 
-    var pipeline = try Pipeline.create(&tc.vc, &tc.vk_allocator, allocator, &tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&tc.vc, allocator, &tc.encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 0,
         .mesh_samples_per_bounce = 0,
@@ -474,7 +468,7 @@ test "inside illuminating sphere is white" {
     try tc.encoder.submitAndIdleUntilDone(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 1024);
-    try assertWhiteFurnaceImage(tc.output_buffer.data);
+    try assertWhiteFurnaceImage(tc.output_buffer.slice);
 
     try tc.encoder.begin();
     // do that again but with mesh sampling
@@ -487,5 +481,5 @@ test "inside illuminating sphere is white" {
     try tc.encoder.submitAndIdleUntilDone(&tc.vc);
 
     try tc.renderToOutput(&pipeline, &scene, 1024);
-    try assertWhiteFurnaceImage(tc.output_buffer.data);
+    try assertWhiteFurnaceImage(tc.output_buffer.slice);
 }

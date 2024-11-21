@@ -3,14 +3,13 @@ const vk = @import("vulkan");
 
 const engine = @import("engine");
 
-const VulkanContext = engine.core.VulkanContext;
-const Encoder = engine.core.Encoder;
-const VkAllocator = engine.core.Allocator;
-const TextureManager = engine.core.Images.TextureManager;
+const core = engine.core;
+const VulkanContext = core.VulkanContext;
+const Encoder = core.Encoder;
 const Pipeline = engine.hrtsystem.pipeline.PathTracing;
 const Scene = engine.hrtsystem.Scene;
 
-const vk_helpers = engine.core.vk_helpers;
+const vk_helpers = core.vk_helpers;
 const exr = engine.fileformats.exr;
 
 const vector = engine.vector;
@@ -90,23 +89,20 @@ pub fn main() !void {
     const context = try VulkanContext.create(allocator, "offline", &.{}, &engine.hrtsystem.required_device_extensions, &engine.hrtsystem.required_device_features, null);
     defer context.destroy(allocator);
 
-    var vk_allocator = VkAllocator.create(&context);
-    defer vk_allocator.destroy(&context, allocator);
-
     var encoder = try Encoder.create(&context, "main");
     defer encoder.destroy(&context);
 
     try logger.log("set up initial state");
 
     try encoder.begin();
-    var scene = try Scene.fromGltfExr(&context, &vk_allocator, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
+    var scene = try Scene.fromGltfExr(&context, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
     defer scene.destroy(&context, allocator);
     try encoder.submitAndIdleUntilDone(&context);
 
     try logger.log("load world");
 
     try encoder.begin();
-    var pipeline = try Pipeline.create(&context, &vk_allocator, allocator, &encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
+    var pipeline = try Pipeline.create(&context, allocator, &encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{
         .max_bounces = 1024,
         .env_samples_per_bounce = 1,
         .mesh_samples_per_bounce = 1,
@@ -116,7 +112,7 @@ pub fn main() !void {
 
     try logger.log("create pipeline");
 
-    const output_buffer = try vk_allocator.createHostBuffer(&context, [4]f32, scene.camera.sensors.items[0].extent.width * scene.camera.sensors.items[0].extent.height, .{ .transfer_dst_bit = true });
+    const output_buffer = try core.mem.DownloadBuffer([4]f32).create(&context, scene.camera.sensors.items[0].extent.width * scene.camera.sensors.items[0].extent.height, "output");
     defer output_buffer.destroy(&context);
 
     // actual ray tracing
@@ -179,7 +175,7 @@ pub fn main() !void {
     try logger.log("render");
 
     // now done with GPU stuff/all rendering; can write from output buffer to exr
-    try exr.helpers.Rgba2D.save(exr.helpers.Rgba2D { .ptr = output_buffer.data.ptr, .extent = scene.camera.sensors.items[0].extent }, allocator, config.out_filepath);
+    try exr.helpers.Rgba2D.save(exr.helpers.Rgba2D { .ptr = output_buffer.slice.ptr, .extent = scene.camera.sensors.items[0].extent }, allocator, config.out_filepath);
 
     try logger.log("write exr");
 }

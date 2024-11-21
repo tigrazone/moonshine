@@ -8,13 +8,12 @@ const vk = @import("vulkan");
 
 const core = @import("./core.zig");
 const VulkanContext = core.VulkanContext;
-const VkAllocator = core.Allocator;
 const vk_helpers = core.vk_helpers;
 
 pool: vk.CommandPool,
 buffer: VulkanContext.CommandBuffer,
 destruction_queue: core.DestructionQueue, // use the page allocator for this for now -- the idea that you probably will either want to destroy zero or many
-upload_allocator: VkAllocator.UploadPageAllocator,
+upload_allocator: core.mem.UploadPageAllocator,
 upload_arena: std.heap.ArenaAllocator, // can't use State as we want to return the allocator but maintain a reference to it
 
 const Self = @This();
@@ -41,7 +40,7 @@ pub fn create(vc: *const VulkanContext, name: [*:0]const u8) !Self {
         .pool = pool,
         .buffer = VulkanContext.CommandBuffer.init(buffer, vc.device_dispatch),
         .destruction_queue = .{},
-        .upload_allocator = VkAllocator.UploadPageAllocator.init(vc),
+        .upload_allocator = core.mem.UploadPageAllocator.init(vc),
         .upload_arena = std.heap.ArenaAllocator {
             .child_allocator = undefined,
             .state = .{},
@@ -112,7 +111,7 @@ pub fn submitAndIdleUntilDone(self: *Self, vc: *const VulkanContext) !void {
     self.clearResources(vc);
 }
 
-pub fn uploadDataToImage(self: Self, comptime T: type, src_data: VkAllocator.BufferSlice(T), dst_image: vk.Image, dst_image_extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
+pub fn uploadDataToImage(self: Self, comptime T: type, src_data: core.mem.BufferSlice(T), dst_image: vk.Image, dst_image_extent: vk.Extent2D, dst_layout: vk.ImageLayout) void {
     self.buffer.pipelineBarrier2(&vk.DependencyInfo {
         .image_memory_barrier_count = 1,
         .p_image_memory_barriers = @ptrCast(&vk.ImageMemoryBarrier2 {
@@ -157,22 +156,6 @@ pub fn uploadDataToImage(self: Self, comptime T: type, src_data: VkAllocator.Buf
 // buffers must have appropriate flags
 pub fn copyBuffer(self: Self, src: vk.Buffer, dst: vk.Buffer, regions: []const vk.BufferCopy) void {
     self.buffer.copyBuffer(src, dst, @intCast(regions.len), regions.ptr);
-}
-
-// buffers must have appropriate flags
-pub fn uploadBuffer(self: Self, comptime T: type, src: VkAllocator.BufferSlice(T), dst: VkAllocator.DeviceBuffer(T)) void {
-    const region = vk.BufferCopy {
-        .src_offset = src.offset,
-        .dst_offset = 0,
-        .size = src.asBytes().len,
-    };
-
-    self.buffer.copyBuffer(src.handle, dst.handle, 1, @ptrCast(&region));
-}
-
-pub fn updateBuffer(self: Self, comptime T: type, dst: VkAllocator.DeviceBuffer(T), src: []const T, offset: vk.DeviceSize) void {
-    const bytes = std.mem.sliceAsBytes(src);
-    self.buffer.updateBuffer(dst.handle, offset * @sizeOf(T), bytes.len, src.ptr);
 }
 
 // size in number of data to duplicate, not bytes

@@ -1,152 +1,120 @@
-// vulkan allocator
-// currently essentially just a passthrough allocator
-// functions here are just utilites that help with stuff
-
 const vk = @import("vulkan");
 const std = @import("std");
 const core = @import("../engine.zig").core;
 const VulkanContext = core.VulkanContext;
+const Encoder = core.Encoder;
 const vk_helpers = core.vk_helpers;
 
-const Allocator = @This();
+const vk_map_memory_minimum_guaranteed_alignment = 64; // https://docs.vulkan.org/spec/latest/chapters/limits.html#limits-minmax may as well commuincate this to the compiler
 
-const MemoryStorage = std.ArrayListUnmanaged(vk.DeviceMemory);
-
-memory_type_properties: std.BoundedArray(vk.MemoryPropertyFlags, vk.MAX_MEMORY_TYPES),
-memory: MemoryStorage,
-
-pub fn create(vc: *const VulkanContext) Allocator {
-    const properties = vc.instance.getPhysicalDeviceMemoryProperties(vc.physical_device.handle);
-
-    var memory_type_properties = std.BoundedArray(vk.MemoryPropertyFlags, vk.MAX_MEMORY_TYPES).init(properties.memory_type_count) catch unreachable;
-
-    for (properties.memory_types[0..properties.memory_type_count], memory_type_properties.slice()) |memory_type, *memory_type_property| {
-        memory_type_property.* = memory_type.property_flags;
-    }
-
-    return Allocator {
-        .memory_type_properties = memory_type_properties,
-        .memory = MemoryStorage {},
-    };
-}
-
-pub fn destroy(self: *Allocator, vc: *const VulkanContext, allocator: std.mem.Allocator) void {
-    for (self.memory.items) |memory| {
-        vc.device.freeMemory(memory, null);
-    }
-    self.memory.deinit(allocator);
-}
-
-
-pub fn findMemoryType(self: *const Allocator, type_filter: u32, properties: vk.MemoryPropertyFlags) !std.meta.Int(.unsigned, vk.MAX_MEMORY_TYPES) {
-    return for (self.memory_type_properties.slice(), 0..) |memory_type_properties, i| {
-        if (type_filter & (@as(u32, 1) << @intCast(i)) != 0 and memory_type_properties.contains(properties)) {
-            break @intCast(i);
-        }
-    } else error.UnavailbleMemoryType;
-}
-
-fn createRawBuffer(self: *Allocator, vc: *const VulkanContext, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags, buffer: *vk.Buffer, buffer_memory: *vk.DeviceMemory) !void {
-    buffer.* = try vc.device.createBuffer(&.{
+fn createRawBuffer(vc: *const VulkanContext, size: vk.DeviceSize, usage: vk.BufferUsageFlags, properties: vk.MemoryPropertyFlags, name: [:0]const u8) !std.meta.Tuple(&.{ vk.Buffer, vk.DeviceMemory }) {
+    const buffer = try vc.device.createBuffer(&.{
             .size = size,
             .usage = usage,
             .sharing_mode = vk.SharingMode.exclusive,
     }, null);
-    errdefer vc.device.destroyBuffer(buffer.*, null);
+    errdefer vc.device.destroyBuffer(buffer, null);
+    try vk_helpers.setDebugName(vc.device, buffer, name);
 
-    const mem_requirements = vc.device.getBufferMemoryRequirements(buffer.*);
+    const mem_requirements = vc.device.getBufferMemoryRequirements(buffer);
 
     const allocate_info = vk.MemoryAllocateInfo {
         .allocation_size = mem_requirements.size,
-        .memory_type_index = try self.findMemoryType(mem_requirements.memory_type_bits, properties),
+        .memory_type_index = try vc.findMemoryType(mem_requirements.memory_type_bits, properties),
         .p_next = if (usage.contains(.{ .shader_device_address_bit = true })) &vk.MemoryAllocateFlagsInfo {
             .device_mask = 0,
             .flags = .{ .device_address_bit = true },
             } else null,
     };
 
-    buffer_memory.* = try vc.device.allocateMemory(&allocate_info, null);
-    errdefer vc.device.freeMemory(buffer_memory.*, null);
+    const memory = try vc.device.allocateMemory(&allocate_info, null);
+    errdefer vc.device.freeMemory(memory, null);
+    try vk_helpers.setDebugName(vc.device, memory, name);
 
-    try vc.device.bindBufferMemory(buffer.*, buffer_memory.*, 0);
+    try vc.device.bindBufferMemory(buffer, memory, 0);
+
+    return .{ buffer, memory };
 }
 
-pub fn DeviceBuffer(comptime T: type) type {
+pub fn Buffer(comptime T: type, comptime memory_properties: vk.MemoryPropertyFlags, comptime usage: vk.BufferUsageFlags) type {
     const type_info = @typeInfo(T);
     if (type_info == .@"struct" and type_info.@"struct".layout == .auto) @compileError("Struct layout of " ++ @typeName(T) ++ " must be specified explicitly, but is not");
+
+    const host_visible = memory_properties.contains(.{ .host_visible_bit = true });
+
     return struct {
         handle: vk.Buffer = .null_handle,
+        memory: vk.DeviceMemory = .null_handle,
+        slice: if (host_visible) []T else void = if (host_visible) &.{} else {},
 
-        const BufferSelf = @This();
+        const Self = @This();
 
-        pub fn destroy(self: BufferSelf, vc: *const VulkanContext) void {
-            vc.device.destroyBuffer(self.handle, null);
+        pub fn create(vc: *const VulkanContext, count: vk.DeviceSize, name: [:0]const u8) !Self {
+            if (count == 0) return Self {};
+
+            const size =  @sizeOf(T) * count;
+            const buffer, const memory = try createRawBuffer(vc, size, usage, memory_properties, name);
+
+            const slice = if (host_visible) blk: {
+                const ptr: [*]align(vk_map_memory_minimum_guaranteed_alignment) u8 = @alignCast(@ptrCast(try vc.device.mapMemory(memory, 0, vk.WHOLE_SIZE, .{})));
+                break :blk @as([*]T, @ptrCast(ptr))[0..count];
+            } else ({});
+
+            return Self {
+                .handle = buffer,
+                .memory = memory,
+                .slice = slice,
+            };
         }
 
-        // must've been created with shader device address bit enabled
-        pub fn getAddress(self: BufferSelf, vc: *const VulkanContext) vk.DeviceAddress {
-            return if (self.handle == .null_handle) 0 else vc.device.getBufferDeviceAddress(&.{
-                .buffer = self.handle,
-            });
+        pub fn destroy(self: Self, vc: *const VulkanContext) void {
+            if (self.handle != .null_handle) {
+                vc.device.destroyBuffer(self.handle, null);
+                vc.device.freeMemory(self.memory, null);
+            }
         }
 
-        pub fn is_null(self: BufferSelf) bool {
+        pub usingnamespace if (usage.contains(.{ .shader_device_address_bit = true })) struct {
+            pub fn getAddress(self: Self, vc: *const VulkanContext) vk.DeviceAddress {
+                return if (self.handle == .null_handle) 0 else vc.device.getBufferDeviceAddress(&.{
+                    .buffer = self.handle,
+                });
+            }
+        } else struct {};
+
+        pub usingnamespace if (usage.contains(.{ .transfer_dst_bit = true })) struct {
+            pub fn updateFrom(self: Self, encoder: *Encoder, dst_offset: vk.DeviceSize, src: []const T) void {
+                const bytes = std.mem.sliceAsBytes(src);
+                encoder.buffer.updateBuffer(self.handle, dst_offset * @sizeOf(T), bytes.len, src.ptr);
+            }
+
+            pub fn uploadFrom(self: Self, encoder: *Encoder, src: BufferSlice(T)) void {
+                const region = vk.BufferCopy {
+                    .src_offset = src.offset,
+                    .dst_offset = 0,
+                    .size = src.asBytes().len,
+                };
+
+                encoder.buffer.copyBuffer(src.handle, self.handle, 1, @ptrCast(&region));
+            }
+        } else struct {};
+
+        pub fn isNull(self: Self) bool {
             return self.handle == .null_handle;
         }
-
-        pub fn sizeInBytes(self: BufferSelf) usize {
-            return self.data.len * @sizeOf(T);
-        }
     };
 }
 
-pub fn createDeviceBuffer(self: *Allocator, vc: *const VulkanContext, allocator: std.mem.Allocator, comptime T: type, count: vk.DeviceSize, usage: vk.BufferUsageFlags, name: [:0]const u8) !DeviceBuffer(T) {
-    if (count == 0) return DeviceBuffer(T) {};
-
-    var buffer: vk.Buffer = undefined;
-    var memory: vk.DeviceMemory = undefined;
-    try self.createRawBuffer(vc, @sizeOf(T) * count, usage, .{ .device_local_bit = true }, &buffer, &memory);
-
-    try vk_helpers.setDebugName(vc.device, buffer, name);
-    try vk_helpers.setDebugName(vc.device, memory, name);
-
-    try self.memory.append(allocator, memory);
-
-    return DeviceBuffer(T) {
-        .handle = buffer,
-    };
+pub fn UploadBuffer(comptime T: type) type {
+    return Buffer(T, vk.MemoryPropertyFlags { .host_visible_bit = true, .host_coherent_bit = true }, vk.BufferUsageFlags { .transfer_src_bit = true });
 }
 
-// buffer that owns it's own memory; good for temp buffers which will quickly be destroyed
-pub const OwnedDeviceBuffer = struct {
-    handle: vk.Buffer,
-    memory: vk.DeviceMemory,
+pub fn DownloadBuffer(comptime T: type) type {
+    return Buffer(T, vk.MemoryPropertyFlags { .host_visible_bit = true, .host_coherent_bit = true, .host_cached_bit = true }, vk.BufferUsageFlags { .transfer_dst_bit = true });
+}
 
-    pub fn destroy(self: OwnedDeviceBuffer, vc: *const VulkanContext) void {
-        vc.device.destroyBuffer(self.handle, null);
-        vc.device.freeMemory(self.memory, null);
-    }
-
-    // must've been created with shader device address bit enabled
-    pub fn getAddress(self: OwnedDeviceBuffer, vc: *const VulkanContext) vk.DeviceAddress {
-        return vc.device.getBufferDeviceAddress(&.{
-            .buffer = self.handle,
-        });
-    }
-};
-
-pub fn createOwnedDeviceBuffer(self: *Allocator, vc: *const VulkanContext, size: vk.DeviceSize, usage: vk.BufferUsageFlags, name: [:0]const u8) !OwnedDeviceBuffer {
-    var buffer: vk.Buffer = undefined;
-    var memory: vk.DeviceMemory = undefined;
-    try self.createRawBuffer(vc, size, usage, .{ .device_local_bit = true }, &buffer, &memory);
-
-    try vk_helpers.setDebugName(vc.device, buffer, name);
-    try vk_helpers.setDebugName(vc.device, memory, name);
-
-    return OwnedDeviceBuffer {
-        .handle = buffer,
-        .memory = memory,
-    };
+pub fn DeviceBuffer(comptime T: type, comptime usage: vk.BufferUsageFlags) type {
+    return Buffer(T, vk.MemoryPropertyFlags { .device_local_bit = true }, usage);
 }
 
 pub fn BufferSlice(comptime T: type) type {
@@ -167,61 +135,13 @@ pub fn BufferSlice(comptime T: type) type {
     };
 }
 
-pub fn OwnedHostBuffer(comptime T: type) type {
-    return struct {
-        handle: vk.Buffer = .null_handle,
-        memory: vk.DeviceMemory = .null_handle,
-        data: []T = &.{},
-
-        const BufferSelf = @This();
-
-        pub fn destroy(self: BufferSelf, vc: *const VulkanContext) void {
-            if (self.handle != .null_handle) {
-                vc.device.destroyBuffer(self.handle, null);
-                vc.device.unmapMemory(self.memory);
-                vc.device.freeMemory(self.memory, null);
-            }
-        }
-
-        pub fn toBytes(self: BufferSelf) OwnedHostBuffer(u8) {
-            return OwnedHostBuffer(u8) {
-                .handle = self.handle,
-                .memory = self.memory,
-                .data = @as([*]u8, @ptrCast(self.data))[0..self.data.len * @sizeOf(T)],
-            };
-        }
-
-        pub fn sizeInBytes(self: BufferSelf) usize {
-            return self.data.len * @sizeOf(T);
-        }
-    };
-}
-
-// count not in bytes, but number of T
-pub fn createHostBuffer(self: *Allocator, vc: *const VulkanContext, comptime T: type, count: vk.DeviceSize, usage: vk.BufferUsageFlags) !OwnedHostBuffer(T) {
-    if (count == 0) return OwnedHostBuffer(T) {};
-
-    var buffer: vk.Buffer = undefined;
-    var memory: vk.DeviceMemory = undefined;
-    const size = @sizeOf(T) * count;
-    try self.createRawBuffer(vc, size, usage, .{ .host_visible_bit = true, .host_coherent_bit = true }, &buffer, &memory);
-
-    const data = @as([*]T, @ptrCast(@alignCast((try vc.device.mapMemory(memory, 0, size, .{})).?)))[0..count];
-
-    return OwnedHostBuffer(T) {
-        .handle = buffer,
-        .memory = memory,
-        .data = data,
-    };
-}
-
 fn sliceContainsPtr(container: []const u8, ptr: [*]const u8) bool {
     return @intFromPtr(ptr) >= @intFromPtr(container.ptr) and
         @intFromPtr(ptr) < (@intFromPtr(container.ptr) + container.len);
 }
 
-pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime required_memory_properties: vk.MemoryPropertyFlags) type {
-    if (comptime !required_memory_properties.contains(.{ .host_visible_bit = true})) @compileError("HostVisiblePageAllocator must only be used to allocate host visible memory");
+pub fn HostVisiblePageAllocator(comptime memory_properties: vk.MemoryPropertyFlags, comptime usage: vk.BufferUsageFlags) type {
+    if (comptime !memory_properties.contains(.{ .host_visible_bit = true})) @compileError("HostVisiblePageAllocator must only be used to allocate host visible memory");
 
     return struct {
         const Self = @This();
@@ -257,12 +177,7 @@ pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime re
                 },
             }, &memory_requirements);
 
-            const available_memory_properties = vc.instance.getPhysicalDeviceMemoryProperties(vc.physical_device.handle);
-            const memory_type_index: MemoryTypeIndex = for (available_memory_properties.memory_types[0..available_memory_properties.memory_type_count], 0..) |available_properties, i| {
-                if (memory_requirements.memory_requirements.memory_type_bits & (@as(u32, 1) << @intCast(i)) != 0 and available_properties.property_flags.contains(required_memory_properties)) {
-                    break @intCast(i);
-                }
-            } else unreachable;
+            const memory_type_index: MemoryTypeIndex = vc.findMemoryType(memory_requirements.memory_requirements.memory_type_bits, memory_properties) catch unreachable;
 
             return Self {
                 .device = vc.device,
@@ -330,8 +245,7 @@ pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime re
                 vk_helpers.setDebugName(self.device, memory, debug_name) catch |err| std.debug.panic("{s}", .{ @errorName(err) });
             }
 
-            const minimum_guaranteed_alignment = 64; // https://docs.vulkan.org/spec/latest/chapters/limits.html#limits-minmax may as well commuincate this to the compiler
-            const ptr_unaligned: [*]align(minimum_guaranteed_alignment) u8 = @alignCast(@ptrCast(self.device.mapMemory(memory, 0, vk.WHOLE_SIZE, .{}) catch return null));
+            const ptr_unaligned: [*]align(vk_map_memory_minimum_guaranteed_alignment) u8 = @alignCast(@ptrCast(self.device.mapMemory(memory, 0, vk.WHOLE_SIZE, .{}) catch return null));
             const ptr_aligned = std.mem.alignPointer(ptr_unaligned + @sizeOf(Allocations.Node), required_alignment).?;
 
             const buffer = self.device.createBuffer(&.{
@@ -399,5 +313,5 @@ pub fn HostVisiblePageAllocator(comptime usage: vk.BufferUsageFlags, comptime re
     };
 }
 
-pub const UploadPageAllocator = HostVisiblePageAllocator(vk.BufferUsageFlags { .transfer_src_bit = true }, vk.MemoryPropertyFlags { .host_visible_bit = true, .host_coherent_bit = true });
-pub const DownloadPageAllocator = HostVisiblePageAllocator(vk.BufferUsageFlags { .transfer_dst_bit = true }, vk.MemoryPropertyFlags { .host_visible_bit = true, .host_coherent_bit = true, .host_cached_bit = true });
+pub const UploadPageAllocator = HostVisiblePageAllocator(vk.MemoryPropertyFlags { .host_visible_bit = true, .host_coherent_bit = true }, vk.BufferUsageFlags { .transfer_src_bit = true });
+pub const DownloadPageAllocator = HostVisiblePageAllocator(vk.MemoryPropertyFlags { .host_visible_bit = true, .host_coherent_bit = true, .host_cached_bit = true }, vk.BufferUsageFlags { .transfer_dst_bit = true });

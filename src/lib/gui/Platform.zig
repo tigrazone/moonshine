@@ -4,13 +4,13 @@ const vk = @import("vulkan");
 const std = @import("std");
 
 const engine = @import("../engine.zig");
-const VulkanContext = engine.core.VulkanContext;
-const Encoder = engine.core.Encoder;
-const VkAllocator = engine.core.Allocator;
-const vk_helpers = engine.core.vk_helpers;
+const core = engine.core;
+const VulkanContext = core.VulkanContext;
+const Encoder = core.Encoder;
+const vk_helpers = core.vk_helpers;
 
-const Image = engine.core.Image;
-const DescriptorLayout = engine.core.descriptor.DescriptorLayout;
+const Image = core.Image;
+const DescriptorLayout = core.descriptor.DescriptorLayout;
 
 const Swapchain = engine.displaysystem.Swapchain;
 const Display = engine.displaysystem.Display;
@@ -39,6 +39,9 @@ pub const required_vulkan_functions = [_]vk.ApiInfo {
 const frames_in_flight = Display.frames_in_flight;
 const Self = @This();
 
+const VertexBuffer = core.mem.Buffer(imgui.DrawVert, .{ .host_visible_bit = true, .host_coherent_bit = true }, .{ .vertex_buffer_bit =  true });
+const IndexBuffer = core.mem.Buffer(imgui.DrawIdx, .{ .host_visible_bit = true, .host_coherent_bit = true }, .{ .index_buffer_bit =  true });
+
 extent: vk.Extent2D,
 
 descriptor_set_layout: GuiDescriptorLayout,
@@ -49,12 +52,12 @@ font_sampler: vk.Sampler,
 font_image: Image,
 font_image_set: vk.DescriptorSet,
 
-vertex_buffers: [frames_in_flight]VkAllocator.OwnedHostBuffer(imgui.DrawVert),
-index_buffers: [frames_in_flight]VkAllocator.OwnedHostBuffer(imgui.DrawIdx),
+vertex_buffers: [frames_in_flight]VertexBuffer,
+index_buffers: [frames_in_flight]IndexBuffer,
 
 views: std.BoundedArray(vk.ImageView, Swapchain.max_image_count),
 
-pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, extent: vk.Extent2D, vk_allocator: *VkAllocator, encoder: *Encoder) !Self {
+pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, extent: vk.Extent2D, encoder: *Encoder) !Self {
     if (imgui.getCurrentContext()) |_| @panic("cannot create more than one Gui");
 
     imgui.createContext();
@@ -215,7 +218,7 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
 
     const font_image = blk: {
         const tex_data = imgui.getTexDataAsAlpha8(imgui.getIO().Fonts);
-        const image = try Image.create(vc, vk_allocator, tex_data[1], .{ .transfer_dst_bit = true, .sampled_bit = true }, .r8_unorm, false, "imgui font");
+        const image = try Image.create(vc, tex_data[1], .{ .transfer_dst_bit = true, .sampled_bit = true }, .r8_unorm, false, "imgui font");
         errdefer image.destroy(vc);
 
         const img_data = tex_data[0][0 .. tex_data[1].width * tex_data[1].height * @sizeOf(u8)];
@@ -244,13 +247,13 @@ pub fn create(vc: *const VulkanContext, swapchain: Swapchain, window: Window, ex
     // sort of a stupid allocation strategy right now
     // create a pretty big buffer that should be good enough for most things, and ensure dear imgui doesn't want to use more at each frame
     // TODO: change this when the rest of the system becomes smart enough that this looks stupid in comparison
-    var vertex_buffers: [frames_in_flight]VkAllocator.OwnedHostBuffer(imgui.DrawVert) = undefined;
+    var vertex_buffers: [frames_in_flight]VertexBuffer = undefined;
     for (&vertex_buffers) |*buffer| {
-        buffer.* = try vk_allocator.createHostBuffer(vc, imgui.DrawVert, std.math.maxInt(imgui.DrawIdx), .{ .vertex_buffer_bit = true });
+        buffer.* = try VertexBuffer.create(vc, std.math.maxInt(imgui.DrawIdx), "imgui vertex buffer");
     }
-    var index_buffers: [frames_in_flight]VkAllocator.OwnedHostBuffer(imgui.DrawIdx) = undefined;
+    var index_buffers: [frames_in_flight]IndexBuffer = undefined;
     for (&index_buffers) |*buffer| {
-        buffer.* = try vk_allocator.createHostBuffer(vc, imgui.DrawIdx, std.math.maxInt(imgui.DrawIdx), .{ .index_buffer_bit = true });
+        buffer.* = try IndexBuffer.create(vc, std.math.maxInt(imgui.DrawIdx), "imgui index buffer");
     }
 
     var views = std.BoundedArray(vk.ImageView, Swapchain.max_image_count){
@@ -356,16 +359,16 @@ pub fn endFrame(self: *Self, command_buffer: VulkanContext.CommandBuffer, swapch
     // copy all imgui vertex/index data into our one big buffer
     const vertex_buffer = self.vertex_buffers[display_image_index];
     const index_buffer = self.index_buffers[display_image_index];
-    std.debug.assert(draw_data.TotalVtxCount <= vertex_buffer.data.len);
-    std.debug.assert(draw_data.TotalIdxCount <= index_buffer.data.len);
+    std.debug.assert(draw_data.TotalVtxCount <= vertex_buffer.slice.len);
+    std.debug.assert(draw_data.TotalIdxCount <= index_buffer.slice.len);
     if (draw_data.CmdListsCount > 0) {
         var vertex_offset: usize = 0;
         var index_offset: usize = 0;
         for (draw_data.CmdLists.Data[0..@intCast(draw_data.CmdListsCount)]) |cmd_list| {
             const vertex_count: usize = @intCast(cmd_list.*.VtxBuffer.Size);
             const index_count: usize = @intCast(cmd_list.*.IdxBuffer.Size);
-            @memcpy(vertex_buffer.data[vertex_offset..].ptr, cmd_list.*.VtxBuffer.Data[0..vertex_count]);
-            @memcpy(index_buffer.data[index_offset..].ptr, cmd_list.*.IdxBuffer.Data[0..index_count]);
+            @memcpy(vertex_buffer.slice[vertex_offset..].ptr, cmd_list.*.VtxBuffer.Data[0..vertex_count]);
+            @memcpy(index_buffer.slice[index_offset..].ptr, cmd_list.*.IdxBuffer.Data[0..index_count]);
             vertex_offset += vertex_count;
             index_offset += index_count;
         }

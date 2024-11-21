@@ -5,7 +5,6 @@ const engine = @import("engine");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
 const Encoder = core.Encoder;
-const VkAllocator = core.Allocator;
 const DestructionQueue = core.DestructionQueue;
 const vk_helpers = core.vk_helpers;
 const SyncCopier = core.SyncCopier;
@@ -106,12 +105,12 @@ const Integrator = struct {
     variants: Variants,
     active: Type,
 
-    pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, scene: Scene) !Integrator {
+    pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder, scene: Scene) !Integrator {
         var integrator: Integrator = undefined;
         integrator.active = .path_tracing;
 
         inline for (@typeInfo(Variants).@"struct".fields) |field| {
-            @field(integrator.variants, field.name).pipeline = try @typeInfo(field.type).@"struct".fields[0].type.create(vc, vk_allocator, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{}, .{ scene.background.sampler });
+            @field(integrator.variants, field.name).pipeline = try @typeInfo(field.type).@"struct".fields[0].type.create(vc, allocator, encoder, .{ scene.world.materials.textures.descriptor_layout.handle, scene.world.constant_specta.descriptor_layout.handle }, .{}, .{ scene.background.sampler });
             @field(integrator.variants, field.name).options = .{};
         }
 
@@ -183,9 +182,6 @@ pub fn main() !void {
     const context = try VulkanContext.create(allocator, "online", &window.getRequiredInstanceExtensions(), &(displaysystem.required_device_extensions ++ hrtsystem.required_device_extensions), &hrtsystem.required_device_features, queueFamilyAcceptable);
     defer context.destroy(allocator);
 
-    var vk_allocator = VkAllocator.create(&context);
-    defer vk_allocator.destroy(&context, allocator);
-
     const window_extent = window.getExtent();
     var display = try Display.create(&context, window_extent, try window.createSurface(context.instance.handle));
     defer display.destroy(&context);
@@ -193,13 +189,13 @@ pub fn main() !void {
     var encoder = try Encoder.create(&context, "main");
     defer encoder.destroy(&context);
 
-    var sync_copier = try SyncCopier.create(&context, &vk_allocator, @sizeOf(vk.AccelerationStructureInstanceKHR));
+    var sync_copier = try SyncCopier.create(&context, @sizeOf(vk.AccelerationStructureInstanceKHR));
     defer sync_copier.destroy(&context);
 
     std.log.info("Set up initial state!", .{});
 
     try encoder.begin();
-    var scene = try Scene.fromGltfExr(&context, &vk_allocator, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
+    var scene = try Scene.fromGltfExr(&context, allocator, &encoder, config.in_filepath, config.skybox_filepath, config.extent);
     defer scene.destroy(&context, allocator);
     try encoder.submitAndIdleUntilDone(&context);
 
@@ -207,13 +203,13 @@ pub fn main() !void {
 
     try encoder.begin();
 
-    var object_picker = try ObjectPicker.create(&context, &vk_allocator, allocator, &encoder);
+    var object_picker = try ObjectPicker.create(&context, allocator, &encoder);
     defer object_picker.destroy(&context);
 
-    var integrator = try Integrator.create(&context, &vk_allocator, allocator, &encoder, scene);
+    var integrator = try Integrator.create(&context, allocator, &encoder, scene);
     defer integrator.destroy(&context);
 
-    var gui = try Platform.create(&context, display.swapchain, window, window_extent, &vk_allocator, &encoder);
+    var gui = try Platform.create(&context, display.swapchain, window, window_extent, &encoder);
     defer gui.destroy(&context);
 
     try encoder.submitAndIdleUntilDone(&context);
@@ -238,7 +234,7 @@ pub fn main() !void {
                 try gui.resize(&context, display.swapchain);
                 scene.camera.sensors.items[active_sensor].destroy(&context);
                 scene.camera.sensors.items.len -= 1;
-                active_sensor = try scene.camera.appendSensor(&context, &vk_allocator, allocator, new_extent);
+                active_sensor = try scene.camera.appendSensor(&context, allocator, new_extent);
                 break :blk try display.startFrame(&context); // don't recreate on second failure
             },
             else => return err,
@@ -322,10 +318,10 @@ pub fn main() !void {
                 try imgui.textFmt("Instance index: {d}", .{object.instance_index});
                 try imgui.textFmt("Geometry index: {d}", .{object.geometry_index});
                 // TODO: all of the copying below should be done once, on object pick
-                const instance = try sync_copier.copyBufferItem(&context, vk.AccelerationStructureInstanceKHR, scene.world.accel.instances_device, object.instance_index);
+                const instance = try sync_copier.copyBufferItem(&context, vk.AccelerationStructureInstanceKHR, scene.world.accel.instances_device.handle, object.instance_index);
                 const accel_geometry_index = instance.instance_custom_index_and_mask.instance_custom_index + object.geometry_index;
-                var geometry = try sync_copier.copyBufferItem(&context, Accel.Geometry, scene.world.accel.geometries, accel_geometry_index);
-                const material = try sync_copier.copyBufferItem(&context, MaterialManager.GpuMaterial, scene.world.materials.materials, geometry.material);
+                var geometry = try sync_copier.copyBufferItem(&context, Accel.Geometry, scene.world.accel.geometries.handle, accel_geometry_index);
+                const material = try sync_copier.copyBufferItem(&context, MaterialManager.GpuMaterial, scene.world.materials.materials.handle, geometry.material);
                 try imgui.textFmt("Mesh index: {d}", .{geometry.mesh});
                 if (imgui.inputScalar(u32, "Material index", &geometry.material, null, null) and geometry.material < scene.world.materials.material_count) {
                     scene.world.accel.recordUpdateSingleMaterial(frame_encoder.buffer, accel_geometry_index, geometry.material);
@@ -335,8 +331,8 @@ pub fn main() !void {
                 const mesh = scene.world.meshes.meshes.get(geometry.mesh);
                 try imgui.textFmt("Vertex count: {d}", .{mesh.vertex_count});
                 try imgui.textFmt("Index count: {d}", .{mesh.index_count});
-                try imgui.textFmt("Has texcoords: {}", .{!mesh.texcoord_buffer.is_null()});
-                try imgui.textFmt("Has normals: {}", .{!mesh.normal_buffer.is_null()});
+                try imgui.textFmt("Has texcoords: {}", .{!mesh.texcoord_buffer.isNull()});
+                try imgui.textFmt("Has normals: {}", .{!mesh.normal_buffer.isNull()});
                 imgui.separatorText("material");
                 try imgui.textFmt("normal: {}", .{material.normal});
                 try imgui.textFmt("emissive: {}", .{material.emissive});
@@ -345,7 +341,7 @@ pub fn main() !void {
                     const VariantType = union_field.type;
                     if (VariantType != void and enum_field.value == @intFromEnum(material.type)) {
                         const material_idx: u32 = @intCast((material.addr - @field(scene.world.materials.variant_buffers, enum_field.name).addr) / @sizeOf(VariantType));
-                        var material_variant = try sync_copier.copyBufferItem(&context, VariantType, @field(scene.world.materials.variant_buffers, enum_field.name).buffer, material_idx);
+                        var material_variant = try sync_copier.copyBufferItem(&context, VariantType, @field(scene.world.materials.variant_buffers, enum_field.name).buffer.handle, material_idx);
                         inline for (@typeInfo(VariantType).@"struct".fields) |struct_field| {
                             switch (struct_field.type) {
                                 f32 => if (imgui.dragScalar(f32, (struct_field.name[0..struct_field.name.len].* ++ .{ 0 })[0..struct_field.name.len :0], &@field(material_variant, struct_field.name), 0.01, 0, std.math.inf(f32))) {
@@ -511,7 +507,7 @@ pub fn main() !void {
                 try gui.resize(&context, display.swapchain);
                 try frame_encoder.attachResource(scene.camera.sensors.items[active_sensor].image);
                 scene.camera.sensors.items.len -= 1;
-                active_sensor = try scene.camera.appendSensor(&context, &vk_allocator, allocator, new_extent);
+                active_sensor = try scene.camera.appendSensor(&context, allocator, new_extent);
             }
         } else |err| if (err == error.OutOfDateKHR) {
             const new_extent = window.getExtent();
@@ -519,7 +515,7 @@ pub fn main() !void {
             try gui.resize(&context, display.swapchain);
             try frame_encoder.attachResource(scene.camera.sensors.items[active_sensor].image);
             scene.camera.sensors.items.len -= 1;
-            active_sensor = try scene.camera.appendSensor(&context, &vk_allocator, allocator, new_extent);
+            active_sensor = try scene.camera.appendSensor(&context, allocator, new_extent);
         } else return err;
 
         window.pollEvents();

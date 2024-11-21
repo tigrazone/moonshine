@@ -12,7 +12,6 @@ const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
 const Encoder = core.Encoder;
-const VkAllocator = core.Allocator;
 const vk_helpers = core.vk_helpers;
 
 const MaterialManager = engine.hrtsystem.MaterialManager;
@@ -58,7 +57,7 @@ fn loadImage(allocator: std.mem.Allocator, image: Gltf.Image, gltf_directory: ?[
 }
 
 // TODO: consider just uploading all textures upfront rather than as part of this function
-fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, gltf: Gltf, gltf_directory: ?[]const u8, gltf_material: Gltf.Material, textures: *TextureManager) !Material {
+fn gltfMaterialToMaterial(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder, gltf: Gltf, gltf_directory: ?[]const u8, gltf_material: Gltf.Material, textures: *TextureManager) !Material {
     // stuff that is in every material
     var material = blk: {
         var material: Material = undefined;
@@ -77,11 +76,11 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
             }
             const debug_name = try std.fmt.allocPrintZ(allocator, "{s} normal", .{ gltf_material.name });
             defer allocator.free(debug_name);
-            break :normal try textures.upload(vc, U8x2, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(rg), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
+            break :normal try textures.upload(vc, U8x2, allocator, encoder, encoder.upload_allocator.getBufferSlice(rg), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
         } else normal: {
             const rg: *F32x2 = @ptrCast(try encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x2)), @sizeOf(F32x2)));
             rg.* = Material.default_normal;
-            break :normal try textures.upload(vc, F32x2, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(rg), vk.Extent2D { .width = 1, .height = 1 }, "default normal");
+            break :normal try textures.upload(vc, F32x2, allocator, encoder, encoder.upload_allocator.getBufferSlice(rg), vk.Extent2D { .width = 1, .height = 1 }, "default normal");
         };
 
         material.emissive = if (gltf_material.emissive_texture) |texture| emissive: {
@@ -104,13 +103,13 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 
             const debug_name = try std.fmt.allocPrintZ(allocator, "{s} emissive", .{ gltf_material.name });
             defer allocator.free(debug_name);
-            break :emissive try textures.upload(vc, U8x4, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(rgba), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
+            break :emissive try textures.upload(vc, U8x4, allocator, encoder, encoder.upload_allocator.getBufferSlice(rgba), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
         } else emissive: {
             const constant: *F32x4 = @ptrCast(try encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
             constant.* = F32x4.new(gltf_material.emissive_factor[0], gltf_material.emissive_factor[1], gltf_material.emissive_factor[2], std.math.nan(f32)).mul_scalar(gltf_material.emissive_strength);
             const debug_name = try std.fmt.allocPrintZ(allocator, "{s} constant emissive {}", .{ gltf_material.name, constant });
             defer allocator.free(debug_name);
-            break :emissive try textures.upload(vc, F32x4, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(constant), vk.Extent2D { .width = 1, .height = 1 }, debug_name);
+            break :emissive try textures.upload(vc, F32x4, allocator, encoder, encoder.upload_allocator.getBufferSlice(constant), vk.Extent2D { .width = 1, .height = 1 }, debug_name);
         };
 
         break :blk material;
@@ -153,13 +152,13 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 
         const debug_name = try std.fmt.allocPrintZ(allocator, "{s} color", .{ gltf_material.name });
         defer allocator.free(debug_name);
-        break :blk try textures.upload(vc, U8x4, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(rgba), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
+        break :blk try textures.upload(vc, U8x4, allocator, encoder, encoder.upload_allocator.getBufferSlice(rgba), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name);
     } else blk: {
         const constant: *F32x4 = @ptrCast(try encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
         constant.* = F32x4.new(gltf_material.metallic_roughness.base_color_factor[0], gltf_material.metallic_roughness.base_color_factor[1], gltf_material.metallic_roughness.base_color_factor[2], std.math.nan(f32));
         const debug_name = try std.fmt.allocPrintZ(allocator, "{s} constant color {}", .{ gltf_material.name, constant });
         defer allocator.free(debug_name);
-        break :blk try textures.upload(vc, F32x4, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(constant), vk.Extent2D { .width = 1, .height = 1 }, debug_name);
+        break :blk try textures.upload(vc, F32x4, allocator, encoder, encoder.upload_allocator.getBufferSlice(constant), vk.Extent2D { .width = 1, .height = 1 }, debug_name);
     };
 
     if (gltf_material.metallic_roughness.metallic_roughness_texture) |texture| {
@@ -189,10 +188,10 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
         }
         const debug_name_metalness = try std.fmt.allocPrintZ(allocator, "{s} metalness", .{ gltf_material.name });
         defer allocator.free(debug_name_metalness);
-        standard_pbr.metalness = try textures.upload(vc, u8, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(metalness), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name_metalness);
+        standard_pbr.metalness = try textures.upload(vc, u8, allocator, encoder, encoder.upload_allocator.getBufferSlice(metalness), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name_metalness);
         const debug_name_roughness = try std.fmt.allocPrintZ(allocator, "{s} roughness", .{ gltf_material.name });
         defer allocator.free(debug_name_roughness);
-        standard_pbr.metalness = try textures.upload(vc, u8, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(roughness), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name_roughness);
+        standard_pbr.metalness = try textures.upload(vc, u8, allocator, encoder, encoder.upload_allocator.getBufferSlice(roughness), vk.Extent2D { .width = @intCast(img.width), .height = @intCast(img.height) }, debug_name_roughness);
         material.bsdf = .{ .standard_pbr = standard_pbr };
         return material;
     } else {
@@ -212,13 +211,13 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
             defer allocator.free(debug_name_metalness);
             const metalness = try encoder.uploadAllocator().create(f32);
             metalness.* = gltf_material.metallic_roughness.metallic_factor;
-            standard_pbr.metalness = try textures.upload(vc, f32, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(metalness), vk.Extent2D { .width = 1, .height = 1 }, debug_name_metalness);
+            standard_pbr.metalness = try textures.upload(vc, f32, allocator, encoder, encoder.upload_allocator.getBufferSlice(metalness), vk.Extent2D { .width = 1, .height = 1 }, debug_name_metalness);
 
             const debug_name_roughness = try std.fmt.allocPrintZ(allocator, "{s} constant roughness {}", .{ gltf_material.name, gltf_material.metallic_roughness.roughness_factor });
             defer allocator.free(debug_name_roughness);
             const roughness = try encoder.uploadAllocator().create(f32);
             roughness.* = gltf_material.metallic_roughness.metallic_factor;
-            standard_pbr.roughness = try textures.upload(vc, f32, vk_allocator, allocator, encoder, encoder.upload_allocator.getBufferSlice(roughness), vk.Extent2D { .width = 1, .height = 1 }, debug_name_roughness);
+            standard_pbr.roughness = try textures.upload(vc, f32, allocator, encoder, encoder.upload_allocator.getBufferSlice(roughness), vk.Extent2D { .width = 1, .height = 1 }, debug_name_roughness);
 
             material.bsdf = .{ .standard_pbr = standard_pbr };
             return material;
@@ -228,22 +227,22 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, vk_allocator: *VkAllocator, 
 
 // glTF doesn't correspond very well to the internal data structures here so this is very inefficient
 // also very inefficient because it's written very inefficiently, can remove a lot of copying, but that's a problem for another time
-pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, gltf: Gltf, gltf_directory: ?[]const u8) !Self {
+pub fn fromGltf(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder, gltf: Gltf, gltf_directory: ?[]const u8) !Self {
     var materials = blk: {
         var materials = try MaterialManager.createEmpty(vc);
         errdefer materials.destroy(vc, allocator);
 
         for (gltf.data.materials.items) |material| {
-            const mat = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, gltf_directory, material, &materials.textures);
+            const mat = try gltfMaterialToMaterial(vc, allocator, encoder, gltf, gltf_directory, material, &materials.textures);
             const namez = try allocator.dupeZ(u8, material.name);
             defer allocator.free(namez);
-            _ = try materials.upload(vc, vk_allocator, allocator, encoder, mat, namez);
+            _ = try materials.upload(vc, allocator, encoder, mat, namez);
         }
 
-        const default_material = try gltfMaterialToMaterial(vc, vk_allocator, allocator, encoder, gltf, gltf_directory, Gltf.Material {
+        const default_material = try gltfMaterialToMaterial(vc, allocator, encoder, gltf, gltf_directory, Gltf.Material {
             .name = "default",
         }, &materials.textures);
-        _ = try materials.upload(vc, vk_allocator, allocator, encoder, default_material, "default");
+        _ = try materials.upload(vc, allocator, encoder, default_material, "default");
 
         break :blk materials;
     };
@@ -379,32 +378,32 @@ pub fn fromGltf(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator:
     var meshes = MeshManager {};
     errdefer meshes.destroy(vc, allocator);
     for (objects.items) |object| {
-        _ = try meshes.upload(vc, vk_allocator, allocator, encoder, object);
+        _ = try meshes.upload(vc, allocator, encoder, object);
     }
 
-    var accel = try Accel.createEmpty(vc, vk_allocator, allocator, materials.textures.descriptor_layout, encoder);
+    var accel = try Accel.createEmpty(vc, allocator, materials.textures.descriptor_layout, encoder);
     errdefer accel.destroy(vc, allocator);
     for (instances.items) |instance| {
-        _ = try accel.uploadInstance(vc, vk_allocator, allocator, encoder, meshes, materials, instance);
+        _ = try accel.uploadInstance(vc, allocator, encoder, meshes, materials, instance);
     }
 
     return Self {
         .materials = materials,
         .meshes = meshes,
         .accel = accel,
-        .constant_specta = try ConstantSpectra.create(vc, vk_allocator, encoder),
+        .constant_specta = try ConstantSpectra.create(vc, encoder),
     };
 }
 
-pub fn createEmpty(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) !Self {
+pub fn createEmpty(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder) !Self {
     var materials = try MaterialManager.createEmpty(vc);
     errdefer materials.destroy(vc, allocator);
 
     return Self {
         .materials = materials,
         .meshes = .{},
-        .accel = try Accel.createEmpty(vc, vk_allocator, allocator, materials.textures.descriptor_layout, encoder),
-        .constant_specta = try ConstantSpectra.create(vc, vk_allocator, encoder),
+        .accel = try Accel.createEmpty(vc, allocator, materials.textures.descriptor_layout, encoder),
+        .constant_specta = try ConstantSpectra.create(vc, encoder),
     };
 }
 

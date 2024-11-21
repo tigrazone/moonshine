@@ -5,7 +5,6 @@ const Gltf = @import("zgltf");
 const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
-const VkAllocator = core.Allocator;
 const Encoder = core.Encoder;
 
 const Sensor = core.Sensor;
@@ -79,11 +78,11 @@ lenses: std.ArrayListUnmanaged(Lens) = .{},
 const Self = @This();
 
 pub const SensorHandle = u32;
-pub fn appendSensor(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, extent: vk.Extent2D) !SensorHandle {
+pub fn appendSensor(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator, extent: vk.Extent2D) !SensorHandle {
     var buf: [32]u8 = undefined;
     const name = try std.fmt.bufPrintZ(&buf, "render {}", .{self.sensors.items.len});
 
-    try self.sensors.append(allocator, try Sensor.create(vc, vk_allocator, extent, name));
+    try self.sensors.append(allocator, try Sensor.create(vc, extent, name));
     return @intCast(self.sensors.items.len - 1);
 }
 

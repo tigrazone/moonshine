@@ -36,7 +36,9 @@ pub fn append(self: *Self, allocator: std.mem.Allocator, item: anytype) !void {
 
     if (comptime @typeInfo(T) == .@"struct") {
         inline for (@typeInfo(T).@"struct".fields) |field| {
-            try self.append(allocator, @field(item, field.name));
+            if (field.type != void) {
+                try self.append(allocator, @field(item, field.name));
+            }
         }
     } else {
         try self.queue.append(allocator, Destruction {

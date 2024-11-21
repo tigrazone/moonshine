@@ -4,7 +4,6 @@ const vk = @import("vulkan");
 const engine = @import("../engine.zig");
 const VulkanContext = engine.core.VulkanContext;
 const Encoder = engine.core.Encoder;
-const VkAllocator = engine.core.Allocator;
 const Image = engine.core.Image;
 
 const Rgba2D = engine.fileformats.exr.helpers.Rgba2D;
@@ -78,7 +77,7 @@ pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator) !Self {
     };
 }
 
-pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder) !void {
+pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder) !void {
     var color = [4]f32 { 1.0, 1.0, 1.0, 1.0 };
     const rgba = Rgba2D {
         .ptr = @ptrCast(&color),
@@ -87,7 +86,7 @@ pub fn addDefaultBackground(self: *Self, vc: *const VulkanContext, vk_allocator:
             .height = 1,
         }
     };
-    try self.addBackground(vc, vk_allocator, allocator, encoder, rgba, "default white");
+    try self.addBackground(vc, allocator, encoder, rgba, "default white");
 }
 
 // this should probably be a parameter, or should infer proper value for this
@@ -104,12 +103,12 @@ const shader_local_size = 8; // must be kept in sync with shader -- looks like H
 // only using equal area for importance sampling.
 // I tried that here but it seems to produce noisier results for e.g., sunny skies
 // compared to just keeping everything in the same parameterization.
-pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, encoder: *Encoder, color_image: Rgba2D, name: []const u8) !void {
+pub fn addBackground(self: *Self, vc: *const VulkanContext, allocator: std.mem.Allocator, encoder: *Encoder, color_image: Rgba2D, name: []const u8) !void {
     const texture_name = try std.fmt.allocPrintZ(allocator, "background {s}", .{ name });
     defer allocator.free(texture_name);
 
     const equirectangular_extent = color_image.extent;
-    const equirectangular_image = try Image.create(vc, vk_allocator, equirectangular_extent, .{ .transfer_dst_bit = true, .sampled_bit = true }, .r32g32b32a32_sfloat, false, texture_name);
+    const equirectangular_image = try Image.create(vc, equirectangular_extent, .{ .transfer_dst_bit = true, .sampled_bit = true }, .r32g32b32a32_sfloat, false, texture_name);
     try encoder.attachResource(equirectangular_image);
 
     const equirectangular_image_host = try encoder.uploadAllocator().dupe([4]f32, color_image.asSlice());
@@ -117,10 +116,10 @@ pub fn addBackground(self: *Self, vc: *const VulkanContext, vk_allocator: *VkAll
     const equal_area_map_size: u32 = @min(std.math.ceilPowerOfTwoAssert(u32, color_image.extent.width), maximum_equal_area_map_size);
     const equal_area_extent = vk.Extent2D { .width = equal_area_map_size, .height = equal_area_map_size };
 
-    const equal_area_image = try Image.create(vc, vk_allocator, equal_area_extent, .{ .storage_bit = true, .sampled_bit = true }, .r32g32b32a32_sfloat, false, texture_name);
+    const equal_area_image = try Image.create(vc, equal_area_extent, .{ .storage_bit = true, .sampled_bit = true }, .r32g32b32a32_sfloat, false, texture_name);
     errdefer equal_area_image.destroy(vc);
 
-    const luminance_image = try Image.create(vc, vk_allocator, equal_area_extent, .{ .storage_bit = true, .sampled_bit = true }, .r32_sfloat, true, texture_name);
+    const luminance_image = try Image.create(vc, equal_area_extent, .{ .storage_bit = true, .sampled_bit = true }, .r32_sfloat, true, texture_name);
     errdefer luminance_image.destroy(vc);
 
     const actual_mip_count = std.math.log2(equal_area_map_size) + 1;

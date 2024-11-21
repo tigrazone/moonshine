@@ -5,7 +5,6 @@ const shaders = @import("shaders");
 const engine = @import("../engine.zig");
 const core = engine.core;
 const VulkanContext = core.VulkanContext;
-const VkAllocator = core.Allocator;
 const Encoder = core.Encoder;
 
 const hrtsystem = engine.hrtsystem;
@@ -44,17 +43,17 @@ pub const ClickedObject = struct {
     barycentrics: F32x2,
 };
 
-buffer: VkAllocator.OwnedHostBuffer(ClickDataShader),
+buffer: core.mem.Buffer(ClickDataShader, .{ .host_visible_bit = true, .host_coherent_bit = true }, .{ .storage_buffer_bit = true }),
 pipeline: Pipeline,
 
 encoder: Encoder,
 ready_fence: vk.Fence,
 
-pub fn create(vc: *const VulkanContext, vk_allocator: *VkAllocator, allocator: std.mem.Allocator, transfer_encoder: *Encoder) !Self {
-    const buffer = try vk_allocator.createHostBuffer(vc, ClickDataShader, 1, .{ .storage_buffer_bit = true });
+pub fn create(vc: *const VulkanContext, allocator: std.mem.Allocator, transfer_encoder: *Encoder) !Self {
+    const buffer = try core.mem.Buffer(ClickDataShader, .{ .host_visible_bit = true, .host_coherent_bit = true }, .{ .storage_buffer_bit = true }).create(vc, 1, "object picker");
     errdefer buffer.destroy(vc);
 
-    var pipeline = try Pipeline.create(vc, vk_allocator, allocator, transfer_encoder, .{}, .{}, .{});
+    var pipeline = try Pipeline.create(vc, allocator, transfer_encoder, .{}, .{}, .{});
     errdefer pipeline.destroy(vc);
 
     var encoder = try Encoder.create(vc, "object picker");
@@ -98,7 +97,7 @@ pub fn getClickedObject(self: *Self, vc: *const VulkanContext, normalized_coords
     try vc.device.resetFences(1, @ptrCast(&self.ready_fence));
     try vc.device.resetCommandPool(self.encoder.pool, .{});
 
-    return self.buffer.data[0].toClickedObject();
+    return self.buffer.slice[0].toClickedObject();
 }
 
 pub fn destroy(self: *Self, vc: *const VulkanContext) void {
