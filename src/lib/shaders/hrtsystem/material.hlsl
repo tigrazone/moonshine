@@ -7,10 +7,6 @@
 #include "../utils/mappings.hlsl"
 #include "spectrum.hlsl"
 
-float3 tangentNormalToWorld(float3 normalTangentSpace, Frame tangentFrame) {
-    return normalize(tangentFrame.frameToWorld(normalTangentSpace)).xyz;
-}
-
 Frame createTextureFrame(float3 normalWorldSpace, Frame tangentFrame) {
     Frame textureFrame = tangentFrame;
     textureFrame.n = normalWorldSpace;
@@ -36,7 +32,7 @@ struct Material {
 
     Frame getTextureFrame(float2 texcoords, Frame tangentFrame) {
         float3 normalTangentSpace = dTextures[NonUniformResourceIndex(normal)].SampleLevel(dTextureSampler, texcoords, 0).rgb;
-        const float3 normalWorldSpace = tangentNormalToWorld(normalTangentSpace + normalTangentSpace - 1, tangentFrame);
+        const float3 normalWorldSpace = normalize(tangentFrame.frameToWorld(normalTangentSpace + normalTangentSpace - 1)).xyz;
         return createTextureFrame(normalWorldSpace, tangentFrame);
     }
 

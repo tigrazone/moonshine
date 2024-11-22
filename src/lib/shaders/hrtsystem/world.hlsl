@@ -95,13 +95,11 @@ struct TriangleLocalSpace {
         const float3 worldPosition = mul(toWorld, float4(surface.position, 1.0));
         const float3x3 m_toMesh = (float3x3) transpose(toMesh);
 
-        const float3 wldNormal0 = mul(m_toMesh, surface.triangleFrame.n);
-        const float  wldScale   = 1.0 / length(wldNormal0);
-        const float3 wldNormal  = wldNormal0 * wldScale;
+        const float3 wldNormal = mul(m_toMesh, surface.triangleFrame.n);
+        const float  wldScale  = 1.0 / length(wldNormal);
 
         // https://developer.nvidia.com/blog/solving-self-intersection-artifacts-in-directx-raytracing/
         {
-
             // nvidia magic constants
             const float c0 = 5.9604644775390625E-8f;
             const float c1 = 1.788139769587360206060111522674560546875E-7f;
@@ -115,17 +113,17 @@ struct TriangleLocalSpace {
 
             objErr += c2 * mul(abs(toMesh), float4(abs(worldPosition), 1));
 
-            const float wldOffset = dot(wldErr, abs(wldNormal));
             const float objOffset = dot(objErr, abs(surface.triangleFrame.n));
+            const float wldOffset = dot(wldErr, abs(wldNormal));
 
-            surface.spawnOffset = wldScale * objOffset + wldOffset;
+            surface.spawnOffset = (objOffset + wldOffset) * wldScale;
         }
 
         // convert to world space
         {
             surface.position = worldPosition;
 
-            surface.triangleFrame = surface.triangleFrame.inSpace(m_toMesh, wldNormal);
+            surface.triangleFrame = surface.triangleFrame.inSpace(m_toMesh, wldNormal * wldScale);
             surface.frame = surface.frame.inSpace(m_toMesh);
         }
 
