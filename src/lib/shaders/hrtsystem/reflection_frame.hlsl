@@ -70,16 +70,6 @@ struct Frame {
         return sin2Theta(v) / cos2Theta(v);
     }
 
-    static float cosPhi(float3 v) {
-        float sinTheta = Frame::sinTheta(v);
-        return (sinTheta == 0.0) ? 1.0 : clamp(v.x / sinTheta, -1.0, 1.0);
-    }
-
-    static float sinPhi(float3 v) {
-        float sinTheta = Frame::sinTheta(v);
-        return (sinTheta == 0.0) ? 0.0 : clamp(v.y / sinTheta, -1.0, 1.0);
-    }
-
     static bool sameHemisphere(float3 v1, float3 v2) {
         return v1.z * v2.z > 0.0;
     }

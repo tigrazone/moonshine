@@ -13,21 +13,24 @@
 #include "../utils/math.hlsl"
 #include "material.hlsl"
 
-static const float CIE1931YIntegral = 106.85691710117189;
+//static const float CIE1931YIntegral = 106.85691710117189;
+#define CIE1931YIntegral_   0.0093583085490884124791293370648
+#define XYZdelta_           0.00212314225053078556263269639066
+#define XYZdelta_2          0.00188323917137476459510357815443
 
 namespace Spectrum {
     // exclusive range
-    float sampleTabulated(const float λ, const float start, const float end, Texture1D<float> t) {
-        return t.SampleLevel(dTextureSampler, (λ - start) / (end - start), 0);
+    // precalculated
+    float sampleTabulated(const float λdelta, Texture1D<float> t) {
+        return t.SampleLevel(dTextureSampler, λdelta, 0);
     }
 
     float sampleReflectance(const float λ, const float3 reflectance) {
-        const float samplesStart = 360;
-        const float samplesEnd = 831;
+        const float λdelta = (λ - 360) * XYZdelta_;
         const float3 rgb = float3(
-            sampleTabulated(λ, samplesStart, samplesEnd, dSpectrumR),
-            sampleTabulated(λ, samplesStart, samplesEnd, dSpectrumG),
-            sampleTabulated(λ, samplesStart, samplesEnd, dSpectrumB)
+            sampleTabulated(λdelta, dSpectrumR),
+            sampleTabulated(λdelta, dSpectrumG),
+            sampleTabulated(λdelta, dSpectrumB)
         );
         return dot(rgb, reflectance);
     }
@@ -35,19 +38,18 @@ namespace Spectrum {
     // a somewhat roundabout way of doing this but I believe it's correct
     float sampleEmission(const float λ, const float3 emission) {
         const float sampledReflectance = sampleReflectance(λ, emission);
-        const float sampledD65 = sampleTabulated(λ, 300, 831, dSpectrumD65);
+        const float sampledD65 = sampleTabulated((λ - 300) * XYZdelta_2, dSpectrumD65);
         return sampledReflectance * sampledD65;
     }
 
     float3 toXYZ(const float λ, const float s) {
-        const float samplesStart = 360;
-        const float samplesEnd = 831;
+        const float λdelta = (λ - 360) * XYZdelta_;
         const float3 rgb = float3(
-            sampleTabulated(λ, samplesStart, samplesEnd, dSpectrumCIEX),
-            sampleTabulated(λ, samplesStart, samplesEnd, dSpectrumCIEY),
-            sampleTabulated(λ, samplesStart, samplesEnd, dSpectrumCIEZ)
+            sampleTabulated(λdelta, dSpectrumCIEX),
+            sampleTabulated(λdelta, dSpectrumCIEY),
+            sampleTabulated(λdelta, dSpectrumCIEZ)
         );
-        return rgb * s / CIE1931YIntegral;
+        return rgb * (s * CIE1931YIntegral_);
     }
 
     float3 toLinearSRGB(const float λ, const float s) {
@@ -71,7 +73,7 @@ struct WavelengthSample {
     static WavelengthSample sampleVisible(const float rand) {
         WavelengthSample s;
         s.λ = 538 - 138.888889f * atanh(0.85691062f - 1.82750197f * rand);
-        s.pdf = 0.0039398042f / pow(cosh(0.0072f * (s.λ - 538)), 2);
+        s.pdf = 0.0039398042f / pow2(cosh(0.0072f * (s.λ - 538)));
         return s;
     }
 };

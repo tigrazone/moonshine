@@ -1,0 +1,1624 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 24,
+      "min": [
+        -5.0,
+        -5.0,
+        -0.05000000074505806
+      ],
+      "max": [
+        5.0,
+        5.0,
+        0.05000000074505806
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5125,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 24,
+      "min": [
+        -5.0,
+        -0.05000000074505806,
+        -5.0
+      ],
+      "max": [
+        5.0,
+        0.05000000074505806,
+        5.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5125,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 24,
+      "min": [
+        -0.05000000074505806,
+        -5.0,
+        -5.0
+      ],
+      "max": [
+        0.05000000074505806,
+        5.0,
+        5.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5125,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 12,
+      "componentType": 5126,
+      "count": 24,
+      "min": [
+        -0.5,
+        -0.05000000074505806,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        0.05000000074505806,
+        0.5
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 13,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 14,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 15,
+      "componentType": 5125,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 16,
+      "componentType": 5126,
+      "count": 24,
+      "min": [
+        -0.5,
+        -0.5,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 17,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 18,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 19,
+      "componentType": 5125,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 20,
+      "componentType": 5126,
+      "count": 24,
+      "min": [
+        -1.25,
+        -3.0,
+        -1.25
+      ],
+      "max": [
+        1.25,
+        3.0,
+        1.25
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 21,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 22,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 23,
+      "componentType": 5125,
+      "count": 36,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 24,
+      "componentType": 5126,
+      "count": 8320,
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 25,
+      "componentType": 5126,
+      "count": 8320,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 26,
+      "componentType": 5126,
+      "count": 8320,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 27,
+      "componentType": 5125,
+      "count": 24954,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 28,
+      "componentType": 5126,
+      "count": 8320,
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 29,
+      "componentType": 5126,
+      "count": 8320,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 30,
+      "componentType": 5126,
+      "count": 8320,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 31,
+      "componentType": 5125,
+      "count": 24954,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "generator": "Iray glTF plugin",
+    "copyright": "NVIDIA Corporation",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 192,
+      "byteStride": 8,
+      "byteOffset": 576,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 144,
+      "byteOffset": 768,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 912,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 1200,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 192,
+      "byteStride": 8,
+      "byteOffset": 1488,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 144,
+      "byteOffset": 1680,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 1824,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 2112,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 192,
+      "byteStride": 8,
+      "byteOffset": 2400,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 144,
+      "byteOffset": 2592,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 2736,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 3024,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 192,
+      "byteStride": 8,
+      "byteOffset": 3312,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 144,
+      "byteOffset": 3504,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 3648,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 3936,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 192,
+      "byteStride": 8,
+      "byteOffset": 4224,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 144,
+      "byteOffset": 4416,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 4560,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 288,
+      "byteStride": 12,
+      "byteOffset": 4848,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 192,
+      "byteStride": 8,
+      "byteOffset": 5136,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 144,
+      "byteOffset": 5328,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 99840,
+      "byteStride": 12,
+      "byteOffset": 5472,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 99840,
+      "byteStride": 12,
+      "byteOffset": 105312,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 66560,
+      "byteStride": 8,
+      "byteOffset": 205152,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 99816,
+      "byteOffset": 271712,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 99840,
+      "byteStride": 12,
+      "byteOffset": 371528,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 99840,
+      "byteStride": 12,
+      "byteOffset": 471368,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 66560,
+      "byteStride": 8,
+      "byteOffset": 571208,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 99816,
+      "byteOffset": 637768,
+      "target": 34963
+    }
+  ],
+  "materials": [
+    {
+      "name": "cube_instance_material",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0.0
+      },
+      "extensions": {
+        "NV_materials_mdl": {
+          "mdl_shader": 1
+        }
+      }
+    },
+    {
+      "name": "cube_instance_2_material",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.7250000238418579,
+          0.7099999785423279,
+          0.6800000071525574,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      },
+      "extensions": {
+        "NV_materials_mdl": {
+          "mdl_shader": 2
+        }
+      }
+    },
+    {
+      "name": "gltf_material_mat",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.14000000059604646,
+          0.44999998807907107,
+          0.090999998152256,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      },
+      "extensions": {
+        "NV_materials_mdl": {
+          "mdl_shader": 3
+        }
+      }
+    },
+    {
+      "name": "cube_instance_5_material",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.6299999952316284,
+          0.06499999761581421,
+          0.05000000074505806,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      },
+      "extensions": {
+        "NV_materials_mdl": {
+          "mdl_shader": 4
+        }
+      }
+    },
+    {
+      "name": "cube_instance_8_material",
+      "doubleSided": true,
+      "emissiveFactor": [
+        10.0,
+        10.0,
+        10.0
+      ],
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.0
+      },
+      "extensions": {
+        "NV_materials_mdl": {
+          "mdl_shader": 5
+        }
+      }
+    },
+    {
+      "name": "cube_instance_14_material",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.5,
+          0.5,
+          0.5,
+          1.0
+        ],
+        "metallicFactor": 0.0
+      },
+      "extensions": {
+        "NV_materials_mdl": {
+          "mdl_shader": 6
+        }
+      }
+    },
+    {
+      "name": "cube_instance_16_material",
+      "doubleSided": true,
+      "extensions": {
+        "NV_materials_mdl": {
+          "mdl_shader": 8
+        }
+      }
+    },
+    {
+      "name": "sphere_instance_material",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.0
+      },
+      "extensions": {
+        "KHR_materials_ior": {
+          "ior": 1.450000047683716
+        },
+        "KHR_materials_transmission": {
+          "transmissionFactor": 1.0
+        },
+                "KHR_materials_dispersion": {
+                    "dispersion": 0.36
+                },
+        "NV_materials_mdl": {
+          "mdl_shader": 9
+        }
+      }
+    },
+    {
+      "name": "sphere_instance_22_material",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.0
+      },
+      "extensions": {
+        "NV_materials_mdl": {
+          "mdl_shader": 11
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0,
+          "mode": 4
+        }
+      ],
+      "name": "cube"
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 4,
+            "TEXCOORD_0": 6
+          },
+          "indices": 7,
+          "material": 1,
+          "mode": 4
+        }
+      ],
+      "name": "cube_1"
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 9,
+            "POSITION": 8,
+            "TEXCOORD_0": 10
+          },
+          "indices": 11,
+          "material": 2,
+          "mode": 4
+        }
+      ],
+      "name": "cube_4"
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 9,
+            "POSITION": 8,
+            "TEXCOORD_0": 10
+          },
+          "indices": 11,
+          "material": 3,
+          "mode": 4
+        }
+      ],
+      "name": "cube_4"
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 13,
+            "POSITION": 12,
+            "TEXCOORD_0": 14
+          },
+          "indices": 15,
+          "material": 4,
+          "mode": 4
+        }
+      ],
+      "name": "cube_7"
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 17,
+            "POSITION": 16,
+            "TEXCOORD_0": 18
+          },
+          "indices": 19,
+          "material": 5,
+          "mode": 4
+        }
+      ],
+      "name": "cube_13"
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 21,
+            "POSITION": 20,
+            "TEXCOORD_0": 22
+          },
+          "indices": 23,
+          "material": 6,
+          "mode": 4
+        }
+      ],
+      "name": "cube_15"
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 25,
+            "POSITION": 24,
+            "TEXCOORD_0": 26
+          },
+          "indices": 27,
+          "material": 7,
+          "mode": 4
+        }
+      ],
+      "name": "sphere"
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 29,
+            "POSITION": 28,
+            "TEXCOORD_0": 30
+          },
+          "indices": 31,
+          "material": 8,
+          "mode": 4
+        }
+      ],
+      "name": "sphere_21"
+    }
+  ],
+  "nodes": [
+    {
+      "translation": [
+        0.0,
+        0.0,
+        19.99209213256836
+      ],
+      "rotation": [
+        0.0,
+        -0.0,
+        -0.0,
+        1.0
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        -0.0,
+        -0.0,
+        1.0,
+        -0.0,
+        0.0,
+        0.0,
+        19.992091970966319,
+        1.0
+      ],
+      "camera": 0,
+      "extras": {
+        "camera::center": [
+          0.0,
+          0.0,
+          -0.024999618530273439
+        ],
+        "camera::eye": [
+          0.0,
+          0.0,
+          19.99209213256836
+        ],
+        "camera::up": [
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "name": "CamInst"
+    },
+    {
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -0.0,
+        -0.0,
+        -5.0,
+        1.0
+      ],
+      "mesh": 0,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 6740987,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "cube_instance"
+    },
+    {
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -0.0,
+        -5.0,
+        -0.0,
+        1.0
+      ],
+      "mesh": 1,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 11403449,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "cube_instance_2"
+    },
+    {
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        -0.0,
+        1.0,
+        -0.0,
+        -0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        5.0,
+        0.0,
+        1.0
+      ],
+      "mesh": 1,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 3789598,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "cube_instance_3"
+    },
+    {
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -5.0,
+        -0.0,
+        -0.0,
+        1.0
+      ],
+      "mesh": 2,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 14125590,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "cube_instance_5"
+    },
+    {
+      "matrix": [
+        1.0,
+        -0.0,
+        -0.0,
+        -0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        5.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "mesh": 3,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 1448622,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "cube_instance_6"
+    },
+    {
+      "matrix": [
+        3.0,
+        0.0,
+        0.0,
+        0.0,
+        -0.0,
+        1.0000000000000023,
+        -0.0,
+        -0.0,
+        0.0,
+        0.0,
+        3.0,
+        0.0,
+        0.0,
+        4.626189558760184,
+        0.0,
+        1.0
+      ],
+      "mesh": 4,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 144522,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "cube_instance_8"
+    },
+    {
+      "matrix": [
+        1.4339410908776152,
+        -0.0,
+        -2.0478801107224795,
+        -0.0,
+        -3.172065784643304e-16,
+        2.4999999999999997,
+        -4.758098676964956e-16,
+        0.0,
+        2.0478801107224795,
+        0.0,
+        1.4339410908776152,
+        0.0,
+        3.0,
+        -3.5,
+        1.6790000000000006,
+        1.0
+      ],
+      "mesh": 5,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 16672517,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "cube_instance_14"
+    },
+    {
+      "matrix": [
+        0.998629534754574,
+        0.0,
+        -0.05233595624294368,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.052335956242943838,
+        0.0,
+        0.9986295347545738,
+        0.0,
+        -2.5,
+        -2.0,
+        -2.0,
+        1.0
+      ],
+      "mesh": 6,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 59962,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "cube_instance_16"
+    },
+    {
+      "translation": [
+        3.5,
+        -1.0,
+        1.75
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mesh": 7,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 16188119,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "sphere_instance"
+    },
+    {
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        -3.0,
+        -4.0,
+        3.0,
+        1.0
+      ],
+      "mesh": 8,
+      "extras": {
+        "attributes_iray": {
+          "caustic": true,
+          "caustic_cast": true,
+          "caustic_recv": true,
+          "face_back": true,
+          "face_front": true,
+          "finalgather": true,
+          "finalgather_cast": true,
+          "finalgather_recv": true,
+          "globillum": true,
+          "globillum_cast": true,
+          "globillum_recv": true,
+          "label": 14590298,
+          "pickable": true,
+          "reflection_cast": true,
+          "reflection_recv": true,
+          "refraction_cast": true,
+          "refraction_recv": true,
+          "shadow_cast": true,
+          "shadow_recv": true,
+          "transparency_cast": true,
+          "transparency_recv": true,
+          "visible": true
+        }
+      },
+      "name": "sphere_instance_22"
+    },
+    {
+      "name": "Scene-0",
+      "children": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ]
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        11
+      ],
+      "name": "Scene-0",
+      "extras": {
+        "attributes_iray": {
+          "IVP_color": [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "depth": 4,
+          "depth_cutout": 16,
+          "depth_reflect": 4,
+          "depth_transp": 4,
+          "environment_dome_depth": 200.0,
+          "environment_dome_ground": false,
+          "environment_dome_ground_glossiness": 0.0,
+          "environment_dome_ground_legacy_reflection": false,
+          "environment_dome_ground_position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "environment_dome_ground_reflectivity": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "environment_dome_ground_shadow_intensity": 1.0,
+          "environment_dome_ground_texturescale": 1.0,
+          "environment_dome_height": 200.0,
+          "environment_dome_mode": "infinite",
+          "environment_dome_position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "environment_dome_radius": 100.0,
+          "environment_dome_rotation_angle": 0.0,
+          "environment_dome_width": 200.0,
+          "environment_function=": 0,
+          "environment_function_intensity": 1.0,
+          "iray_instancing": "off",
+          "iview::hdr_ev": 0.0,
+          "iview::inline_color": [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "iview::inline_width": 1.0,
+          "iview::magnifier_size": 300,
+          "iview::offset": 10.0,
+          "iview::outline_color": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "iview::outline_width": 2.0,
+          "iview::overview": true,
+          "iview::zoom_factor": 1.0,
+          "iview:sunsky:active": true,
+          "iview:sunsky:date": "Tue Jun 16 2020",
+          "iview:sunsky:dst": true,
+          "iview:sunsky:latitude": 37.31999969482422,
+          "iview:sunsky:longitude": -122.02999877929688,
+          "iview:sunsky:time": "12:00:00",
+          "iview:sunsky:timezone": "America/Los_Angeles",
+          "progressive_rendering_max_samples": 10,
+          "samples": 4.0,
+          "shadow_cast": true,
+          "shadow_recv": true
+        }
+      }
+    }
+  ],
+  "textures": [
+    {
+      "source": 0,
+      "name": "tex",
+      "extras": {
+        "gamma": 0.0
+      }
+    }
+  ],
+  "cameras": [
+    {
+      "type": "perspective",
+      "name": "default",
+      "perspective": {
+        "zfar": 873.2446899414063,
+        "znear": 0.008732447400689125,
+        "aspectRatio": 1.3333333333333333,
+        "yfov": 0.7175414562225342
+      },
+      "extras": {
+        "attributes_iray": {
+          "mip_burn_highlights": 0.699999988079071,
+          "mip_burn_highlights_per_component": false,
+          "mip_camera_shutter": 4.0,
+          "mip_cm2_factor": 1.0,
+          "mip_crush_blacks": 0.5,
+          "mip_f_number": 1.0,
+          "mip_film_iso": 100.0,
+          "mip_gamma": 2.200000047683716,
+          "mip_saturation": 1.0,
+          "mip_vignetting": 0.0,
+          "mip_whitepoint": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "tm_enable_tonemapper": true,
+          "tm_tonemapper": "mia_exposure_photographic"
+        },
+        "resolution": [
+          640,
+          480
+        ]
+      }
+    }
+  ],
+  "extensions": {
+    "NV_materials_mdl": {
+      "modules": [
+        "mdl::base",
+        "mdl::gltf_support",
+        "mdl::nvidia::core_definitions",
+        "mdl::state"
+      ],
+      "shaders": [
+        {
+          "arguments": {
+            "texture": 0
+          },
+          "definition": "mdl::base::environment_spherical(texture_2d)",
+          "name": "env_shd"
+        },
+        {
+          "arguments": {
+            "metallic_factor": 0.0
+          },
+          "definition": "mdl::gltf_support::gltf_material",
+          "hash": [
+            "0x2b557fab",
+            "0x5f2f13b5",
+            "0x5dbe3123",
+            "0x469f59c1"
+          ],
+          "name": "cube_instance_material"
+        },
+        {
+          "arguments": {
+            "metallic_factor": 0.0
+          },
+          "definition": "mdl::gltf_support::gltf_material",
+          "hash": [
+            "0x2b557fab",
+            "0x5f2f13b5",
+            "0x5dbe3123",
+            "0x469f59c1"
+          ],
+          "name": "cube_instance_2_material"
+        },
+        {
+          "arguments": {
+            "base_color_factor": [
+              0.054592281579971316,
+              1.0,
+              0.0
+            ]
+          },
+          "definition": "mdl::gltf_support::gltf_material",
+          "hash": [
+            "0x2b557fab",
+            "0x5f2f13b5",
+            "0x5dbe3123",
+            "0x469f59c1"
+          ],
+          "name": "gltf_material_mat"
+        },
+        {
+          "arguments": {
+            "base_color_factor": [
+              1.0,
+              0.0,
+              0.00010718735575210304
+            ],
+            "metallic_factor": 0.0
+          },
+          "definition": "mdl::gltf_support::gltf_material",
+          "hash": [
+            "0x2b557fab",
+            "0x5f2f13b5",
+            "0x5dbe3123",
+            "0x469f59c1"
+          ],
+          "name": "cube_instance_5_material"
+        },
+        {
+          "arguments": {
+            "emissive_factor": [
+              10.0,
+              10.0,
+              10.0
+            ],
+            "metallic_factor": 0.0,
+            "roughness_factor": 0.0
+          },
+          "definition": "mdl::gltf_support::gltf_material",
+          "hash": [
+            "0x2b557fab",
+            "0x5f2f13b5",
+            "0x5dbe3123",
+            "0x469f59c1"
+          ],
+          "name": "cube_instance_8_material"
+        },
+        {
+          "arguments": {
+            "normal=": 7
+          },
+          "definition": "mdl::nvidia::core_definitions::flex_material",
+          "hash": [
+            "0xcdccb2f5",
+            "0xccfa4281",
+            "0x41aa45c6",
+            "0x53936269"
+          ],
+          "name": "cube_instance_14_material"
+        },
+        {
+          "definition": "mdl::state::normal()",
+          "name": "mdl::state::normal_801"
+        },
+        {
+          "definition": "mdl::gltf_support::gltf_material",
+          "hash": [
+            "0x2b557fab",
+            "0x5f2f13b5",
+            "0x5dbe3123",
+            "0x469f59c1"
+          ],
+          "name": "cube_instance_16_material"
+        },
+        {
+          "arguments": {
+            "normal=": 10
+          },
+          "definition": "mdl::nvidia::core_definitions::thick_glass",
+          "hash": [
+            "0x45a51489",
+            "0x068b105e",
+            "0xcfed7f3b",
+            "0x1b45b4f8"
+          ],
+          "name": "sphere_instance_material"
+        },
+        {
+          "definition": "mdl::state::normal()",
+          "name": "mdl::state::normal_804"
+        },
+        {
+          "arguments": {
+            "roughness_factor": 0.0
+          },
+          "definition": "mdl::gltf_support::gltf_material",
+          "hash": [
+            "0x2b557fab",
+            "0x5f2f13b5",
+            "0x5dbe3123",
+            "0x469f59c1"
+          ],
+          "name": "sphere_instance_22_material"
+        }
+      ]
+    }
+  },
+  "extensionsUsed": [
+    "NV_materials_mdl",
+    "KHR_lights_punctual"
+  ],
+  "buffers": [
+    {
+      "byteLength": 737584,
+      "uri": "cornellBox.bin"
+    }
+  ]
+}

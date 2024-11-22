@@ -55,18 +55,18 @@ void getTangentBitangent(float3 positions[3], float2 texcoords[3], out float3 ta
     float3 deltaP20 = positions[2] - positions[0];
 
     float det = deltaT10.x * deltaT20.y - deltaT10.y * deltaT20.x;
-    if (det == 0.0) {
+    if (isZERO(det)) {
         coordinateSystem(normalize(cross(deltaP10, deltaP20)), tangent, bitangent);
     } else {
-        tangent = normalize((deltaT20.y * deltaP10 - deltaT10.y * deltaP20) / det);
-        bitangent = normalize((-deltaT20.x * deltaP10 + deltaT10.x * deltaP20) / det);
+        det = 1.0 / det;
+        tangent = normalize((deltaT20.y * deltaP10 - deltaT10.y * deltaP20) * det);
+        bitangent = normalize((-deltaT20.x * deltaP10 + deltaT10.x * deltaP20) * det);
     }
 }
 
-template <typename T>
-T interpolate(float3 barycentrics, T v[3]) {
-    return barycentrics.x * v[0] + barycentrics.y * v[1] + barycentrics.z * v[2];
-}
+#define mixBary(a, b, c, bary) ( (a) + ((b) - (a)) * (bary).y + ((c) - (a)) * (bary).z )
+
+#define interpolate(bary, v) ( mixBary(((v)[0]), ((v)[1]), ((v)[2]), (bary)) )
 
 struct TriangleLocalSpace {
     float3 positions[3];
@@ -137,7 +137,7 @@ struct TriangleLocalSpace {
         float3 p1 = mul(toWorld, float4(positions[1], 1.0));
         float3 p2 = mul(toWorld, float4(positions[2], 1.0));
 
-        return length(cross(p1 - p0, p2 - p0)) / 2.0;
+        return length(cross(p1 - p0, p2 - p0)) * 0.5f;
     }
 };
 
@@ -174,7 +174,8 @@ struct World {
 
         Mesh mesh = this.mesh(instanceIndex, geometryIndex);
 
-        const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : float3(primitiveIndex * 3 + 0, primitiveIndex * 3 + 1, primitiveIndex * 3 + 2);
+        const uint primitiveIndex3 = primitiveIndex * 3;
+        const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : uint3(primitiveIndex3, primitiveIndex3 + 1, primitiveIndex3 + 2);
 
         // positions always available
         t.positions[0] = loadPosition(mesh.positionAddress, ind.x);

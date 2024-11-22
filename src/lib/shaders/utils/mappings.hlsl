@@ -16,10 +16,10 @@ float2 squareToGaussian(float2 square) {
     return r * float2(cos(theta), sin(theta));
 }
 
-float2 squareToUniformDiskConcentric(float2 square) {
-    float2 uOffset = 2.0 * square - float2(1.0, 1.0);
+float2 squareToUniformDiskConcentric(float2 uOffset) {
+    uOffset += uOffset - 1;
 
-    if (all(uOffset == float2(0.0, 0.0))) {
+    if (isZERO(uOffset.x) && isZERO(uOffset.y)) {
         return float2(0.0, 0.0);
     }
 
@@ -72,7 +72,7 @@ float3 squareToEqualAreaSphere(float2 square) {
 	const float d = abs(signedDistance);
 	const float r = 1.0 - d;
 
-	const float phi = (r == 0.0 ? 1.0 : (uvp.y - uvp.x) / r + 1.0) * PI / 4.0;
+	const float phi = (isZERO(r) ? 1.0 : (uvp.y - uvp.x) / r + 1.0) * PI / 4.0;
 	const float3 signs = sign(float3(uv.x, uv.y, signedDistance));
 
 	return signs * float3(

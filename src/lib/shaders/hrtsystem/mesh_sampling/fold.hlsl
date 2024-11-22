@@ -16,13 +16,14 @@ struct PushConsts {
 
 [numthreads(32, 1, 1)]
 void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
-	const uint dstIndex = dispatchXYZ.x;
-	const uint dstImageSize = textureDimensions(dstMip);
+	#define dstIndex		(dispatchXYZ.x)
+	#define dstImageSize	(textureDimensions(dstMip))
 
 	if (any(dstIndex >= dstImageSize)) return;
+	const uint dstIndex2 = dstIndex + dstIndex;
 
 	if (dstImageSize == 1) {
-		const float newSum = srcMip[2 * dstIndex + 0] + srcMip[2 * dstIndex + 1];
+		const float newSum = srcMip[dstIndex2] + srcMip[dstIndex2 + 1];
 		const float oldSum = dstMip[dstIndex];
 		// if this conditional fails it means this mesh is not actually emissive at all
 		// in this case, not adding it to our sum will effectively cull it
@@ -41,6 +42,9 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 		}
 	}
 
-	dstMip[dstIndex] = srcMip[2 * dstIndex + 0]
-	                 + srcMip[2 * dstIndex + 1];
+	dstMip[dstIndex] = srcMip[dstIndex2]
+	                 + srcMip[dstIndex2 + 1];
+
+	#undef dstIndex
+	#undef dstImageSize
 }

@@ -22,6 +22,6 @@ struct Reservoir {
 
     // not valid to look at selected unless this returns true
     bool valid() {
-        return weightSum != 0;
+        return weightSum > NEARzero;
     }
 };

@@ -5,13 +5,17 @@
 
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
-	const uint2 pixelIndex = dispatchXYZ.xy;
-	const uint2 dstImageSize = textureDimensions(dstMip);
+	#define pixelIndex		(dispatchXYZ.xy)
+	#define dstImageSize	(textureDimensions(dstMip))
 
 	if (any(pixelIndex >= dstImageSize)) return;
+	const uint2 pixelIndex2 = pixelIndex + pixelIndex;
 
-	dstMip[pixelIndex] = srcMip[2 * pixelIndex + uint2(0, 0)]
-	                   + srcMip[2 * pixelIndex + uint2(1, 0)]
-	                   + srcMip[2 * pixelIndex + uint2(0, 1)]
-	                   + srcMip[2 * pixelIndex + uint2(1, 1)];
+	dstMip[pixelIndex] = srcMip[pixelIndex2]
+	                   + srcMip[uint2(pixelIndex2.x + 1, pixelIndex2.y)]
+	                   + srcMip[uint2(pixelIndex2.x, pixelIndex2.y + 1)]
+	                   + srcMip[uint2(pixelIndex2.x + 1, pixelIndex2.y + 1)];
+
+	#undef pixelIndex
+	#undef dstImageSize
 }

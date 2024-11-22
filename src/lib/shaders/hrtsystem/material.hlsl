@@ -73,15 +73,15 @@ struct GGX : MicrofacetDistribution {
     // GGX NDF
     // m must be in frame space
     float D(float3 m) {
-        float α2 = pow(α, 2);
-        float denom = PI * pow(pow(Frame::cosTheta(m), 2) * (α2 - 1) + 1, 2);
+        float α2 = pow2(α);
+        float denom = PI * pow2(pow2(Frame::cosTheta(m)) * (α2 - 1) + 1);
         return α2 / denom;
     }
 
     float Λ(float3 v) {
         float tan_theta_v_squared = Frame::tan2Theta(v);
         if (isinf(tan_theta_v_squared)) return 0.0f;
-        return (sqrt(1.0f + pow(α, 2) * tan_theta_v_squared) - 1.0f) / 2.0f;
+        return (sqrt(1.0f + pow2(α) * tan_theta_v_squared) - 1.0f) / 2.0f;
     }
 
     // w_i, w_o must be in frame space
@@ -113,22 +113,12 @@ struct GGX : MicrofacetDistribution {
 // ηi is index of refraction for medium on current side of boundary
 // ηt is index of refraction for medium on other side of boundary
 namespace Fresnel {
-    float schlickR0(float ηi, float ηt) {
-        return pow((ηt - ηi) / (ηt + ηi), 2);
-    }
-
     float schlickWeight(float cosTheta) {
-        return pow(1 - cosTheta, 5);
+        return pow5(1 - cosTheta);
     }
 
     float schlick(float cosTheta, float R0) {
         return lerp(schlickWeight(cosTheta), 1, R0);
-    }
-
-    // lerp between layer1 and layer2 based on schlick fresnel
-    float fresnelLerp(float cosTheta, float ηi, float ηt, float layer1, float layer2) {
-        const float f = schlick(cosTheta, schlickR0(ηi, ηt));
-        return lerp(layer1, layer2, f);
     }
 
     // boundary of two dielectric surfaces
@@ -211,7 +201,7 @@ struct Lambert : BSDF {
 
     BSDFSample sample(float3 w_o, float2 square) {
         float3 w_i = squareToCosineHemisphere(square);
-        if (w_o.z < 0.0) w_i.z *= -1;
+        if (w_o.z < 0.0) w_i.z = -w_i.z;
 
         BSDFSample sample;
         sample.dirFs = w_i;
@@ -237,16 +227,19 @@ struct StandardPBR : BSDF {
     float ior; // ior - internal index of refraction; [0, inf)
 
     static StandardPBR load(const uint64_t addr, const float2 texcoords, const float λ) {
-        uint colorTextureIndex = vk::RawBufferLoad<uint>(addr + sizeof(uint) * 0);
-        uint metalnessTextureIndex = vk::RawBufferLoad<uint>(addr + sizeof(uint) * 1);
-        uint roughnessTextureIndex = vk::RawBufferLoad<uint>(addr + sizeof(uint) * 2);
-        float ior = vk::RawBufferLoad<float>(addr + sizeof(uint) * 3);
+        uint colorTextureIndex = vk::RawBufferLoad<uint>(addr);
+        uint64_t addr1 = addr + sizeof(uint);
+        uint metalnessTextureIndex = vk::RawBufferLoad<uint>(addr1);
+        addr1 += sizeof(uint);
+        uint roughnessTextureIndex = vk::RawBufferLoad<uint>(addr1);
+        addr1 += sizeof(uint);
+        float ior = vk::RawBufferLoad<float>(addr1);
 
         StandardPBR material;
         material.reflectance = Spectrum::sampleReflectance(λ, dTextures[NonUniformResourceIndex(colorTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).rgb);
         material.metalness = dTextures[NonUniformResourceIndex(metalnessTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).r;
         float roughness = dTextures[NonUniformResourceIndex(roughnessTextureIndex)].SampleLevel(dTextureSampler, texcoords, 0).r;
-        material.distr = GGX::create(max(pow(roughness, 2), 0.001));
+        material.distr = GGX::create(max(pow2(roughness), 0.001));
         material.ior = ior;
         return material;
     }
@@ -311,44 +304,6 @@ struct StandardPBR : BSDF {
     }
 };
 
-struct DisneyDiffuse : BSDF {
-    float reflectance;
-    float roughness;
-
-    static DisneyDiffuse create(float reflectance, float roughness) {
-        DisneyDiffuse material;
-        material.reflectance = reflectance;
-        material.roughness = roughness;
-        return material;
-    }
-
-    BSDFSample sample(float3 w_o, float2 square) {
-        return Lambert::create(reflectance).sample(w_o, square);
-    }
-
-    BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
-        BSDFEvaluation eval = Lambert::create(reflectance).evaluate(w_i, w_o);
-
-        float3 h = normalize(w_i + w_o);
-        float cosThetaHI = dot(w_i, h);
-
-        float cosThetaNI = abs(Frame::cosTheta(w_i));
-        float cosThetaNO = abs(Frame::cosTheta(w_o));
-        float F_I = pow(1 - cosThetaNI, 5);
-        float F_O = pow(1 - cosThetaNO, 5);
-
-        float R_R = 2 * roughness * cosThetaHI * cosThetaHI;
-        float retro = R_R * (F_I + F_O + F_I * F_O * (R_R - 1));
-
-        eval.reflectance *= ((1 - F_I / 2) * (1 - F_O / 2) + retro);
-        return eval;
-    }
-
-    static bool isDelta() {
-        return false;
-    }
-};
-
 struct PerfectMirror : BSDF {
     BSDFSample sample(float3 w_o, float2 square) {
         BSDFSample sample;
@@ -387,8 +342,8 @@ struct Glass : BSDF {
 
     static Glass load(const uint64_t addr, const float λ) {
         Glass material;
-        const float a = vk::RawBufferLoad<float>(addr + sizeof(float) * 0);
-        const float b = vk::RawBufferLoad<float>(addr + sizeof(float) * 1);
+        const float a = vk::RawBufferLoad<float>(addr);
+        const float b = vk::RawBufferLoad<float>(addr + sizeof(float));
         material.intIOR = cauchyIOR(a, b, λ);
         return material;
     }
@@ -411,7 +366,7 @@ struct Glass : BSDF {
             }
             sample.dirFs = refractDir(w_o, faceForward(float3(0.0, 0.0, 1.0), w_o), etaI / etaT);
         }
-        if (all(sample.dirFs != 0.0)) {
+        if (isNotZERO(sample.dirFs.x) && isNotZERO(sample.dirFs.y) && isNotZERO(sample.dirFs.z)) {
             sample.eval.reflectance = 1;
             sample.eval.pdf = 1.#INF;
         } else {

@@ -50,17 +50,20 @@ struct EnvMap : Light {
     LightSample sample(float λ, float3 positionWs, float2 rand) {
         const uint size = textureDimensions(luminanceTexture).x;
         const uint mipCount = log2(size) + 1;
+        float reservour_rand = rand.x;
 
         uint2 idx = uint2(0, 0);
+        uint2 idx2 = idx;
         for (uint level = mipCount; level-- > 0;) {
             Reservoir<uint2> r = Reservoir<uint2>::empty();
             for (uint i = 0; i < 2; i++) {
                 for (uint j = 0; j < 2; j++) {
-                    const uint2 coords = 2 * idx + uint2(i, j);
-                    r.update(coords, luminanceTexture.Load(uint3(coords, level)), rand.x);
+                    const uint2 coords = idx2 + uint2(i, j);
+                    r.update(coords, luminanceTexture.Load(uint3(coords, level)), reservour_rand);
                 }
             }
             idx = r.selected;
+            idx2 = idx + idx;
         }
         const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
 
@@ -86,7 +89,7 @@ struct EnvMap : Light {
         const uint mipCount = log2(size) + 1;
         const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
 
-        if (integral == 0) return LightEvaluation::empty();
+        if (integral < NEARzero) return LightEvaluation::empty();
 
         const float2 uv = squareToEqualAreaSphereInverse(dirWs);
         const uint2 idx = clamp(uint2(uv * size), uint2(0, 0), uint2(size, size));
@@ -99,11 +102,8 @@ struct EnvMap : Light {
     }
 };
 
-float areaMeasureToSolidAngleMeasure(float3 pos1, float3 pos2, float3 dir1, float3 dir2) {
-    const float r2 = dot(pos1 - pos2, pos1 - pos2);
-    const float lightCos = abs(dot(-dir1, dir2));
-
-    return r2 / lightCos;
+float areaMeasureToSolidAngleMeasure(float3 pos1_pos2, float3 dir1, float3 dir2) {
+    return dot(pos1_pos2, pos1_pos2) / abs(dot(dir1, dir2));
 }
 
 struct TriangleLight: Light {
@@ -128,7 +128,7 @@ struct TriangleLight: Light {
         LightSample lightSample;
         lightSample.connection = surface.position - positionWs;
         lightSample.connection += faceForward(surface.triangleFrame.n, -lightSample.connection) * surface.spawnOffset;
-        lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) * area_;
+        lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position - positionWs, normalize(lightSample.connection), surface.triangleFrame.n) * area_;
         lightSample.eval.radiance = material.getEmissive(λ, surface.texcoord) / lightSample.eval.pdf;
 
         return lightSample;
@@ -162,7 +162,7 @@ struct MeshLights : Light {
         LightSample lightSample;
         lightSample.eval = LightEvaluation::empty();
 
-        if (integral() == 0.0) return lightSample;
+        if (integral() < NEARzero) return lightSample;
 
         const uint mipCount = uint(ceil(log2(emissiveTriangleCount))) + 1;
 
@@ -171,7 +171,7 @@ struct MeshLights : Light {
         for (uint level = mipCount; level-- > 0;) {
             Reservoir<uint> r = Reservoir<uint>::empty();
             for (uint i = 0; i < 2; i++) {
-                const uint coord = 2 * idx + i;
+                const uint coord = idx + idx + i;
                 powerPacked = power.Load(uint2(coord, level));
                 r.update(coord, f16tof32(powerPacked[0]), rand.x);
             }
@@ -185,8 +185,9 @@ struct MeshLights : Light {
         const TriangleLight inner = TriangleLight::create(meta.instanceIndex, meta.geometryIndex, primitiveIndex, world);
         powerPacked = power.Load(idx);
         lightSample = inner.sample(λ, positionWs, rand, f16tof32(powerPacked[1]));
-        lightSample.eval.pdf *= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
-        lightSample.eval.radiance /= selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
+        float selPdf = selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
+        lightSample.eval.pdf *= selPdf;
+        lightSample.eval.radiance /= selPdf;
         return lightSample;
     }
 
@@ -196,32 +197,26 @@ struct MeshLights : Light {
 
     float selectionPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
         float integral_ = integral();
-        if (integral_ == 0.0) return 0.0; // no lights
+        if (integral_ < NEARzero) return 0.0; // no lights
         const uint instanceID = world.instances[instanceIndex].instanceCustomIndex;
         const uint offset = geometryToTrianglePowerOffset[instanceID + geometryIndex];
-        const uint invalidOffset = 0xFFFFFFFF;
-        if (offset == invalidOffset) return 0.0; // no light at this triangle
-        const uint idx = offset + primitiveIndex;
+        if (offset == MAX_UINT) return 0.0; // no light at this triangle
         half2 powerPacked = power.Load(uint2(offset + primitiveIndex, 0));
         return f16tof32(powerPacked[0]) / integral_;
     }
 
     float areaPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
         float integral_ = integral();
-        if (integral_ == 0.0) return 0.0; // no lights
+        if (integral_ < NEARzero) return 0.0; // no lights
         const uint instanceID = world.instances[instanceIndex].instanceCustomIndex;
         const uint offset = geometryToTrianglePowerOffset[instanceID + geometryIndex];
-        const uint invalidOffset = 0xFFFFFFFF;
-        if (offset == invalidOffset) return 0.0; // no light at this triangle
-        const uint idx = offset + primitiveIndex;
+        if (offset == MAX_UINT) return 0.0; // no light at this triangle
         half2 powerPacked = power.Load(uint2(offset + primitiveIndex, 0));
         return f16tof32(powerPacked[0]) * f16tof32(powerPacked[1]) / integral_;
     }
 
     float integral() {
-        const uint size = emissiveTriangleCount;
-
-        if (size == 0) return 0;
+        if (emissiveTriangleCount == 0) return 0;
 
         const uint mipCount = uint(ceil(log2(emissiveTriangleCount))) + 1;
         half2 powerPacked = power.Load(uint2(0, mipCount - 1));

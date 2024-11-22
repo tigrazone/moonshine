@@ -24,20 +24,20 @@ struct PushConsts {
 
 [numthreads(32, 1, 1)]
 void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
-	const uint srcPrimitive = dispatchXYZ.x;
+	#define srcPrimitive	(dispatchXYZ).x
 
 	if (any(srcPrimitive >= pushConsts.triangleCount)) return;
 
 	World world;
-    world.instances = dInstances;
-    world.worldToInstance = dWorldToInstance;
-    world.meshes = dMeshes;
-    world.geometries = dGeometries;
-    world.materials = dMaterials;
+	world.instances = dInstances;
+	world.worldToInstance = dWorldToInstance;
+	world.meshes = dMeshes;
+	world.geometries = dGeometries;
+	world.materials = dMaterials;
 
 	float total_emissive = 0;
 
-	const uint samples_per_dim = 8;
+	#define samples_per_dim	8
 	const float samples_per_dim_delta = 1.0 / float(samples_per_dim);
 	for (uint i = 0; i < samples_per_dim; i++) {
 		for (uint j = 0; j < samples_per_dim; j++) {
@@ -58,4 +58,7 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 	dstPower[dstOffset + srcPrimitive][1] = f32tof16(1.0 / area_);
 	dstTriangleMetadata[dstOffset + srcPrimitive].instanceIndex = pushConsts.instanceIndex;
 	dstTriangleMetadata[dstOffset + srcPrimitive].geometryIndex = pushConsts.geometryIndex;
+
+	#undef srcPrimitive
+	#undef samples_per_dim
 }

@@ -1,0 +1,1 @@
+..\..\zig-out\bin\online.exe c:\msys64\home\user\from-git\glTF-Sample-Assets\Models\DirectionalLight\glTF\DirectionalLight.gltf  ../../assets/room.exr
