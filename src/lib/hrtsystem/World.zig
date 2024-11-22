@@ -30,6 +30,8 @@ const U32x3 = vector.Vec3(u32);
 const U8x2 = vector.Vec2(u8);
 const U8x4 = vector.Vec4(u8);
 
+const NEARzero: f32 = 1.0e-25;
+
 pub const Material = MaterialManager.Material;
 pub const PolymorphicBSDF = MaterialManager.PolymorphicBSDF;
 pub const Instance = Accel.Instance;
@@ -118,7 +120,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, allocator: std.mem.Allocator
     var standard_pbr: MaterialManager.StandardPBR = undefined;
     standard_pbr.ior = gltf_material.ior;
 
-    if (gltf_material.transmission_factor == 1.0) {
+    if (gltf_material.transmission_factor > 0.999) {
         // infer cauchy's equation A, B constants assuming IOR
         // was measured at 560nm and material has dispersion of BK7
         const b = 0.00420; // BK7
@@ -195,14 +197,14 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, allocator: std.mem.Allocator
         material.bsdf = .{ .standard_pbr = standard_pbr };
         return material;
     } else {
-        if (gltf_material.metallic_roughness.metallic_factor == 0.0 and gltf_material.metallic_roughness.roughness_factor == 1.0) {
+        if (gltf_material.metallic_roughness.metallic_factor < NEARzero and gltf_material.metallic_roughness.roughness_factor > 0.999) {
             // parse as lambert
             const lambert = MaterialManager.Lambert {
                 .color = standard_pbr.color,
             };
             material.bsdf = .{ .lambert = lambert };
             return material;
-        } else if (gltf_material.metallic_roughness.metallic_factor == 1.0 and gltf_material.metallic_roughness.roughness_factor == 0.0) {
+        } else if (gltf_material.metallic_roughness.metallic_factor > 0.999 and gltf_material.metallic_roughness.roughness_factor < NEARzero) {
             // parse as perfect mirror
             material.bsdf = .{ .perfect_mirror = {} };
             return material;

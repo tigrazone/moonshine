@@ -19,10 +19,6 @@ fold_pipeline: FoldPipeline,
 
 const Self = @This();
 
-fn luminance(rgb: [3]f32) f32 {
-    return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
-}
-
 const EquirectangularToEqualAreaPipeline = engine.core.pipeline.Pipeline(.{ .shader_path = "hrtsystem/background/equirectangular_to_equal_area.hlsl", .PushSetBindings = struct {
     src_texture: engine.core.pipeline.CombinedImageSampler,
     dst_image: engine.core.pipeline.StorageImage,

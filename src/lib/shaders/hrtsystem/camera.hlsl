@@ -10,21 +10,21 @@
 // * up along +Z
 
 struct ThinLens {
-    float vfov;
+    float vfov_tan;
     float aspect;
     float aperture;
     float focusDistance;
 
     Ray generateRay(const float2 rand, const float2 uv) {
-        const float2 uvNDC = uv * 2 - 1;
+        const float2 uvNDC = uv + uv - 1;
 
-        const float halfViewportHeight = tan(vfov / 2);
+        const float halfViewportHeight = vfov_tan;
         const float halfViewportWidth = aspect * halfViewportHeight;
         const float2 halfViewport = float2(halfViewportWidth, halfViewportHeight);
 
         const float3 directionCameraSpaceUnorm = float3(1.0, uvNDC * halfViewport);
 
-        const float2 lens = aperture * squareToUniformDiskConcentric(rand) / 2.0;
+        const float2 lens = aperture > 0.0 ? aperture * squareToUniformDiskConcentric(rand) * 0.5f : float2(0,0);
         const float3 focus = focusDistance * directionCameraSpaceUnorm;
 
         Ray ray;
@@ -41,17 +41,17 @@ struct Camera {
     float3 forward;
     float3 up;
     float vfov;
+    float vfov_tan;
     float aperture;
     float focusDistance;
+    float3 u;
+    float3 v;
 
     Ray generateRay(const float aspect, const float2 uv, const float2 rand) {
-        const ThinLens thinLens = {vfov, aspect, aperture, focusDistance};
+        const ThinLens thinLens = {vfov_tan, aspect, aperture, focusDistance};
         const Ray rayCameraSpace = thinLens.generateRay(rand, uv);
 
-        const float3 w = forward;
-        const float3 u = normalize(cross(up, w));
-        const float3 v = cross(u, w);
-        const float4x3 toWorld = {w, u, v, origin};
+        const float4x3 toWorld = {forward, u, v, origin};
 
         return rayCameraSpace.transformed(toWorld);
     }

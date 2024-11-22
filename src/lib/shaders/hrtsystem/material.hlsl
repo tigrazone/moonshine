@@ -80,13 +80,13 @@ struct GGX : MicrofacetDistribution {
 
     float Λ(float3 v) {
         float tan_theta_v_squared = Frame::tan2Theta(v);
-        if (isinf(tan_theta_v_squared)) return 0.0f;
-        return (sqrt(1.0f + pow2(α) * tan_theta_v_squared) - 1.0f) / 2.0f;
+        if (isinf(tan_theta_v_squared)) return 0.0;
+        return (sqrt(1.0 + pow2(α) * tan_theta_v_squared) - 1.0) * 0.5;
     }
 
     // w_i, w_o must be in frame space
     float G(float3 w_i, float3 w_o) {
-        return 1.0f / (1.0f + Λ(w_i) + Λ(w_o));
+        return 1.0 / (1.0 + Λ(w_i) + Λ(w_o));
     }
 
     // samples a half vector from the distribution
@@ -97,7 +97,7 @@ struct GGX : MicrofacetDistribution {
         float cosThetaSquared = 1 / (1 + tanThetaSquared);
         float sinTheta = sqrt(max(0, 1 - cosThetaSquared));
         float cosTheta = sqrt(cosThetaSquared);
-        float phi = 2 * PI * square.y;
+        float phi = M_TWO_PI * square.y;
 
         // convert them to cartesian
         float3 h = sphericalToCartesian(sinTheta, cosTheta, phi);
@@ -125,30 +125,38 @@ namespace Fresnel {
     // PBRT version
     float dielectric(float cosThetaI, float ηi, float ηt) {
         cosThetaI = clamp(cosThetaI, -1, 1);
+        float divided;
 
         // potentially swap indices of refraction
         // TODO: should this be here?
         bool entering = cosThetaI > 0;
         if (!entering) {
-            float tmp = ηi;
-            ηi = ηt;
-            ηt = tmp;
-            cosThetaI = abs(cosThetaI);
-        }
+            divided = ηt / ηi;
+            cosThetaI = -cosThetaI;
+        } else divided = ηi / ηt;
 
         // compute cosThetaT using Snell's Law
-        float sinThetaI = sqrt(max(0, 1 - cosThetaI * cosThetaI));
-        float sinThetaT = ηi / ηt * sinThetaI;
+        float sinThetaT2 = pow2(divided) * max(0, 1 - cosThetaI * cosThetaI);
 
         // handle total internal reflection
-        if (sinThetaT >= 1) return 1;
+        if (sinThetaT2 >= 1) return 1;
 
-        float cosThetaT = sqrt(max(0, 1 - sinThetaT * sinThetaT));
+        float cosThetaT = sqrt(max(0, 1 - sinThetaT2));
 
+        /*
         float r_parl = ((ηt * cosThetaI) - (ηi * cosThetaT)) / ((ηt * cosThetaI) + (ηi * cosThetaT));
         float r_perp = ((ηi * cosThetaI) - (ηt * cosThetaT)) / ((ηi * cosThetaI) + (ηt * cosThetaT));
+        return (r_parl * r_parl + r_perp * r_perp) * 0.5f;
+        */
 
-        return (r_parl * r_parl + r_perp * r_perp) / 2;
+        float A0 = ηt * cosThetaI;
+        float A1 = ηi * cosThetaT;
+        float B0 = ηi * cosThetaI;
+        float B1 = ηt * cosThetaT;
+
+        float r_parl = (A0 - A1) / (A0 + A1);
+        float r_perp = (B0 - B1) / (B0 + B1);
+        return (r_parl * r_parl + r_perp * r_perp) * 0.5f; //11* 2/ -> 6* 2/
     }
 };
 
@@ -194,8 +202,8 @@ struct Lambert : BSDF {
 
     BSDFEvaluation evaluate(float3 w_i, float3 w_o) {
         BSDFEvaluation eval;
-        eval.reflectance = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) * reflectance / PI : 0.0;
-        eval.pdf = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) / PI : 0.0;
+        eval.pdf = Frame::sameHemisphere(w_i, w_o) ? abs(Frame::cosTheta(w_i)) * M_INV_PI : 0.0;
+        eval.reflectance = reflectance * eval.pdf;
         return eval;
     }
 
@@ -307,7 +315,7 @@ struct StandardPBR : BSDF {
 struct PerfectMirror : BSDF {
     BSDFSample sample(float3 w_o, float2 square) {
         BSDFSample sample;
-        sample.dirFs = float3(-w_o.x, -w_o.y, w_o.z);
+        sample.dirFs = float3(-w_o.xy, w_o.z);
         sample.eval.reflectance = 1;
         sample.eval.pdf = 1.#INF;
         return sample;
@@ -322,15 +330,11 @@ struct PerfectMirror : BSDF {
     }
 };
 
-float3 refractDir(float3 wi, float3 n, float eta) {
-    float cosThetaI = dot(n, wi);
-    float sin2ThetaI = max(0, 1 - cosThetaI * cosThetaI);
-    float sin2ThetaT = eta * eta * sin2ThetaI;
+float3 refractDir(float3 wi, bool side, float eta) {
+    float sin2ThetaT = eta * eta * max(0, 1 - wi.z * wi.z);
     if (sin2ThetaT >= 1) return 0.0;
 
-    float cosThetaT = sqrt(1 - sin2ThetaT);
-
-    return eta * -wi + (eta * cosThetaI - cosThetaT) * n;
+    return float3((-eta) * wi.xy, side ? -sqrt(1 - sin2ThetaT) : sqrt(1 - sin2ThetaT));
 }
 
 float cauchyIOR(const float a, const float b, const float λ) {
@@ -353,7 +357,7 @@ struct Glass : BSDF {
         BSDFSample sample;
 
         if (coinFlipRemap(fresnel, square.x)) {
-            sample.dirFs = float3(-w_o.x, -w_o.y, w_o.z);
+            sample.dirFs = float3(-w_o.xy, w_o.z);
         } else {
             float etaI;
             float etaT;
@@ -364,8 +368,9 @@ struct Glass : BSDF {
                 etaT = AIR_IOR;
                 etaI = intIOR;
             }
-            sample.dirFs = refractDir(w_o, faceForward(float3(0.0, 0.0, 1.0), w_o), etaI / etaT);
+            sample.dirFs = refractDir(w_o, w_o.z > 0, etaI / etaT);
         }
+
         if (isNotZERO(sample.dirFs.x) && isNotZERO(sample.dirFs.y) && isNotZERO(sample.dirFs.z)) {
             sample.eval.reflectance = 1;
             sample.eval.pdf = 1.#INF;

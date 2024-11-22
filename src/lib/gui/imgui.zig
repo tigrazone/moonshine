@@ -191,6 +191,46 @@ const ColorEditFlags = packed struct(c_int) {
     _unused2: u3 = 0,
 };
 
+// Flags for ImGui::TreeNodeEx(), ImGui::CollapsingHeader*()
+pub const
+    ImGuiTreeNodeFlags_None : c_int					= 0;
+pub const
+    ImGuiTreeNodeFlags_Selected : c_int             = 1 << 0;   // Draw as selected
+pub const
+    ImGuiTreeNodeFlags_Framed : c_int               = 1 << 1;  // Draw frame with background (e.g. for CollapsingHeader)
+pub const
+    ImGuiTreeNodeFlags_AllowOverlap : c_int         = 1 << 2;   // Hit testing to allow subsequent widgets to overlap this one
+pub const
+    ImGuiTreeNodeFlags_NoTreePushOnOpen : c_int     = 1 << 3;   // Don't do a TreePush() when open (e.g. for CollapsingHeader) = no extra indent nor pushing on ID stack
+pub const
+    ImGuiTreeNodeFlags_NoAutoOpenOnLog : c_int      = 1 << 4;   // Don't automatically and temporarily open node when Logging is active (by default logging will automatically open tree nodes)
+pub const
+    ImGuiTreeNodeFlags_DefaultOpen : c_int          = 1 << 5;   // Default node to be open
+pub const
+    ImGuiTreeNodeFlags_OpenOnDoubleClick : c_int    = 1 << 6;   // Open on double-click instead of simple click (default for multi-select unless any _OpenOnXXX behavior is set explicitly). Both behaviors may be combined.
+pub const
+    ImGuiTreeNodeFlags_OpenOnArrow : c_int          = 1 << 7;   // Open when clicking on the arrow part (default for multi-select unless any _OpenOnXXX behavior is set explicitly). Both behaviors may be combined.
+pub const
+    ImGuiTreeNodeFlags_Leaf : c_int                 = 1 << 8;   // No collapsing, no arrow (use as a convenience for leaf nodes).
+pub const
+    ImGuiTreeNodeFlags_Bullet : c_int               = 1 << 9;   // Display a bullet instead of arrow. IMPORTANT: node can still be marked open/close if you don't set the _Leaf flag!
+pub const
+    ImGuiTreeNodeFlags_FramePadding : c_int         = 1 << 10;  // Use FramePadding (even for an unframed text node) to vertically align text baseline to regular widget height. Equivalent to calling AlignTextToFramePadding() before the node.
+pub const
+    ImGuiTreeNodeFlags_SpanAvailWidth : c_int       = 1 << 11;  // Extend hit box to the right-most edge, even if not framed. This is not the default in order to allow adding other items on the same line without using AllowOverlap mode.
+pub const
+    ImGuiTreeNodeFlags_SpanFullWidth : c_int        = 1 << 12;  // Extend hit box to the left-most and right-most edges (cover the indent area).
+pub const
+    ImGuiTreeNodeFlags_SpanTextWidth : c_int        = 1 << 13;  // Narrow hit box + narrow hovering highlight, will only cover the label text.
+pub const
+    ImGuiTreeNodeFlags_SpanAllColumns : c_int       = 1 << 14;  // Frame will span all columns of its container table (text will still fit in current column)
+pub const
+    ImGuiTreeNodeFlags_NavLeftJumpsBackHere : c_int = 1 << 15;  // (WIP) Nav: left direction may move to this TreeNode() from any of its child (items submitted between TreeNode and TreePop)
+pub const
+    ImGuiTreeNodeFlags_NoScrollOnOpen : c_int		= 1 << 16;  // FIXME: TODO: Disable automatic scroll on TreePop() if node got just open and contents is not visible
+pub const
+    ImGuiTreeNodeFlags_CollapsingHeader : c_int     = ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog;
+
 pub fn colorEdit(label: [*:0]const u8, color: *F32x3, flags: ColorEditFlags) bool {
     return c.igColorEdit4(label, @ptrCast(color), @bitCast(flags));
 }
@@ -323,8 +363,8 @@ pub fn sameLine() void {
     c.igSameLine(0.0, -1.0);
 }
 
-pub fn collapsingHeader(label: [*:0]const u8) bool {
-    return c.igCollapsingHeader_TreeNodeFlags(label, 0);
+pub fn collapsingHeader(label: [*:0]const u8, flags: c_int) bool {
+    return c.igCollapsingHeader_TreeNodeFlags(label, flags);
 }
 
 pub fn begin(name: [*:0]const u8) void {

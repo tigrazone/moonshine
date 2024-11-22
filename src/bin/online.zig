@@ -244,11 +244,11 @@ pub fn main() !void {
         imgui.setNextWindowPos(50, 50);
         imgui.setNextWindowSize(250, 350);
         imgui.begin("Settings");
-        if (imgui.collapsingHeader("Metrics")) {
+        if (imgui.collapsingHeader("Metrics", imgui.ImGuiTreeNodeFlags_DefaultOpen)) {
             try imgui.textFmt("Last frame time: {d:.3}ms", .{display.last_frame_time_ns / std.time.ns_per_ms});
             try imgui.textFmt("Framerate: {d:.2} FPS", .{imgui.getIO().Framerate});
         }
-        if (imgui.collapsingHeader("Sensor")) {
+        if (imgui.collapsingHeader("Sensor", imgui.ImGuiTreeNodeFlags_None)) {
             if (imgui.button("Reset", imgui.Vec2{ .x = imgui.getContentRegionAvail().x - imgui.getFontSize() * 10, .y = 0 })) {
                 scene.camera.sensors.items[active_sensor].clear();
             }
@@ -258,9 +258,10 @@ pub fn main() !void {
             _ = imgui.inputScalar(u32, "Max sample count", &max_sample_count, 1, 100);
             imgui.popItemWidth();
         }
-        if (imgui.collapsingHeader("Camera")) {
+        if (imgui.collapsingHeader("Camera", imgui.ImGuiTreeNodeFlags_None)) {
             imgui.pushItemWidth(imgui.getFontSize() * -7.5);
             var changed = imgui.sliderAngle("Vertical FOV", &scene.camera.lenses.items[0].vfov, 1, 179);
+            if(changed) scene.camera.lenses.items[0] = scene.camera.lenses.items[0].prepareCameraPreCalcs();
             changed = imgui.dragScalar(f32, "Focus distance", &scene.camera.lenses.items[0].focus_distance, 0.1, -std.math.inf(f32), std.math.inf(f32)) or changed;
             changed = imgui.dragScalar(f32, "Aperture size", &scene.camera.lenses.items[0].aperture, 0.01, 0.0, std.math.inf(f32)) or changed;
             changed = imgui.dragVector(F32x3, "Origin", &scene.camera.lenses.items[0].origin, 0.1, -std.math.inf(f32), std.math.inf(f32)) or changed;
@@ -273,7 +274,7 @@ pub fn main() !void {
             }
             imgui.popItemWidth();
         }
-        if (imgui.collapsingHeader("Integrator")) {
+        if (imgui.collapsingHeader("Integrator", imgui.ImGuiTreeNodeFlags_None)) {
             imgui.pushItemWidth(imgui.getFontSize() * -14.2);
             if (imgui.combo(Integrator.Type, "Type", &integrator.active)) {
                 scene.camera.sensors.items[active_sensor].clear();
@@ -381,6 +382,7 @@ pub fn main() !void {
                 if (!std.meta.eql(delta, F32x2.new(0.5, 0.5))) {
                     const aspect = window_size.x / window_size.y;
                     scene.camera.lenses.items[0].forward = scene.camera.lenses.items[0].directionFromUv(F32x2.new(delta.x, delta.y), aspect);
+                    scene.camera.lenses.items[0] = scene.camera.lenses.items[0].prepareCameraPreCalcs();
                     scene.camera.sensors.items[active_sensor].clear();
                 }
             } else {
@@ -411,6 +413,7 @@ pub fn main() !void {
 
             if (!std.meta.eql(new_lens, old_lens)) {
                 scene.camera.lenses.items[0] = new_lens;
+                scene.camera.lenses.items[0] = scene.camera.lenses.items[0].prepareCameraPreCalcs();
                 scene.camera.sensors.items[active_sensor].clear();
             }
         }

@@ -22,10 +22,17 @@ struct Frame {
         return frame;
     }
 
-    Frame inSpace(float4x3 m) {
-        float3 n2 = normalize(mul(m, n).xyz);
-        float3 s2 = normalize(mul(m, s).xyz);
-        float3 t2 = normalize(mul(m, t).xyz);
+    Frame inSpace(float3x3 m) {
+        float3 n2 = normalize(mul(m, n));
+        float3 s2 = normalize(mul(m, s));
+        float3 t2 = normalize(mul(m, t));
+
+        return Frame::create(n2, s2, t2);
+    }
+
+    Frame inSpace(float3x3 m, float3 n2) {
+        float3 s2 = normalize(mul(m, s));
+        float3 t2 = normalize(mul(m, t));
 
         return Frame::create(n2, s2, t2);
     }
@@ -50,24 +57,9 @@ struct Frame {
         return v.z;
     }
 
-    static float cos2Theta(float3 v) {
-        return v.z * v.z;
-    }
-
-    static float sin2Theta(float3 v) {
-        return max(0.0, 1.0 - cos2Theta(v));
-    }
-
-    static float sinTheta(float3 v) {
-        return sqrt(sin2Theta(v));
-    }
-
-    static float tanTheta(float3 v) {
-        return sinTheta(v) / cosTheta(v);
-    }
-
     static float tan2Theta(float3 v) {
-        return sin2Theta(v) / cos2Theta(v);
+        float cos2Theta0 = v.z * v.z;
+        return max(0.0, 1.0 - cos2Theta0) / cos2Theta0;
     }
 
     static bool sameHemisphere(float3 v1, float3 v2) {

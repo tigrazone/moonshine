@@ -3,7 +3,7 @@
 #include "math.hlsl"
 
 // Returns a float between 0 and 1
-#define uint_to_float(x) ( asfloat(0x3f800000 | ((x) >> 9)) - 1.0f )
+#define uint_to_float(x) ( asfloat(0x3f800000 | ((x) >> 9)) - 1.0 )
 
 namespace Hash {
     /*

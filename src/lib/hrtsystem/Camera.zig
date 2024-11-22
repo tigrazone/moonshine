@@ -20,8 +20,11 @@ pub const Lens = extern struct {
     forward: F32x3,
     up: F32x3,
     vfov: f32, // radians
+    vfov_tan: f32,
     aperture: f32,
     focus_distance: f32,
+    u: F32x3,
+    v: F32x3,
 
     pub fn fromGltf(gltf: Gltf) !Lens {
         // just use first camera found in nodes, if none found, use an arbitrary default
@@ -43,23 +46,40 @@ pub const Lens = extern struct {
             F32x4.new(0, 1, 0, 0),
         ) };
 
+        const up = transform.mul_vec(F32x3.new(0.0, 1.0,  0.0)).unit();
+        const w  = transform.mul_vec(F32x3.new(0.0, 0.0, -1.0)).unit();
+        const u  = up.cross(w).unit();
+        const v  = u.cross(w);
+
         return Lens {
             .origin = transform.mul_point(F32x3.new(0.0, 0.0, 0.0)),
-            .forward = transform.mul_vec(F32x3.new(0.0, 0.0, -1.0)).unit(),
-            .up = transform.mul_vec(F32x3.new(0.0, 1.0, 0.0)).unit(),
+            .forward = w,
+            .up = up,
             .vfov = yfov,
+            .vfov_tan = std.math.tan(yfov / 2),
             .aperture = 0.0,
             .focus_distance = 1.0,
+            .u = u,
+            .v = v,
         };
+    }
+
+    pub fn prepareCameraPreCalcs(self: Lens) Lens {
+        var newLens : Lens = self;
+
+        newLens.vfov_tan = std.math.tan(self.vfov / 2);
+        newLens.u = self.up.cross(self.forward).unit();
+        newLens.v = newLens.u.cross(self.forward);
+        return newLens;
     }
 
     // should correspond to GPU-side generateRay
     pub fn directionFromUv(self: Lens, uv: F32x2, aspect: f32) F32x3 {
         const w = self.forward;
-        const u = self.up.cross(w).unit();
-        const v = u.cross(w);
+        const u = self.u;
+        const v = self.v;
 
-        const h = std.math.tan(self.vfov / 2);
+        const h = self.vfov_tan;
         const viewport_height = 2 * h * self.focus_distance;
         const viewport_width = aspect * viewport_height;
 
@@ -87,7 +107,11 @@ pub fn appendSensor(self: *Self, vc: *const VulkanContext, allocator: std.mem.Al
 }
 
 pub const LensHandle = u32;
-pub fn appendLens(self: *Self, allocator: std.mem.Allocator, lens: Lens) !LensHandle {
+pub fn appendLens(self: *Self, allocator: std.mem.Allocator, lens0: Lens) !LensHandle {
+    var lens = lens0;
+    lens.u  = lens.up.cross(lens.forward).unit();
+    lens.v  = lens.u.cross(lens.forward);
+    lens.vfov_tan = std.math.tan(lens.vfov / 2);
     try self.lenses.append(allocator, lens);
     return @intCast(self.lenses.items.len - 1);
 }

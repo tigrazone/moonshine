@@ -52,6 +52,7 @@ Frame selectFrame(const SurfacePoint surface, const Material material, const flo
     } else if (sign0 == sign(dot(outgoingDirWs, surface.frame.n))) {
         // if texture normal not valid, try shading normal
         shadingFrame = surface.frame;
+        surface.frame.reorthogonalize();
     } else {
         // otherwise fall back to triangle normal
         shadingFrame = surface.triangleFrame;
@@ -108,7 +109,7 @@ struct PathTracingIntegrator : Integrator {
                 const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position - path.ray.origin, path.ray.direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
                 const float weight = misWeight(1, path.ray.pdf, meshSamplesPerBounce, lightPdf);
                 path.radiance += path.throughput * material.getEmissive(λ, surface.texcoord) * weight;
-            }
+            } else path.radiance += path.throughput * material.getEmissive(λ, surface.texcoord); 
 
             if(path.bounceCount > maxBounces) return path.radiance;
 
@@ -130,19 +131,19 @@ struct PathTracingIntegrator : Integrator {
             if (!bsdf.isDelta()) {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamplesPerBounce; directCount++) {
-                    float2 rand = float2(rng.getFloat(), rng.getFloat());
+                    float2 rand = rng.getFloat2();
                     path.radiance += path.throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, λ, surface.position, surface.triangleFrame.n, surface.spawnOffset, rand, envSamplesPerBounce, 1);
                 }
 
                 // accumulate direct light samples from emissive meshes
                 for (uint directCount = 0; directCount < meshSamplesPerBounce; directCount++) {
-                    float2 rand = float2(rng.getFloat(), rng.getFloat());
+                    float2 rand = rng.getFloat2();
                     path.radiance += path.throughput * estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, λ, surface.position, surface.triangleFrame.n, surface.spawnOffset, rand, meshSamplesPerBounce, 1);
                 }
             }
 
             // sample direction for next bounce
-            const BSDFSample sample = bsdf.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
+            const BSDFSample sample = bsdf.sample(outgoingDirSs, rng.getFloat2());
             if (sample.eval.reflectance < NEARzero) return path.radiance;
 
             // set up info for next bounce
@@ -202,19 +203,19 @@ struct DirectLightIntegrator : Integrator {
             if (!bsdf.isDelta()) {
                 // accumulate direct light samples from env map
                 for (uint directCount = 0; directCount < envSamples; directCount++) {
-                    float2 rand = float2(rng.getFloat(), rng.getFloat());
+                    float2 rand = rng.getFloat2();
                     pathRadiance += estimateDirectMISLight(scene.tlas, shadingFrame, scene.envMap, bsdf, outgoingDirSs, λ, surface.position, surface.triangleFrame.n, surface.spawnOffset, rand, envSamples, brdfSamples);
                 }
 
                 // accumulate direct light samples from emissive meshes
                 for (uint directCount = 0; directCount < meshSamples; directCount++) {
-                    float2 rand = float2(rng.getFloat(), rng.getFloat());
+                    float2 rand = rng.getFloat2();
                     pathRadiance += estimateDirectMISLight(scene.tlas, shadingFrame, scene.meshLights, bsdf, outgoingDirSs, λ, surface.position, surface.triangleFrame.n, surface.spawnOffset, rand, meshSamples, brdfSamples);
                 }
             }
 
             for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
-                const BSDFSample sample = bsdf.sample(outgoingDirSs, float2(rng.getFloat(), rng.getFloat()));
+                const BSDFSample sample = bsdf.sample(outgoingDirSs, rng.getFloat2());
                 if (sample.eval.reflectance > 0) {
                     Ray ray = initialRay;
                     ray.direction = shadingFrame.frameToWorld(sample.dirFs);

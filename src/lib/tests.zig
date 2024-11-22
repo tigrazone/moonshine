@@ -264,7 +264,7 @@ fn icosphere(order: usize, allocator: std.mem.Allocator, encoder: *Encoder, reve
 
 // used so that we can care less for less perceptable error
 fn luminance(color: [3]f32) f32 {
-    return 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2];
+    return 0.212671 * color[0] + 0.71516 * color[1] + 0.072169 * color[2];
 }
 
 // spectral causes a decent amount of color variance so our per-pixel error bounds

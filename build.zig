@@ -46,7 +46,8 @@ pub fn build(b: *std.Build) !void {
     try compiles.append(blk: {
         var engine_options = default_engine_options;
         engine_options.vk_metrics = true;
-        engine_options.shader_source = .load; // for hot shader reload
+        //engine_options.shader_source = .load; // for hot shader reload
+        engine_options.shader_source = .embed;
         const engine = makeEngineModule(b, vulkan, engine_options, target);
         const exe = b.addExecutable(.{
             .name = "online",

@@ -73,7 +73,7 @@ struct EnvMap : Light {
         const float envMapDistance = 10000000000;
         LightSample lightSample;
         lightSample.connection = squareToEqualAreaSphere(uv) * envMapDistance;
-        lightSample.eval.pdf = discretePdf / (4.0 * PI);
+        lightSample.eval.pdf = discretePdf * M_4PI;
         lightSample.eval.radiance = Spectrum::sampleEmission(λ, rgbTexture[idx]) / lightSample.eval.pdf;
 
         return lightSample;
@@ -96,7 +96,7 @@ struct EnvMap : Light {
         const float discretePdf = luminanceTexture[idx] * float(size * size) / integral;
 
         LightEvaluation eval;
-        eval.pdf = discretePdf / (4.0 * PI);
+        eval.pdf = discretePdf * M_4PI;
         eval.radiance = Spectrum::sampleEmission(λ, rgbTexture[idx]);
         return eval;
     }

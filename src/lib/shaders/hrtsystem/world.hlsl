@@ -90,16 +90,16 @@ struct TriangleLocalSpace {
 
         surface.frame = surface.triangleFrame;
         surface.frame.n = normalize(interpolate(barycentrics, normals));
-        surface.frame.reorthogonalize();
 
         const float3 worldPosition = mul(toWorld, float4(surface.position, 1.0));
+        const float3x3 m_toMesh = (float3x3) transpose(toMesh);
+
+        const float3 wldNormal0 = mul(m_toMesh, surface.triangleFrame.n);
+        const float  wldScale   = 1.0 / length(wldNormal0);
+        const float3 wldNormal  = wldNormal0 * wldScale;
 
         // https://developer.nvidia.com/blog/solving-self-intersection-artifacts-in-directx-raytracing/
         {
-            float3 wldNormal = mul(transpose((float3x3)toMesh), surface.triangleFrame.n);
-
-            const float wldScale = rsqrt(dot(wldNormal, wldNormal));
-            wldNormal = mul(wldScale, wldNormal);
 
             // nvidia magic constants
             const float c0 = 5.9604644775390625E-8f;
@@ -107,9 +107,8 @@ struct TriangleLocalSpace {
             const float c2 = 1.19209317972490680404007434844970703125E-7f;
 
             const float3 extent3 = abs(edge1) + abs(edge2) + abs(edge1 - edge2);
-            const float extent = max(max(extent3.x, extent3.y), extent3.z);
 
-            float3 objErr = c0 * abs(positions[0]) + mul(c1, extent);
+            float3 objErr = c0 * abs(positions[0]) + c1 * max(max(extent3.x, extent3.y), extent3.z);
 
             const float3 wldErr = c1 * mul(abs((float3x3)toWorld), abs(surface.position)) + mul(c2, abs(transpose(toWorld)[3]));
 
@@ -125,17 +124,17 @@ struct TriangleLocalSpace {
         {
             surface.position = worldPosition;
 
-            surface.triangleFrame = surface.triangleFrame.inSpace(transpose(toMesh));
-            surface.frame = surface.frame.inSpace(transpose(toMesh));
+            surface.triangleFrame = surface.triangleFrame.inSpace(m_toMesh, wldNormal);
+            surface.frame = surface.frame.inSpace(m_toMesh);
         }
 
         return surface;
     }
 
-    float area(const float3x4 toWorld) {
-        float3 p0 = mul(toWorld, float4(positions[0], 1.0));
-        float3 p1 = mul(toWorld, float4(positions[1], 1.0));
-        float3 p2 = mul(toWorld, float4(positions[2], 1.0));
+    float area(const float3x3 toWorld3x3) {
+        float3 p0 = mul(toWorld3x3, positions[0]); //was added m[0][3] + m[1][3] + m[2][3] but with p1 - p0 and p2 - p0 - this addition is collapsed to 0
+        float3 p1 = mul(toWorld3x3, positions[1]);
+        float3 p2 = mul(toWorld3x3, positions[2]);
 
         return length(cross(p1 - p0, p2 - p0)) * 0.5f;
     }
@@ -165,8 +164,7 @@ struct World {
     }
 
     float triangleArea(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
-        const float3x4 toWorld = instances[NonUniformResourceIndex(instanceIndex)].transform;
-        return triangleLocalSpace(instanceIndex, geometryIndex, primitiveIndex).area(toWorld);
+        return triangleLocalSpacePos(instanceIndex, geometryIndex, primitiveIndex).area((float3x3) toWorld(instanceIndex));
     }
 
     TriangleLocalSpace triangleLocalSpace(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
@@ -206,6 +204,22 @@ struct World {
             t.normals[1] = normal;
             t.normals[2] = normal;
         }
+
+        return t;
+    }
+
+    TriangleLocalSpace triangleLocalSpacePos(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
+        TriangleLocalSpace t;
+
+        Mesh mesh = this.mesh(instanceIndex, geometryIndex);
+        const uint primitiveInd3 = primitiveIndex * 3;
+
+        const uint3 ind = mesh.indexAddress != 0 ? vk::RawBufferLoad<uint3>(mesh.indexAddress + sizeof(uint3) * primitiveIndex) : uint3(primitiveInd3, primitiveInd3 + 1, primitiveInd3 + 2);
+
+        // positions always available
+        t.positions[0] = loadPosition(mesh.positionAddress, ind.x);
+        t.positions[1] = loadPosition(mesh.positionAddress, ind.y);
+        t.positions[2] = loadPosition(mesh.positionAddress, ind.z);
 
         return t;
     }

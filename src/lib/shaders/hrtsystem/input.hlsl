@@ -25,8 +25,8 @@ struct PushConsts {
 void raygen() {
     Camera camera = pushConsts.camera;
     // make camera have perfect focus
-    camera.focusDistance = 1.0f;
-    camera.aperture = 0.0f;
+    camera.focusDistance = 1.0;
+    camera.aperture = 0.0;
     const uint2 sensorSize = textureDimensions(dOutputImage);
     const float aspect = float(sensorSize.x) / float(sensorSize.y);
     Ray ray = pushConsts.camera.generateRay(aspect, pushConsts.coords, float2(0, 0));
