@@ -11,7 +11,7 @@
 [[vk::binding(5, 0)]] StructuredBuffer<uint> emissiveTriangleCount;
 
 // dst
-[[vk::binding(6, 0)]] RWTexture1D<float> dstPower;
+[[vk::binding(6, 0)]] RWTexture1D<half2> dstPower;
 [[vk::binding(7, 0)]] RWStructuredBuffer<TriangleMetadata> dstTriangleMetadata;
 
 // mesh info
@@ -38,21 +38,24 @@ void main(uint3 dispatchXYZ: SV_DispatchThreadID) {
 	float total_emissive = 0;
 
 	const uint samples_per_dim = 8;
+	const float samples_per_dim_delta = 1.0 / float(samples_per_dim);
 	for (uint i = 0; i < samples_per_dim; i++) {
 		for (uint j = 0; j < samples_per_dim; j++) {
-			const float2 barycentrics = squareToTriangle(float2(i, j) / float(samples_per_dim));
+			const float2 barycentrics = squareToTriangle(float2(i, j) * samples_per_dim_delta);
 			const SurfacePoint surface = world.surfacePoint(pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive, barycentrics);
 			const Material material = world.material(pushConsts.instanceIndex, pushConsts.geometryIndex);
 			total_emissive += luminance(dTextures[NonUniformResourceIndex(material.emissive)].SampleLevel(dTextureSampler, surface.texcoord, 0).rgb);
 		}
 	}
 
-	const float average_emissive = total_emissive / float(samples_per_dim * samples_per_dim);
+	const float average_emissive = total_emissive * samples_per_dim_delta * samples_per_dim_delta;
 
-	const float power = PI * world.triangleArea(pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive) * average_emissive;
+	const float area_ = world.triangleArea(pushConsts.instanceIndex, pushConsts.geometryIndex, srcPrimitive);
+	const float power = PI * area_ * average_emissive;
 
 	const uint dstOffset = emissiveTriangleCount[0];
-	dstPower[dstOffset + srcPrimitive] = power;
+	dstPower[dstOffset + srcPrimitive][0] = f32tof16(power);
+	dstPower[dstOffset + srcPrimitive][1] = f32tof16(1.0 / area_);
 	dstTriangleMetadata[dstOffset + srcPrimitive].instanceIndex = pushConsts.instanceIndex;
 	dstTriangleMetadata[dstOffset + srcPrimitive].geometryIndex = pushConsts.geometryIndex;
 }
