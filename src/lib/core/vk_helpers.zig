@@ -35,21 +35,23 @@ pub fn texelBlockSize(format: vk.Format) vk.DeviceSize {
     return switch (format) {
         .r8_unorm => 1,
         .r8g8_unorm => 2,
-        .r8g8b8a8_srgb, .r32_sfloat => 4,
+        .r8g8b8a8_srgb, .r8g8b8a8_unorm, .r32_sfloat => 4,
         .r32g32_sfloat => 8,
+        .r32g32b32_sfloat => 16,
         .r32g32b32a32_sfloat => 16,
         else => unreachable, // TODO
     };
 }
 
-pub fn typeToFormat(comptime in: type) vk.Format {
+pub fn typeToFormat(comptime in: type, comptime srgb: bool) vk.Format {
     const vector = @import("../engine.zig").vector;
     return switch (in) {
         u8 => .r8_unorm,
         vector.Vec2(u8) => .r8g8_unorm,
-        vector.Vec4(u8) => .r8g8b8a8_srgb, // TODO: not assume srgb
+        vector.Vec4(u8) => switch (srgb) { true => .r8g8b8a8_srgb, false => .r8g8b8a8_unorm },
         f32 => .r32_sfloat,
         vector.Vec2(f32) => .r32g32_sfloat,
+        vector.Vec3(f32) => .r32g32b32_sfloat,
         vector.Vec4(f32) => .r32g32b32a32_sfloat,
         else => unreachable, // TODO
     };

@@ -17,6 +17,7 @@
 
 #define	pow2(x) ( (x) * (x) )
 
+float	pow2F(float x) { return x * x; }
 float	pow5(float x) { return x * x * x * x * x; }
 
 #define atanh(x) ( log((1 + (x)) / (1 - (x))) * 0.5f )

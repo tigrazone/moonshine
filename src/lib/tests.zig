@@ -293,15 +293,15 @@ test "white sphere on white background is white" {
     {
         const mesh_handle = try world.meshes.upload(&tc.vc, allocator, &tc.encoder, try icosphere(5, allocator, &tc.encoder, false));
 
-        const normal: *F32x2 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x2)), @sizeOf(F32x2)));
+        const normal: *F32x3 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x3, false)), @sizeOf(F32x3)));
         normal.* = MaterialManager.Material.default_normal;
-        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x2, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
+        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x3, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
 
-        const albedo: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        const albedo: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4, true)), @sizeOf(F32x4)));
         albedo.* = F32x4.new(1, 1, 1, std.math.nan(f32));
         const albedo_texture = try world.materials.textures.upload(&tc.vc, F32x4, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(albedo), vk.Extent2D { .width = 1, .height = 1 }, "");
 
-        const emissive: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        const emissive: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4, false)), @sizeOf(F32x4)));
         emissive.* = F32x4.new(0, 0, 0, std.math.nan(f32));
         const emissive_texture = try world.materials.textures.upload(&tc.vc, F32x4, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(emissive), vk.Extent2D { .width = 1, .height = 1 }, "");
 
@@ -395,15 +395,15 @@ test "inside illuminating sphere is white" {
     {
         const mesh_handle = try world.meshes.upload(&tc.vc, allocator, &tc.encoder, try icosphere(5, allocator, &tc.encoder, true));
 
-        const normal: *F32x2 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x2)), @sizeOf(F32x2)));
+        const normal: *F32x3 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x3, false)), @sizeOf(F32x3)));
         normal.* = MaterialManager.Material.default_normal;
-        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x2, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
+        const normal_texture = try world.materials.textures.upload(&tc.vc, F32x3, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(normal), vk.Extent2D { .width = 1, .height = 1 }, "");
 
-        const albedo: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        const albedo: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4, true)), @sizeOf(F32x4)));
         albedo.* = F32x4.new(0.5, 0.5, 0.5, std.math.nan(f32));
         const albedo_texture = try world.materials.textures.upload(&tc.vc, F32x4, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(albedo), vk.Extent2D { .width = 1, .height = 1 }, "");
 
-        const emissive: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4)), @sizeOf(F32x4)));
+        const emissive: *F32x4 = @ptrCast(try tc.encoder.uploadAllocator().alignedAlloc(u8, vk_helpers.texelBlockSize(vk_helpers.typeToFormat(F32x4, false)), @sizeOf(F32x4)));
         emissive.* = F32x4.new(0.5, 0.5, 0.5, std.math.nan(f32));
         const emissive_texture = try world.materials.textures.upload(&tc.vc, F32x4, allocator, &tc.encoder, tc.encoder.upload_allocator.getBufferSlice(emissive), vk.Extent2D { .width = 1, .height = 1 }, "");
 

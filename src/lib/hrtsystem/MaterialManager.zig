@@ -10,6 +10,7 @@ const Image = core.Image;
 const vk_helpers = core.vk_helpers;
 
 const F32x2 = engine.vector.Vec2(f32);
+const F32x3 = engine.vector.Vec3(f32);
 
 // I define a material to be a BSDF that may vary over a surface,
 // plus a normal and emissive map
@@ -20,7 +21,7 @@ const F32x2 = engine.vector.Vec2(f32);
 // translating this into a GPU buffer for each variant, and have a base material struct
 // that simply has an enum and a device address, which points to the specific variant
 pub const Material = struct {
-    pub const default_normal = F32x2.new(0.5, 0.5);
+    pub const default_normal = F32x3.new(0.5, 0.5, 0.5);
     const normal_components = @TypeOf(default_normal).element_count;
     const emissive_components = 3;
 
@@ -249,8 +250,8 @@ pub const TextureManager = struct {
 
     pub const Handle = u32;
 
-    pub fn upload(self: *TextureManager, vc: *const VulkanContext, comptime T: type, allocator: std.mem.Allocator, encoder: *Encoder, src: core.mem.BufferSlice(T), extent: vk.Extent2D, name: [:0]const u8) !TextureManager.Handle {
-        const format = comptime vk_helpers.typeToFormat(T);
+    pub fn upload(self: *TextureManager, vc: *const VulkanContext, comptime T: type, allocator: std.mem.Allocator, encoder: *Encoder, src: core.mem.BufferSlice(T), extent: vk.Extent2D, name: [:0]const u8, comptime srgb: bool) !TextureManager.Handle {
+        const format = comptime vk_helpers.typeToFormat(T, srgb);
 
         // > If dstImage does not have either a depth/stencil format or a multi-planar format,
         // > then for each element of pRegions, bufferOffset must be a multiple of the texel block size

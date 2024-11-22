@@ -32,10 +32,6 @@ float3 squareToCosineHemisphere(float2 square) {
     return float3(d, sqrt(max(0.0, 1.0 - dot(d, d))));
 }
 
-float3 sphericalToCartesian(float sinTheta, float cosTheta, float phi) {
-    return float3(sinTheta * float2(cos(phi), sin(phi)), cosTheta);
-}
-
 // (phi, theta) -- ([0, 2pi], [0, pi])
 // assumes vector normalized
 float2 cartesianToSpherical(float3 v) {
