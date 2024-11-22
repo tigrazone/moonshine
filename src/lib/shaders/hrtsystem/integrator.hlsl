@@ -52,7 +52,6 @@ Frame selectFrame(const SurfacePoint surface, const Material material, const flo
     } else if (sign0 == sign(dot(outgoingDirWs, surface.frame.n))) {
         // if texture normal not valid, try shading normal
         shadingFrame = surface.frame;
-        surface.frame.reorthogonalize();
     } else {
         // otherwise fall back to triangle normal
         shadingFrame = surface.triangleFrame;

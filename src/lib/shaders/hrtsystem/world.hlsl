@@ -90,6 +90,7 @@ struct TriangleLocalSpace {
 
         surface.frame = surface.triangleFrame;
         surface.frame.n = normalize(interpolate(barycentrics, normals));
+        surface.frame.reorthogonalize();
 
         const float3 worldPosition = mul(toWorld, float4(surface.position, 1.0));
         const float3x3 m_toMesh = (float3x3) transpose(toMesh);
