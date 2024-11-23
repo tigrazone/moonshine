@@ -27,12 +27,17 @@ struct Mesh {
 
 struct SurfacePoint {
     float3 position;
+    float3 position0;   //position before transform
     float2 texcoord;
 
     Frame triangleFrame; // from triangle positions
     Frame frame; // from vertex attributes
 
     float spawnOffset; // minimum offset along normal that a ray will not intersect
+
+    float3 positions[3];
+    float3 normals[3];
+    float2 texcoords[3];
 };
 
 float3 loadPosition(uint64_t addr, uint index) {
@@ -80,7 +85,7 @@ struct TriangleLocalSpace {
 
         const float3 edge1 = positions[1] - positions[0];
         const float3 edge2 = positions[2] - positions[0];
-        surface.position = positions[0] + ((attribs.x * edge1) + (attribs.y * edge2));
+        surface.position0 = positions[0] + ((attribs.x * edge1) + (attribs.y * edge2));
 
         surface.texcoord = interpolate(barycentrics, texcoords);
 
@@ -92,11 +97,25 @@ struct TriangleLocalSpace {
         surface.frame.n = normalize(interpolate(barycentrics, normals));
         surface.frame.reorthogonalize();
 
-        const float3 worldPosition = mul(toWorld, float4(surface.position, 1.0));
         const float3x3 m_toMesh = (float3x3) transpose(toMesh);
 
-        const float3 wldNormal = mul(m_toMesh, surface.triangleFrame.n);
-        const float  wldScale  = 1.0 / length(wldNormal);
+        // convert to world space
+        {
+            surface.position = mul(toWorld, float4(surface.position0, 1.0));
+
+            surface.triangleFrame = surface.triangleFrame.inSpace(m_toMesh, normalize( mul(m_toMesh, surface.triangleFrame.n) ) );
+            surface.frame = surface.frame.inSpace(m_toMesh);
+        }
+
+        return surface;
+    }
+
+    SurfacePoint calcSpawnOffset(const float3x4 toWorld, const float3x4 toMesh, SurfacePoint surface)
+    {
+        const float3 wldNormal = mul((float3x3) transpose(toMesh), surface.triangleFrame.n);
+
+        const float3 edge1 = positions[1] - positions[0];
+        const float3 edge2 = positions[2] - positions[0];
 
         // https://developer.nvidia.com/blog/solving-self-intersection-artifacts-in-directx-raytracing/
         {
@@ -108,23 +127,22 @@ struct TriangleLocalSpace {
             const float3 extent3 = abs(edge1) + abs(edge2) + abs(edge1 - edge2);
 
             float3 objErr = c0 * abs(positions[0]) + c1 * max(max(extent3.x, extent3.y), extent3.z);
+            //4*
 
-            const float3 wldErr = c1 * mul(abs((float3x3)toWorld), abs(surface.position)) + mul(c2, abs(transpose(toWorld)[3]));
+            const float3 wldErr = c1 * mul(abs((float3x3)toWorld), abs(surface.position0)) + mul(c2, abs(transpose(toWorld)[3]));
+            //9* 1* 3* -> 13*
 
-            objErr += c2 * mul(abs(toMesh), float4(abs(worldPosition), 1));
+            objErr += c2 * mul(abs(toMesh), float4(abs(surface.position), 1));
+            //13*
 
             const float objOffset = dot(objErr, abs(surface.triangleFrame.n));
             const float wldOffset = dot(wldErr, abs(wldNormal));
+            //6*
 
-            surface.spawnOffset = (objOffset + wldOffset) * wldScale;
-        }
+            surface.spawnOffset = (objOffset + wldOffset) / length(wldNormal);
+            //1/
 
-        // convert to world space
-        {
-            surface.position = worldPosition;
-
-            surface.triangleFrame = surface.triangleFrame.inSpace(m_toMesh, wldNormal * wldScale);
-            surface.frame = surface.frame.inSpace(m_toMesh);
+            //total 4 + 13 + 13 + 6 = 36* 1/
         }
 
         return surface;
@@ -233,5 +251,13 @@ struct World {
 
     SurfacePoint surfacePoint(uint instanceIndex, uint geometryIndex, uint primitiveIndex, float2 attribs) {
         return triangleLocalSpace(instanceIndex, geometryIndex, primitiveIndex).surfacePoint(attribs, toWorld(instanceIndex), toMesh(instanceIndex));
+    }
+
+    SurfacePoint calcSpawnOffset(uint instanceIndex, SurfacePoint surface) {
+        TriangleLocalSpace tls;
+        tls.positions = surface.positions;
+        tls.normals = surface.normals;
+        tls.texcoords = surface.texcoords;
+        return tls.calcSpawnOffset(toWorld(instanceIndex), toMesh(instanceIndex), surface);
     }
 };
