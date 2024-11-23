@@ -105,7 +105,7 @@ struct PathTracingIntegrator : Integrator {
             // collect light from emissive meshes
             if(meshSamplesPerBounce > 0)
             {
-                const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position - path.ray.origin, path.ray.direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
+                const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, path.ray.origin, path.ray.direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
                 const float weight = misWeight(1, path.ray.pdf, meshSamplesPerBounce, lightPdf);
                 path.radiance += path.throughput * material.getEmissive(λ, surface.texcoord) * weight;
             } else path.radiance += path.throughput * material.getEmissive(λ, surface.texcoord); 
@@ -223,7 +223,7 @@ struct DirectLightIntegrator : Integrator {
                     if (its.hit()) {
                         // hit -- collect light from emissive meshes
                         const SurfacePoint surface = scene.world.surfacePoint(its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
-                        const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position - ray.origin, ray.direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
+                        const float lightPdf = areaMeasureToSolidAngleMeasure(surface.position, ray.origin, ray.direction, surface.triangleFrame.n) * scene.meshLights.areaPdf(its.instanceIndex, its.geometryIndex, its.primitiveIndex);
                         const float weight = misWeight(brdfSamples, sample.eval.pdf, meshSamples, lightPdf);
                         pathRadiance += sample.eval.reflectance * scene.world.material(its.instanceIndex, its.geometryIndex).getEmissive(λ, surface.texcoord) * weight;
                     } else {

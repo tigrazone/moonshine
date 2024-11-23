@@ -25,6 +25,7 @@ struct LightSample {
 struct TriangleMetadata {
 	uint instanceIndex;
 	uint geometryIndex;
+	float area_;
 };
 
 interface Light {
@@ -79,8 +80,8 @@ struct EnvMap : Light {
         return lightSample;
     }
 
-    LightSample sample(float λ, float3 positionWs, float2 square, float area_) {
-        return sample(λ, positionWs, square);
+    LightSample sample(float λ, float3 positionWs, float2 rand, float area_) {
+        return sample(λ, positionWs, rand);
     }
 
     // pdf is with respect to solid angle (no trace)
@@ -102,8 +103,8 @@ struct EnvMap : Light {
     }
 };
 
-float areaMeasureToSolidAngleMeasure(float3 pos1_pos2, float3 dir1, float3 dir2) {
-    return dot(pos1_pos2, pos1_pos2) / abs(dot(dir1, dir2));
+float areaMeasureToSolidAngleMeasure(float3 pos1, float3 pos2, float3 dir1, float3 dir2) {
+    return dot(pos1 - pos2, pos1 - pos2) / abs(dot(dir1, dir2));
 }
 
 struct TriangleLight: Light {
@@ -128,15 +129,15 @@ struct TriangleLight: Light {
         LightSample lightSample;
         lightSample.connection = surface.position - positionWs;
         lightSample.connection += faceForward(surface.triangleFrame.n, -lightSample.connection) * surface.spawnOffset;
-        lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position - positionWs, normalize(lightSample.connection), surface.triangleFrame.n) * area_;
+        lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) * area_;
         lightSample.eval.radiance = material.getEmissive(λ, surface.texcoord) / lightSample.eval.pdf;
 
         return lightSample;
     }
 
-    LightSample sample(float λ, float3 positionWs, float2 square) {
+    LightSample sample(float λ, float3 positionWs, float2 rand) {
         float area_;
-        return sample(λ, positionWs, square, area_);
+        return sample(λ, positionWs, rand, area_);
     }
 };
 
@@ -165,15 +166,14 @@ struct MeshLights : Light {
         if (integral() < NEARzero) return lightSample;
 
         const uint mipCount = uint(ceil(log2(emissiveTriangleCount))) + 1;
+        float reservour_rand = rand.x;
 
         uint idx = 0;
-        half2 powerPacked;
         for (uint level = mipCount; level-- > 0;) {
             Reservoir<uint> r = Reservoir<uint>::empty();
             for (uint i = 0; i < 2; i++) {
                 const uint coord = idx + idx + i;
-                powerPacked = power.Load(uint2(coord, level));
-                r.update(coord, f16tof32(powerPacked[0]), rand.x);
+                r.update(coord, power.Load(uint2(coord, level)), reservour_rand);
             }
             idx = r.selected;
         }
@@ -183,16 +183,15 @@ struct MeshLights : Light {
         const uint primitiveIndex = idx - geometryToTrianglePowerOffset[instanceID + meta.geometryIndex];
 
         const TriangleLight inner = TriangleLight::create(meta.instanceIndex, meta.geometryIndex, primitiveIndex, world);
-        powerPacked = power.Load(idx);
-        lightSample = inner.sample(λ, positionWs, rand, f16tof32(powerPacked[1]));
+        lightSample = inner.sample(λ, positionWs, rand, meta.area_);
         float selPdf = selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
         lightSample.eval.pdf *= selPdf;
         lightSample.eval.radiance /= selPdf;
         return lightSample;
     }
 
-    LightSample sample(float λ, float3 positionWs, float2 square, float area_) {
-        return sample(λ, positionWs, square);
+    LightSample sample(float λ, float3 positionWs, float2 rand, float area_) {
+        return sample(λ, positionWs, rand);
     }
 
     float selectionPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
@@ -201,25 +200,18 @@ struct MeshLights : Light {
         const uint instanceID = world.instances[instanceIndex].instanceCustomIndex;
         const uint offset = geometryToTrianglePowerOffset[instanceID + geometryIndex];
         if (offset == MAX_UINT) return 0.0; // no light at this triangle
-        half2 powerPacked = power.Load(uint2(offset + primitiveIndex, 0));
-        return f16tof32(powerPacked[0]) / integral_;
+        const uint idx = offset + primitiveIndex;
+        return power.Load(uint2(idx, 0)) / integral_;
     }
 
     float areaPdf(uint instanceIndex, uint geometryIndex, uint primitiveIndex) {
-        float integral_ = integral();
-        if (integral_ < NEARzero) return 0.0; // no lights
-        const uint instanceID = world.instances[instanceIndex].instanceCustomIndex;
-        const uint offset = geometryToTrianglePowerOffset[instanceID + geometryIndex];
-        if (offset == MAX_UINT) return 0.0; // no light at this triangle
-        half2 powerPacked = power.Load(uint2(offset + primitiveIndex, 0));
-        return f16tof32(powerPacked[0]) * f16tof32(powerPacked[1]) / integral_;
+        return selectionPdf(instanceIndex, geometryIndex, primitiveIndex) / world.triangleArea(instanceIndex, geometryIndex, primitiveIndex);
     }
 
     float integral() {
         if (emissiveTriangleCount == 0) return 0;
 
         const uint mipCount = uint(ceil(log2(emissiveTriangleCount))) + 1;
-        half2 powerPacked = power.Load(uint2(0, mipCount - 1));
-        return f16tof32(powerPacked[0]);
+        return power.Load(uint2(0, mipCount - 1));
     }
 };

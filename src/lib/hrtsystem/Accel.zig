@@ -84,6 +84,7 @@ const TrianglePowerFoldPipeline = engine.core.pipeline.Pipeline(.{ .shader_path 
 const TriangleMetadata = extern struct {
     instance_index: u32,
     geometry_index: u32,
+    area_: f32,
 };
 
 triangle_power_pipeline: TrianglePowerPipeline,
