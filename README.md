@@ -6,7 +6,8 @@
 </div>
 
 ![moonshine-vdnf](assets/lux-balls-bounded-vndf.webp)
-*rendered with Moonshine with Bounded VNDF Sampling for Smith-GGX Reflections*
+*rendered by Moonshine<br>
+with Bounded VNDF Sampling for Smith-GGX Reflections*
 
 ### Features
 * Binaries
