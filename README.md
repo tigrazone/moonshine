@@ -5,7 +5,7 @@
 **A spectral path tracer built with Zig + Vulkan**
 </div>
 
-![moonshine-vdnf](https://github.com/user-attachments/assets/74e32886-ff91-481a-a353-5f2aa64f7a1c)
+![moonshine-vdnf](assets/lux-balls-bounded-vndf.webp)
 *rendered with Moonshine with Bounded VNDF Sampling for Smith-GGX Reflections*
 
 ### Features
