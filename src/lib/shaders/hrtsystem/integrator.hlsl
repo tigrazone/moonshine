@@ -99,7 +99,7 @@ struct PathTracingIntegrator : Integrator {
         for (Intersection its = Intersection::find(scene.tlas, path.ray.desc()); its.hit(); its = Intersection::find(scene.tlas, path.ray.desc())) {
 
             // decode mesh attributes and material from intersection
-            SurfacePoint surface = scene.world.surfacePoint(its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
+            const SurfacePoint surface = scene.world.surfacePoint(its.instanceIndex, its.geometryIndex, its.primitiveIndex, its.barycentrics);
             const Material material = scene.world.material(its.instanceIndex, its.geometryIndex);
 
             // collect light from emissive meshes
@@ -126,9 +126,6 @@ struct PathTracingIntegrator : Integrator {
             const float3 outgoingDirWs = -path.ray.direction;
             const Frame shadingFrame = selectFrame(surface, material, outgoingDirWs);
             const float3 outgoingDirSs = shadingFrame.worldToFrame(outgoingDirWs);
-
-            //spawnOffset needed from here
-            surface = scene.world.calcSpawnOffset(its.instanceIndex, surface);
 
             if (!bsdf.isDelta()) {
                 // accumulate direct light samples from env map
