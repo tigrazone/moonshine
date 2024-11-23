@@ -5,8 +5,9 @@
 **A spectral path tracer built with Zig + Vulkan**
 </div>
 
-[![A bathroom scene rendered with moonshine](https://repository-images.githubusercontent.com/378788480/b9ad3836-4558-43f6-82ed-6668d99399b4)](https://blendswap.com/blend/12584)
-*Salle de bain by nacimus, rendered with Moonshine*
+![moonshine-vdnf](assets/lux-balls-bounded-vndf.webp)
+*rendered by Moonshine<br>
+with Bounded VNDF Sampling for Smith-GGX Reflections*
 
 ### Features
 * Binaries

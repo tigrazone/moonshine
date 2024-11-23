@@ -2,9 +2,17 @@
 
 #include "math.hlsl"
 
+// https://eheitzresearch.wordpress.com/749-2/
 float2 squareToTriangle(float2 square) {
-    float a = 1 - sqrt(1 - square.x);
-    return float2(a, square.y * (1 - a));
+    if (square.y > square.x) {
+        square.x *= 0.5;
+		square.y -= square.x;
+        return square;
+    } else {
+        square.y *= 0.5;
+		square.x -= square.y;
+        return square;
+    }
 }
 
 float2 squareToUniformDiskConcentric(float2 uOffset) {
