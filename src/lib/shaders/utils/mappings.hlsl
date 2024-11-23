@@ -4,10 +4,14 @@
 
 // https://eheitzresearch.wordpress.com/749-2/
 float2 squareToTriangle(float2 square) {
-    if (square.x < square.y) {
-        return float2(square.x / 2, square.y - (square.x / 2));
+    if (square.y > square.x) {
+        square.x *= 0.5;
+		square.y -= square.x;
+        return square;
     } else {
-        return float2(square.x - (square.y / 2), square.y / 2);
+        square.y *= 0.5;
+		square.x -= square.y;
+        return square;
     }
 }
 
