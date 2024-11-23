@@ -27,10 +27,10 @@ template <class Light, class BSDF>
 float estimateDirectMISLight(RaytracingAccelerationStructure accel, Frame frame, Light light, BSDF material, float3 outgoingDirFs, float λ, float3 positionWs, float3 triangleNormalDirWs, float spawnOffset, float2 rand, uint lightSamplesTaken, uint brdfSamplesTaken) {
     const LightSample lightSample = light.sample(λ, positionWs, rand);
 
-    if (lightSample.eval.radiance > 0) {
-    const float3 lightDirWs = normalize(lightSample.connection);
+    if (lightSample.eval.radiance > NEARzero) {
+        const float3 lightDirWs = normalize(lightSample.connection);
         const BSDFEvaluation bsdfEval = material.evaluate(frame.worldToFrame(lightDirWs), outgoingDirFs);
-        if (bsdfEval.reflectance > 0) {
+        if (bsdfEval.reflectance > NEARzero) {
             float3 dir = faceForward(triangleNormalDirWs, lightDirWs) * spawnOffset;
             if (!ShadowIntersection::hit(accel, positionWs + dir, lightSample.connection - dir)) {                
                 return lightSample.eval.radiance * bsdfEval.reflectance * misWeight(lightSamplesTaken, lightSample.eval.pdf, brdfSamplesTaken, bsdfEval.pdf);
@@ -215,7 +215,7 @@ struct DirectLightIntegrator : Integrator {
 
             for (uint brdfSampleCount = 0; brdfSampleCount < brdfSamples; brdfSampleCount++) {
                 const BSDFSample sample = bsdf.sample(outgoingDirSs, rng.getFloat2());
-                if (sample.eval.reflectance > 0) {
+                if (sample.eval.reflectance > NEARzero) {
                     Ray ray = initialRay;
                     ray.direction = shadingFrame.frameToWorld(sample.dirFs);
                     ray.origin = surface.position + faceForward(surface.triangleFrame.n, ray.direction) * surface.spawnOffset;

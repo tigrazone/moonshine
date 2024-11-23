@@ -66,16 +66,20 @@ struct EnvMap : Light {
             idx = r.selected;
             idx2 = idx + idx;
         }
-        const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
 
-        const float discretePdf = luminanceTexture[idx] * float(size * size) / integral;
-        const float2 uv = (float2(idx) + rand) / float2(size, size);
-
-        const float envMapDistance = 10000000000;
         LightSample lightSample;
-        lightSample.connection = squareToEqualAreaSphere(uv) * envMapDistance;
-        lightSample.eval.pdf = discretePdf * M_4PI;
-        lightSample.eval.radiance = Spectrum::sampleEmission(λ, rgbTexture[idx]) / lightSample.eval.pdf;
+        lightSample.eval.radiance = Spectrum::sampleEmission(λ, rgbTexture[idx]);
+		if(lightSample.eval.radiance > NEARzero) {
+			const float integral = luminanceTexture.Load(uint3(0, 0, mipCount - 1));
+
+			const float discretePdf = luminanceTexture[idx] * float(size * size) / integral;
+			const float2 uv = (float2(idx) + rand) / float2(size, size);
+
+			const float envMapDistance = 10000000000;
+			lightSample.connection = squareToEqualAreaSphere(uv) * envMapDistance;
+			lightSample.eval.pdf = discretePdf * M_4PI;
+			lightSample.eval.radiance /= lightSample.eval.pdf;
+		}
 
         return lightSample;
     }
@@ -127,10 +131,13 @@ struct TriangleLight: Light {
         const SurfacePoint surface = t.surfacePoint(barycentrics, toWorld, toMesh);
 
         LightSample lightSample;
-        lightSample.connection = surface.position - positionWs;
-        lightSample.connection += faceForward(surface.triangleFrame.n, -lightSample.connection) * surface.spawnOffset;
-        lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) * area_;
-        lightSample.eval.radiance = material.getEmissive(λ, surface.texcoord) / lightSample.eval.pdf;
+        lightSample.eval.radiance = material.getEmissive(λ, surface.texcoord);
+		if(lightSample.eval.radiance > NEARzero) {
+			lightSample.connection = surface.position - positionWs;
+			lightSample.connection += faceForward(surface.triangleFrame.n, -lightSample.connection) * surface.spawnOffset;
+			lightSample.eval.pdf = areaMeasureToSolidAngleMeasure(surface.position, positionWs, normalize(lightSample.connection), surface.triangleFrame.n) * area_;
+			lightSample.eval.radiance /= lightSample.eval.pdf;
+		}
 
         return lightSample;
     }
@@ -184,9 +191,12 @@ struct MeshLights : Light {
 
         const TriangleLight inner = TriangleLight::create(meta.instanceIndex, meta.geometryIndex, primitiveIndex, world);
         lightSample = inner.sample(λ, positionWs, rand, meta.area_);
-        float selPdf = selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
-        lightSample.eval.pdf *= selPdf;
-        lightSample.eval.radiance /= selPdf;
+		if(lightSample.eval.radiance > NEARzero) {
+			float selPdf = selectionPdf(meta.instanceIndex, meta.geometryIndex, primitiveIndex);
+			lightSample.eval.pdf *= selPdf;
+			lightSample.eval.radiance /= selPdf;
+		}
+
         return lightSample;
     }
 
