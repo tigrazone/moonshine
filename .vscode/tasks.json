@@ -4,7 +4,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "zig build",
+            "command": "./assets/bats/b-debug.bat",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
