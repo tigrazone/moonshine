@@ -68,8 +68,6 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, allocator: std.mem.Allocator
         material.normal = if (gltf_material.normal_texture) |texture| normal: {
             const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
 
-            // this gives us rgb --> need to convert to rg
-            // theoretically gltf spec claims these values should already be linear
             const img, const width, const height = try loadImage(allocator, image, gltf_directory);
             defer allocator.free(img);
 
