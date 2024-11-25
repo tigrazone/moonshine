@@ -113,15 +113,19 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, allocator: std.mem.Allocator
     standard_pbr.ior = gltf_material.ior;
 
     if (gltf_material.transmission_factor > 0.999) {
-        // infer cauchy's equation A, B constants assuming IOR
-        // was measured at 560nm and material has dispersion of BK7
-        const b = 0.00420; // BK7
-        const b_nm = b * 1000000.0;  // μm2 to nm2
-        const measured_ior_wavelength = 560.0;
-        const a = standard_pbr.ior - b_nm / (measured_ior_wavelength * measured_ior_wavelength);
+        const dispersion = @max(gltf_material.dispersion, 0.2); // real materials have dispersion!
+        const abbe_number = 20.0 / dispersion;
+
+        const fraunhofer_F = 486.13;
+        const fraunhofer_d = 587.56;
+        const fraunhofer_C = 656.27;
+
+        const b = (standard_pbr.ior - 1.0) / (abbe_number * (std.math.pow(f32, fraunhofer_F, -2.0) - std.math.pow(f32, fraunhofer_C, -2.0)));
+        const a = standard_pbr.ior - (b / std.math.pow(f32, fraunhofer_d, 2.0));
+
         material.bsdf = .{ .glass = .{
             .cauchy_a = a,
-            .cauchy_b = b_nm,
+            .cauchy_b = b,
         }};
         return material;
     }
@@ -150,7 +154,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, allocator: std.mem.Allocator
     if (gltf_material.metallic_roughness.metallic_roughness_texture) |texture| {
         const image = gltf.data.images.items[gltf.data.textures.items[texture.index].source.?];
 
-        // this gives us rgb --> only need r (metallic) and g (roughness) channels
+        // this gives us rgb --> only need g (roughness) and b (metalness) channels
         // theoretically gltf spec claims these values should already be linear
         const img, const width, const height = try loadImage(allocator, image, gltf_directory);
         defer allocator.free(img);
@@ -158,7 +162,7 @@ fn gltfMaterialToMaterial(vc: *const VulkanContext, allocator: std.mem.Allocator
         const metalness = try encoder.uploadAllocator().alloc(u8, img.len);
         const roughness = try encoder.uploadAllocator().alloc(u8, img.len);
         for (metalness, roughness, img) |*dst1, *dst2, src| {
-            dst1.* = src.x;
+            dst1.* = src.z;
             dst2.* = src.y;
         }
         const debug_name_metalness = try std.fmt.allocPrintZ(allocator, "{s} metalness", .{ gltf_material.name });
@@ -249,12 +253,17 @@ pub fn fromGltf(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder:
     for (gltf.data.nodes.items) |node| {
         if (node.mesh) |model_idx| {
             const mesh = gltf.data.meshes.items[model_idx];
-            const geometries = try allocator.alloc(Geometry, mesh.primitives.items.len);
-            for (mesh.primitives.items, geometries) |primitive, *geometry| {
-                geometry.* = Geometry {
+            var geometries = std.ArrayList(Geometry).init(allocator);
+            try geometries.ensureTotalCapacityPrecise(mesh.primitives.items.len);
+            for (mesh.primitives.items) |primitive| {
+                const material = primitive.material orelse materials.material_count - 1;
+                // ignore primitives that have a non-opaque alpha mode. there's no support for texture opacity,
+                // and ignoring them is a better approximation than making them exist but be opaque
+                if (gltf.data.materials.items[material].alpha_mode != .@"opaque") continue;
+                geometries.appendAssumeCapacity(Geometry {
                     .mesh = @intCast(objects.items.len),
-                    .material = @intCast(primitive.material orelse materials.material_count - 1),
-                };
+                    .material = @intCast(material),
+                });
                 // get indices
                 const indices = if (primitive.indices) |indices_index| blk2: {
                     const accessor = gltf.data.accessors.items[indices_index];
@@ -313,6 +322,9 @@ pub fn fromGltf(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder:
                                 gltf.getDataFromBufferView(f32, &positions, accessor, buffer);
                             },
                             .texcoord => |accessor_index| {
+                                // mesh may have many texcoords that we can use, but moonshine only knows how to use one set of them currently
+                                // so ignore any after the first
+                                if (texcoords.items.len != 0) continue;
                                 const accessor = gltf.data.accessors.items[accessor_index];
                                 const buffer = buffers[gltf.data.buffer_views.items[accessor.buffer_view.?].buffer];
                                 gltf.getDataFromBufferView(f32, &texcoords, accessor, buffer);
@@ -350,6 +362,11 @@ pub fn fromGltf(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder:
                 });
             }
 
+            if (geometries.items.len == 0) {
+                geometries.deinit();
+                continue;
+            }
+
             const mat = Gltf.getGlobalTransform(&gltf.data, node);
             // convert to Z-up
             try instances.append(Instance {
@@ -358,7 +375,7 @@ pub fn fromGltf(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder:
                     F32x4.new(mat[0][2], mat[1][2], mat[2][2], mat[3][2]),
                     F32x4.new(mat[0][1], mat[1][1], mat[2][1], mat[3][1]),
                 ),
-                .geometries = geometries,
+                .geometries = try geometries.toOwnedSlice(),
             });
         }
     }
