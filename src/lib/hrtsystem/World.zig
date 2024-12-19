@@ -259,7 +259,7 @@ pub fn fromGltf(vc: *const VulkanContext, allocator: std.mem.Allocator, encoder:
                 const material = if (primitive.material) |material| blk: {
                     // ignore primitives that have a non-opaque alpha mode. there's no support for texture opacity,
                     // and ignoring them is a better approximation than making them exist but be opaque
-                    if (gltf.data.materials.items[material].alpha_mode != .@"opaque") continue;
+                    // if (gltf.data.materials.items[material].alpha_mode != .@"opaque") continue;
                     break :blk material;
                 } else (materials.material_count - 1);
                 geometries.appendAssumeCapacity(Geometry {
